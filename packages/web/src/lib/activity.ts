@@ -12,6 +12,8 @@ export interface ActivitySnapshot {
   moveLabel: string;
   moveDetail: string;
   goalLabel: string;
+  moduleLabel: string;
+  moduleDetail: string;
   stale: boolean;
 }
 
@@ -36,6 +38,7 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     inferenceAgeLabel: formatAge(inferenceAgeMs),
     ...formatActiveMove(runtime),
     goalLabel: formatGoal(runtime),
+    ...formatSparkModule(runtime),
     stale,
   };
 }
@@ -106,6 +109,20 @@ function formatGoal(runtime: RuntimeReadModel | undefined): string {
   const cognition = asRecord(state.cognition);
   const activeGoal = asRecord(cognition.activeGoal);
   return stringField(activeGoal, 'description') || stringField(activeGoal, 'id') || '-';
+}
+
+function formatSparkModule(runtime: RuntimeReadModel | undefined): { moduleLabel: string; moduleDetail: string } {
+  const module = runtime?.spark?.activeModule;
+  if (!module) {
+    return { moduleLabel: 'no module logged', moduleDetail: '-' };
+  }
+
+  const version = module.version ? `@${module.version}` : '';
+  const facets = module.activeFacets?.length ? module.activeFacets.join(', ') : 'unknown facets';
+  return {
+    moduleLabel: `${module.id}${version}`,
+    moduleDetail: `${facets} | ${module.source}`,
+  };
 }
 
 function formatActiveMove(runtime: RuntimeReadModel | undefined): { moveLabel: string; moveDetail: string } {

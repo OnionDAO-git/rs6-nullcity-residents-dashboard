@@ -553,6 +553,7 @@
       <div><span>Last Thought</span><strong>{activity.inferenceLabel}</strong><small>{activity.inferenceAgeLabel}</small></div>
       <div><span>Current Move</span><strong>{activity.moveLabel}</strong><small>{activity.moveDetail}</small></div>
       <div><span>Goal</span><strong>{activity.goalLabel}</strong></div>
+      <div><span>SPARK Module</span><strong>{activity.moduleLabel}</strong><small>{activity.moduleDetail}</small></div>
     </div>
     <div class="activity-detail">{activity.actionDetail}</div>
   </section>

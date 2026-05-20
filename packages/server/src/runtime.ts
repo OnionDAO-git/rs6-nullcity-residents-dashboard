@@ -6,6 +6,7 @@ import type {
   InferenceLogEntry,
   ResidentDashboardRow,
   ResidentSummary,
+  SparkRuntimeSummary,
   RuntimeReadModel,
   RuntimeState,
   SoulSummary,
@@ -52,6 +53,7 @@ export class RuntimeRepository {
     const latestAction = actions.at(-1);
     const latestInference = inference.at(-1);
     const reaction = latestAction?.source === 'nervous-system' ? latestAction : [...actions].reverse().find(entry => entry.source === 'nervous-system');
+    const spark = buildSparkRuntimeSummary(actions, inference);
 
     return {
       available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || actions.length || inference.length),
@@ -89,6 +91,7 @@ export class RuntimeRepository {
         lastActionSource: latestAction?.source,
         gatewayHealthy: summary?.online,
       },
+      spark,
       memory: {
         indexMarkdown,
         files: memoryFiles,
@@ -116,6 +119,7 @@ export class RuntimeRepository {
           thinking: runtime.thinking,
           nervous: runtime.nervous,
           body: runtime.body,
+          spark: runtime.spark,
           lastEvent: latestEvent(runtime.logs.actions),
           errors: runtime.errors,
         };
@@ -175,6 +179,22 @@ export class RuntimeRepository {
     const roots = [path.join(this.logsRoot, resident, 'inference'), path.join(this.logsRoot, residentSlug(resident), 'inference')];
     return readLatestFromRoots<InferenceLogEntry>(roots, 100);
   }
+}
+
+export function buildSparkRuntimeSummary(actions: ActionLogEntry[], inference: InferenceLogEntry[]): SparkRuntimeSummary {
+  const modules = new Map<string, SparkRuntimeSummary['modules'][number]>();
+  for (const entry of actions) {
+    addSparkModule(modules, moduleFromLogEntry(entry), 'action-log', entry.t, facetsFromAction(entry));
+  }
+  for (const entry of inference) {
+    addSparkModule(modules, moduleFromLogEntry(entry), 'inference-log', entry.t, ['thinking']);
+  }
+
+  const ordered = [...modules.values()].sort((a, b) => String(a.lastSeenAt || '').localeCompare(String(b.lastSeenAt || '')));
+  return {
+    modules: ordered,
+    activeModule: ordered.at(-1),
+  };
 }
 
 async function readLatestFromRoots<T>(roots: string[], limit: number): Promise<T[]> {
@@ -254,6 +274,61 @@ function countNervousRules(markdown?: string): number | undefined {
 function actionKind(action: unknown): string | undefined {
   const record = asRecord(action);
   return typeof record.kind === 'string' ? record.kind : typeof record.type === 'string' ? record.type : undefined;
+}
+
+function addSparkModule(
+  modules: Map<string, SparkRuntimeSummary['modules'][number]>,
+  identity: { id: string; version?: string } | undefined,
+  source: SparkRuntimeSummary['modules'][number]['source'],
+  lastSeenAt: string | undefined,
+  facets: string[],
+): void {
+  if (!identity) return;
+  const key = `${identity.id}@${identity.version || ''}`;
+  const existing = modules.get(key);
+  if (!existing) {
+    modules.set(key, {
+      id: identity.id,
+      version: identity.version,
+      source,
+      activeFacets: orderedFacets(facets),
+      lastSeenAt,
+    });
+    return;
+  }
+
+  existing.activeFacets = orderedFacets([...existing.activeFacets, ...facets]);
+  if (!existing.lastSeenAt || (lastSeenAt && lastSeenAt >= existing.lastSeenAt)) {
+    existing.source = source;
+    existing.lastSeenAt = lastSeenAt;
+  }
+}
+
+function moduleFromLogEntry(entry: ActionLogEntry | InferenceLogEntry): { id: string; version?: string } | undefined {
+  const sparkModule = asRecord(entry.sparkModule);
+  const id = typeof sparkModule.id === 'string' ? sparkModule.id : undefined;
+  if (!id) return undefined;
+  return {
+    id,
+    version: typeof sparkModule.version === 'string' ? sparkModule.version : undefined,
+  };
+}
+
+function facetsFromAction(entry: ActionLogEntry): string[] {
+  if (entry.source === 'thinking') return ['thinking'];
+  if (entry.source === 'nervous-system') return ['nervous-rules'];
+  if (entry.source === 'body') return ['body'];
+  if (entry.source === 'manual') return ['manual'];
+  return [];
+}
+
+function orderedFacets(facets: string[]): string[] {
+  const order = ['thinking', 'body', 'nervous-rules', 'manual'];
+  return [...new Set(facets)].sort((a, b) => {
+    const ai = order.indexOf(a);
+    const bi = order.indexOf(b);
+    return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi) || a.localeCompare(b);
+  });
 }
 
 function resultStatus(result: unknown): string | undefined {
