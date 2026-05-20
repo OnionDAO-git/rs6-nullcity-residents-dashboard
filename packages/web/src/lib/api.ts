@@ -42,6 +42,7 @@ export const api = {
   observe: (subject: SpectatorSubject, mode: SpectatorMode) =>
     request<SpectatorSession>('/api/observe/session', { method: 'POST', body: JSON.stringify({ subject, mode }) }),
   unobserve: (sessionId: string) => request(`/api/observe/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
+  streamSession: (sessionId: string) => new EventSource(`/api/observe/session/${encodeURIComponent(sessionId)}/stream`),
   souls: () => request<SoulSummary[]>('/api/souls'),
   logs: () => request<{ actions: unknown[]; inference: unknown[] }>('/api/logs'),
 };

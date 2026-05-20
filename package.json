@@ -6,12 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run dev:server & bun run dev:web",
-    "dev:server": "bun --cwd packages/server run dev",
-    "dev:web": "bun --cwd packages/web run dev",
-    "build": "bun --cwd packages/shared run build && bun --cwd packages/observer run build && bun --cwd packages/server run build && bun --cwd packages/web run build",
-    "check": "bun --cwd packages/shared run check && bun --cwd packages/observer run check && bun --cwd packages/server run check && bun --cwd packages/web run check",
-    "typecheck": "bun --cwd packages/shared run typecheck && bun --cwd packages/observer run typecheck && bun --cwd packages/server run typecheck && bun --cwd packages/web run typecheck"
+    "dev": "bun run --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' dev",
+    "dev:server": "bun run --filter '@nullcity-dashboard/server' dev",
+    "dev:web": "bun run --filter '@nullcity-dashboard/web' dev",
+    "build": "bun run --filter '@nullcity-dashboard/shared' --filter '@nullcity-dashboard/observer' --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' build",
+    "check": "bun run --filter '*' check",
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "@types/bun": "^1.1.16",

@@ -13,6 +13,7 @@
     "@nullcity-dashboard/observer": "*",
     "@nullcity-dashboard/shared": "*",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "client2": "file:../../../rs6-nullcity-client-ts",
     "svelte": "^5.16.0",
     "vite": "^6.0.7"
   },

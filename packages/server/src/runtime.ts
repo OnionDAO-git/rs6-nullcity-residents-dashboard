@@ -55,6 +55,7 @@ export class RuntimeRepository {
 
     return {
       available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || actions.length || inference.length),
+      online: Boolean(summary?.online),
       state,
       thinking: {
         mode: summary?.online ? inferThinkingMode(latestInference) : 'offline',

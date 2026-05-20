@@ -17,10 +17,13 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type SessionListener = (session: SpectatorSession) => void;
+
 export class GatewayClient {
   private ws?: WebSocket;
   private pending = new Map<string | number, Pending>();
   private sessions = new Map<string, SpectatorSession>();
+  private sessionListeners = new Map<string, Set<SessionListener>>();
   private connected = false;
   private connecting?: Promise<void>;
   private lastConnectedAt?: string;
@@ -75,11 +78,13 @@ export class GatewayClient {
       subject,
       mode,
       connected: true,
+      regionId: typeof state.regionId === 'number' ? state.regionId : undefined,
       position: parsePosition(state.position),
       latestPerception: state.perception,
+      packets: this.sessions.get(message.payload.sessionId)?.packets || [],
       lastEventAt: new Date().toISOString(),
     };
-    this.sessions.set(session.id, session);
+    this.setSession(session.id, session);
     return session;
   }
 
@@ -87,7 +92,7 @@ export class GatewayClient {
     await this.request(makeFrame('unobserve_subject', { sessionId }));
     const session = this.sessions.get(sessionId);
     if (session) {
-      this.sessions.set(sessionId, { ...session, connected: false });
+      this.setSession(sessionId, { ...session, connected: false });
     }
   }
 
@@ -97,6 +102,18 @@ export class GatewayClient {
 
   listSessions(): SpectatorSession[] {
     return [...this.sessions.values()].sort((a, b) => subjectKey(a.subject).localeCompare(subjectKey(b.subject)));
+  }
+
+  subscribeSession(sessionId: string, listener: SessionListener): () => void {
+    const listeners = this.sessionListeners.get(sessionId) || new Set<SessionListener>();
+    listeners.add(listener);
+    this.sessionListeners.set(sessionId, listeners);
+    const session = this.sessions.get(sessionId);
+    if (session) listener(session);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.sessionListeners.delete(sessionId);
+    };
   }
 
   private async request(message: ClientMessage, timeoutMs = 5000): Promise<ServerMessage> {
@@ -120,6 +137,7 @@ export class GatewayClient {
   private async ensureConnected(): Promise<void> {
     if (this.connected && this.ws?.readyState === WebSocket.OPEN) return;
     if (this.connecting) return this.connecting;
+    assertAgentGatewayUrl(this.url);
 
     this.connecting = new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(this.url, {
@@ -148,10 +166,14 @@ export class GatewayClient {
       });
 
       ws.on('message', data => this.handleMessage(data.toString()));
-      ws.on('error', () => fail(new Error('Gateway websocket error')));
+      ws.on('error', error => {
+        const message = error instanceof Error && error.message ? error.message : 'Gateway websocket error';
+        fail(new Error(message));
+      });
       ws.on('close', () => {
         this.connected = false;
         this.lastDisconnectedAt = new Date().toISOString();
+        this.lastError = this.lastError || 'Gateway websocket closed';
         this.rejectAll(new Error('Gateway websocket closed'));
       });
     }).finally(() => {
@@ -186,14 +208,33 @@ export class GatewayClient {
   }
 
   private applyPush(message: ServerMessage): void {
+    if (message.kind === 'spectator_connected') {
+      const state = message.payload.initialState as Record<string, unknown>;
+      const session: SpectatorSession = {
+        id: message.payload.sessionId,
+        subject: message.payload.subject,
+        mode: isSpectatorMode(state.mode) ? state.mode : 'follow',
+        connected: true,
+        regionId: typeof state.regionId === 'number' ? state.regionId : undefined,
+        position: parsePosition(state.position),
+        latestPerception: state.perception,
+        packets: this.sessions.get(message.payload.sessionId)?.packets || [],
+        lastEventAt: new Date().toISOString(),
+      };
+      this.setSession(session.id, session);
+    }
     if (message.kind === 'spectator_perception') {
       const session = this.sessions.get(message.payload.sessionId);
       if (session) {
         const perception = message.payload.perception as Record<string, unknown>;
-        this.sessions.set(session.id, {
+        const position = parsePosition(message.payload.position) ??
+          parsePosition((perception.resident as Record<string, unknown> | undefined)?.position ?? perception.position) ??
+          session.position;
+        this.setSession(session.id, {
           ...session,
           latestPerception: message.payload.perception,
-          position: parsePosition((perception.resident as Record<string, unknown> | undefined)?.position ?? perception.position) ?? session.position,
+          position,
+          regionId: typeof message.payload.regionId === 'number' ? message.payload.regionId : session.regionId,
           lastEventAt: new Date().toISOString(),
         });
       }
@@ -202,10 +243,28 @@ export class GatewayClient {
       const session = this.sessions.get(message.payload.sessionId);
       if (session) {
         const payload = message.payload.payload as Record<string, unknown>;
-        this.sessions.set(session.id, {
+        this.setSession(session.id, {
           ...session,
+          regionId: typeof payload.regionId === 'number' ? payload.regionId : session.regionId,
           position: parsePosition(payload.position) ?? session.position,
           latestPerception: payload.perception ?? session.latestPerception,
+          lastEventAt: new Date().toISOString(),
+        });
+      }
+    }
+    if (message.kind === 'spectator_packet') {
+      const session = this.sessions.get(message.payload.sessionId);
+      if (session) {
+        this.setSession(session.id, {
+          ...session,
+          packets: [
+            ...(session.packets || []).slice(-749),
+            {
+              opcode: message.payload.opcode,
+              payload: message.payload.payload,
+              receivedAt: new Date().toISOString(),
+            },
+          ],
           lastEventAt: new Date().toISOString(),
         });
       }
@@ -213,8 +272,15 @@ export class GatewayClient {
     if (message.kind === 'spectator_disconnected') {
       const session = this.sessions.get(message.payload.sessionId);
       if (session) {
-        this.sessions.set(session.id, { ...session, connected: false, error: message.payload.cause });
+        this.setSession(session.id, { ...session, connected: false, error: message.payload.cause });
       }
+    }
+  }
+
+  private setSession(sessionId: string, session: SpectatorSession): void {
+    this.sessions.set(sessionId, session);
+    for (const listener of this.sessionListeners.get(sessionId) || []) {
+      listener(session);
     }
   }
 
@@ -227,6 +293,17 @@ export class GatewayClient {
   }
 }
 
+function assertAgentGatewayUrl(value: string): void {
+  try {
+    const url = new URL(value);
+    if (url.port === '43594') {
+      throw new Error('AGENT_GATEWAY_URL points at the RuneScape game gateway on port 43594. Use the AgentGateway on port 43595 for dashboard resident control.');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('RuneScape game gateway')) throw error;
+  }
+}
+
 function parsePosition(value: unknown): { x: number; y: number; level: number } | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const record = value as Record<string, unknown>;
@@ -234,4 +311,8 @@ function parsePosition(value: unknown): { x: number; y: number; level: number } 
   const y = Number(record.y);
   const level = Number(record.level ?? 0);
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y, level: Number.isFinite(level) ? level : 0 } : undefined;
+}
+
+function isSpectatorMode(value: unknown): value is SpectatorMode {
+  return value === 'follow' || value === 'free-camera' || value === 'picture-in-picture';
 }

@@ -1,0 +1,95 @@
+import { Client, type SpectatorRsPacketFrame } from 'client2';
+
+type SpectatorMessage =
+  | { type: 'nullcity:spectator-session'; sessionId: string; subject: { kind: string; name?: string; username?: string } }
+  | { type: 'nullcity:spectator-packet'; sessionId: string; packet: SpectatorRsPacketFrame }
+  | { type: 'nullcity:spectator-clear' };
+
+const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+const status = document.getElementById('status') as HTMLDivElement;
+let sessionId = '';
+let packetCount = 0;
+let lastOpcode = '';
+let hasMapBootstrap = false;
+
+const clientConfig = await loadClientConfig();
+(globalThis as typeof globalThis & { __NULLCITY_RS_HOST__?: string }).__NULLCITY_RS_HOST__ = clientConfig.host;
+(globalThis as typeof globalThis & { __NULLCITY_RS_SECURE__?: boolean }).__NULLCITY_RS_SECURE__ = clientConfig.secure;
+
+const client = new Client(10, false, true);
+client.enableSpectatorMode();
+setStatus(`waiting for spectator packets via ${clientConfig.secure ? 'wss' : 'ws'}://${clientConfig.host}`);
+
+window.addEventListener('message', event => {
+  if (event.origin !== window.location.origin) return;
+  const message = event.data as SpectatorMessage;
+  if (!message || typeof message !== 'object') return;
+
+  if (message.type === 'nullcity:spectator-clear') {
+    sessionId = '';
+    packetCount = 0;
+    lastOpcode = '';
+    hasMapBootstrap = false;
+    setStatus('waiting for spectator packets');
+    return;
+  }
+
+  if (message.type === 'nullcity:spectator-session') {
+    if (message.sessionId !== sessionId) {
+      sessionId = message.sessionId;
+      packetCount = 0;
+      lastOpcode = '';
+      hasMapBootstrap = false;
+    }
+    const label = message.subject.kind === 'resident' ? message.subject.name : message.subject.username;
+    setStatus(`following ${label || 'subject'}; waiting for render packets`);
+    return;
+  }
+
+  if (message.type === 'nullcity:spectator-packet' && message.sessionId === sessionId) {
+    packetCount += 1;
+    lastOpcode = String(message.packet.opcode);
+    hasMapBootstrap = hasMapBootstrap || message.packet.opcode === 166 || message.packet.opcode === 23;
+    try {
+      client.pushSpectatorPacket(message.packet);
+      const mapState = hasMapBootstrap ? '' : '; missing map bootstrap';
+      setStatus(`packets ${packetCount}; last opcode ${lastOpcode}${mapState}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'packet decode failed';
+      setStatus(`packet ${lastOpcode} failed: ${detail}`);
+    }
+  }
+});
+
+function setStatus(text: string): void {
+  status.textContent = text;
+  status.hidden = text.length === 0;
+  window.parent.postMessage({ type: 'nullcity:spectator-status', text }, window.location.origin);
+}
+
+async function loadClientConfig(): Promise<{ host: string; secure: boolean }> {
+  try {
+    const response = await fetch('/api/controller/config');
+    if (!response.ok) throw new Error(`config ${response.status}`);
+    const config = await response.json() as { rsClientHost?: unknown; rsClientSecure?: unknown };
+    return {
+      host: typeof config.rsClientHost === 'string' && config.rsClientHost ? config.rsClientHost : defaultClientHost(),
+      secure: config.rsClientSecure === true,
+    };
+  } catch {
+    return { host: defaultClientHost(), secure: window.location.protocol === 'https:' };
+  }
+}
+
+function defaultClientHost(): string {
+  return `${window.location.host}/rs`;
+}
+
+function fitCanvas(): void {
+  const scale = Math.min(window.innerWidth / 765, window.innerHeight / 503);
+  canvas.style.width = `${Math.max(1, Math.floor(765 * scale))}px`;
+  canvas.style.height = `${Math.max(1, Math.floor(503 * scale))}px`;
+}
+
+window.addEventListener('resize', fitCanvas);
+fitCanvas();

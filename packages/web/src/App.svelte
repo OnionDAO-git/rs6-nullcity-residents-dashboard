@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DashboardOverview, ObservableSubjectSummary, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession } from '@nullcity-dashboard/shared';
+  import type { DashboardOverview, ObservableSubjectSummary, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import { NullCitySpectatorBridge, summarizePerception } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { compactJson, subjectLabel, subjectPath, timeAgo } from './lib/format';
 
   let route = window.location.pathname;
   let loading = false;
+  let actionBusy = false;
   let error = '';
+  let actionError = '';
   let overview: DashboardOverview | undefined;
   let residents: ResidentDashboardRow[] = [];
   let selectedRuntime: RuntimeReadModel | undefined;
@@ -14,21 +17,28 @@
   let sessions: SpectatorSession[] = [];
   let souls: SoulSummary[] = [];
   let logs: { actions: unknown[]; inference: unknown[] } = { actions: [], inference: [] };
+  let activeSession: SpectatorSession | undefined;
+  let sessionStream: EventSource | undefined;
+  let sessionStreamId = '';
+
+  const defaultSpawnX = '3225';
+  const defaultSpawnY = '3217';
+  const defaultSpawnLevel = '0';
 
   let filter = 'all';
-  let newName = 'res:';
-  let spawnX = '';
-  let spawnY = '';
-  let spawnLevel = '0';
-  let connectAfterCreate = true;
+  let newName = 'res:resident_001';
+  let spawnX = defaultSpawnX;
+  let spawnY = defaultSpawnY;
+  let spawnLevel = defaultSpawnLevel;
+  let connectAfterCreate = false;
   let disconnectPolicy = 'idle';
-  let selectedSoul = '';
   let jsonAction = '{\n  "kind": "noop",\n  "cause": "dashboard"\n}';
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
   $: observeKind = parts[0] === 'observe' ? parts[1] : '';
   $: observeId = parts[0] === 'observe' ? parts[2] : '';
+  $: if (route === '/residents/new') seedSpawnDefaults();
 
   onMount(() => {
     const listener = () => {
@@ -58,12 +68,20 @@
     try {
       if (route === '/') overview = await api.overview();
       else if (route === '/residents') residents = await api.residents(filter);
-      else if (route === '/residents/new') souls = await api.souls();
-      else if (residentName) selectedRuntime = await api.runtime(residentName);
+      else if (route === '/residents/new') {
+        seedSpawnDefaults();
+        souls = await api.souls();
+      }
+      else if (residentName) {
+        [selectedRuntime, sessions] = await Promise.all([api.runtime(residentName), api.sessions()]);
+        syncResidentStream();
+      }
       else if (route === '/observe' || route.startsWith('/observe/')) {
         [subjects, sessions] = await Promise.all([api.subjects(), api.sessions()]);
+        syncObserveStream();
       } else if (route === '/souls') souls = await api.souls();
       else if (route === '/logs') logs = await api.logs();
+      if (!route.startsWith('/observe/') && !residentName) closeSessionStream();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Request failed';
     } finally {
@@ -75,38 +93,81 @@
     routeTo(path);
   }
 
+  function seedSpawnDefaults() {
+    if (!spawnX.trim()) spawnX = defaultSpawnX;
+    if (!spawnY.trim()) spawnY = defaultSpawnY;
+    if (!spawnLevel.trim()) spawnLevel = defaultSpawnLevel;
+  }
+
   async function createResident() {
-    const body: Record<string, unknown> = { name: newName };
-    const x = Number(spawnX);
-    const y = Number(spawnY);
-    const level = Number(spawnLevel);
-    if (Number.isFinite(x) && Number.isFinite(y)) body.spawnPosition = { x, y, level: Number.isFinite(level) ? level : 0 };
-    if (selectedSoul) body.soul = selectedSoul;
-    await api.createResident(body);
-    if (connectAfterCreate) await api.residentCommand(newName, 'connect', { observe: true, control: true, onDisconnect: disconnectPolicy });
-    nav(`/residents/${encodeURIComponent(newName)}`);
+    await runAction(async () => {
+      const name = newName.trim().toLowerCase();
+      if (!/^res:[a-z0-9_]{1,20}$/.test(name)) throw new Error('Resident names must match res:[a-z0-9_]{1,20}');
+      const body: Record<string, unknown> = { name };
+      const x = Number(spawnX);
+      const y = Number(spawnY);
+      const level = Number(spawnLevel);
+      if (Number.isInteger(x) && Number.isInteger(y)) body.spawnPosition = { x, y, level: Number.isInteger(level) ? level : 0 };
+      await api.createResident(body);
+      if (connectAfterCreate) await api.residentCommand(name, 'connect', { observe: true, control: false, onDisconnect: disconnectPolicy });
+      nav(`/residents/${encodeURIComponent(name)}`);
+    });
   }
 
   async function commandResident(command: 'connect' | 'attach' | 'detach' | 'disconnect') {
     if (!residentName) return;
-    await api.residentCommand(residentName, command, command === 'connect' ? { observe: true, control: true, onDisconnect: disconnectPolicy } : {});
-    await loadRoute();
+    await runAction(async () => {
+      await api.residentCommand(residentName, command, command === 'connect' ? { observe: true, control: true, onDisconnect: disconnectPolicy } : {});
+      await loadRoute();
+    });
+  }
+
+  async function loginResident() {
+    if (!residentName) return;
+    await runAction(async () => {
+      await api.residentCommand(residentName, 'connect', { observe: true, control: false, onDisconnect: disconnectPolicy });
+      await loadRoute();
+    });
   }
 
   async function sendJsonAction() {
     if (!residentName) return;
-    await api.submitAction(residentName, JSON.parse(jsonAction));
-    await loadRoute();
+    await runAction(async () => {
+      await api.submitAction(residentName, JSON.parse(jsonAction));
+      await loadRoute();
+    });
   }
 
   async function startObserve(subject: ObservableSubjectSummary, mode: SpectatorMode = 'follow') {
-    await api.observe(subject.subject, mode);
-    nav(`/observe/${subjectPath(subject.subject)}`);
+    await observeSubject(subject.subject, mode);
+  }
+
+  async function observeResident() {
+    if (!residentName) return;
+    await runAction(async () => {
+      await api.residentCommand(residentName, 'connect', { observe: false, control: false, onDisconnect: disconnectPolicy });
+      await openObserveSubject({ kind: 'resident', name: residentName }, 'follow');
+    });
+  }
+
+  async function observeSubject(subject: SpectatorSubject, mode: SpectatorMode = 'follow') {
+    await runAction(async () => openObserveSubject(subject, mode));
+  }
+
+  async function openObserveSubject(subject: SpectatorSubject, mode: SpectatorMode = 'follow') {
+    const session = await api.observe(subject, mode);
+    upsertSession(session);
+    activeSession = session;
+    nav(`/observe/${subjectPath(subject)}`);
+    openSessionStream(session);
   }
 
   async function stopObserve(sessionId: string) {
-    await api.unobserve(sessionId);
-    await loadRoute();
+    await runAction(async () => {
+      await api.unobserve(sessionId);
+      if (activeSession?.id === sessionId) activeSession = { ...activeSession, connected: false };
+      await loadRoute();
+    });
   }
 
   function residentRows(): ResidentDashboardRow[] {
@@ -116,9 +177,88 @@
   function selectedSession(): SpectatorSession | undefined {
     if (!observeKind || !observeId) return undefined;
     const decoded = decodeURIComponent(observeId);
-    return sessions.find(session =>
-      session.subject.kind === observeKind && (session.subject.kind === 'resident' ? session.subject.name === decoded : session.subject.username === decoded),
-    );
+    return [activeSession, ...sessions].find(session => session && subjectMatches(session.subject, observeKind, decoded));
+  }
+
+  function residentSession(): SpectatorSession | undefined {
+    if (!residentName) return undefined;
+    return [activeSession, ...sessions].find(session => session?.subject.kind === 'resident' && session.subject.name.toLowerCase() === residentName.toLowerCase());
+  }
+
+  function residentIsOnline(): boolean {
+    return selectedRuntime?.online === true;
+  }
+
+  function subjectMatches(subject: SpectatorSubject, kind: string, id: string): boolean {
+    return subject.kind === kind && (subject.kind === 'resident' ? subject.name.toLowerCase() === id.toLowerCase() : subject.username.toLowerCase() === id.toLowerCase());
+  }
+
+  function upsertSession(session: SpectatorSession) {
+    sessions = [session, ...sessions.filter(candidate => candidate.id !== session.id)];
+  }
+
+  function syncObserveStream() {
+    const session = selectedSession();
+    if (session) openSessionStream(session);
+    else closeSessionStream();
+  }
+
+  function syncResidentStream() {
+    const session = residentSession();
+    if (session) openSessionStream(session);
+    else closeSessionStream();
+  }
+
+  function openSessionStream(session: SpectatorSession) {
+    if (sessionStreamId === session.id && sessionStream) return;
+    closeSessionStream();
+    activeSession = session;
+    sessionStreamId = session.id;
+    sessionStream = api.streamSession(session.id);
+    sessionStream.addEventListener('session', event => {
+      const session = JSON.parse((event as MessageEvent).data) as SpectatorSession;
+      activeSession = session;
+      upsertSession(session);
+    });
+    sessionStream.onerror = () => {
+      actionError = 'Spectator stream disconnected; polling will keep the last session visible.';
+      closeSessionStream();
+    };
+  }
+
+  function closeSessionStream() {
+    sessionStream?.close();
+    sessionStream = undefined;
+    sessionStreamId = '';
+  }
+
+  async function runAction(fn: () => Promise<void>) {
+    actionBusy = true;
+    actionError = '';
+    try {
+      await fn();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'Action failed';
+    } finally {
+      actionBusy = false;
+    }
+  }
+
+  function spectatorFrame(node: HTMLElement, session: SpectatorSession | undefined) {
+    const bridge = new NullCitySpectatorBridge(node);
+    bridge.setSession(session);
+    return {
+      update(next: SpectatorSession | undefined) {
+        bridge.setSession(next);
+      },
+      destroy() {
+        bridge.destroy();
+      },
+    };
+  }
+
+  function sessionSummary(session: SpectatorSession | undefined) {
+    return summarizePerception(session?.latestPerception);
   }
 
   function soulTitle(soul: SoulSummary): string {
@@ -146,8 +286,8 @@
     <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
   </div>
 
-  {#if error}
-    <div class="notice rose">{error}</div>
+  {#if error || actionError}
+    <div class="notice rose">{error || actionError}</div>
   {/if}
   {#if loading}
     <div class="notice">Loading dashboard state</div>
@@ -192,13 +332,12 @@
     </section>
     <section class="form-grid">
       <label>Name <input bind:value={newName} placeholder="res:name" /></label>
-      <label>Soul <select bind:value={selectedSoul}><option value="">unassigned</option>{#each souls as soul}<option value={soul.file}>{soul.title}</option>{/each}</select></label>
-      <label>X <input bind:value={spawnX} inputmode="numeric" /></label>
-      <label>Y <input bind:value={spawnY} inputmode="numeric" /></label>
-      <label>Level <input bind:value={spawnLevel} inputmode="numeric" /></label>
+      <label>X <input bind:value={spawnX} inputmode="numeric" placeholder={defaultSpawnX} /></label>
+      <label>Y <input bind:value={spawnY} inputmode="numeric" placeholder={defaultSpawnY} /></label>
+      <label>Level <input bind:value={spawnLevel} inputmode="numeric" placeholder={defaultSpawnLevel} /></label>
       <label>Disconnect policy <select bind:value={disconnectPolicy}><option value="idle">idle</option><option value="logout">logout</option></select></label>
-      <label class="check"><input type="checkbox" bind:checked={connectAfterCreate} /> Connect after create</label>
-      <button class="primary wide" onclick={createResident}>Create</button>
+      <label class="check"><input type="checkbox" bind:checked={connectAfterCreate} /> Spawn online after create</label>
+      <button class="primary wide" disabled={actionBusy} onclick={createResident}>Create</button>
     </section>
     {@render SoulGrid({ souls })}
   {:else if residentName}
@@ -208,16 +347,27 @@
         <h1>{residentName}</h1>
       </div>
       <div class="actions">
-        <button onclick={() => commandResident('attach')}>Observe</button>
-        <button onclick={() => commandResident('connect')}>Control</button>
-        <button onclick={() => commandResident('detach')}>Detach</button>
-        <button class="danger" onclick={() => commandResident('disconnect')}>Disconnect</button>
+        {#if residentIsOnline()}
+          <button disabled={actionBusy} onclick={observeResident}>Observe</button>
+          <button disabled={actionBusy} onclick={() => commandResident('connect')}>Control</button>
+          <button disabled={actionBusy} onclick={() => commandResident('detach')}>Detach</button>
+          <button disabled={actionBusy} class="danger" onclick={() => commandResident('disconnect')}>Disconnect</button>
+        {:else}
+          <button disabled={actionBusy} class="primary" onclick={loginResident}>Login</button>
+        {/if}
       </div>
     </section>
     <section class="split">
       <div class="panel observer-pane">
         <div class="panel-title">Spectator</div>
-        <div class="spectator-placeholder">Read-only observer surface</div>
+        <div class="observer-surface">
+          <div class="spectator-frame" use:spectatorFrame={residentSession()} aria-label="resident spectator"></div>
+          {#if !residentIsOnline()}
+            <button disabled={actionBusy} class="surface-action" onclick={loginResident}>Login Resident</button>
+          {:else if !residentSession()}
+            <button disabled={actionBusy} class="surface-action" onclick={observeResident}>Start Spectator</button>
+          {/if}
+        </div>
       </div>
       <div class="panel">
         <div class="panel-title">Body</div>
@@ -232,7 +382,7 @@
     <section class="panel">
       <div class="panel-title">Manual Action</div>
       <textarea bind:value={jsonAction}></textarea>
-      <button class="primary" onclick={sendJsonAction}>Submit Action</button>
+      <button class="primary" disabled={actionBusy || !residentIsOnline()} onclick={sendJsonAction}>Submit Action</button>
     </section>
     <section class="modules">
       {@render LogPanel({ title: 'Actions', rows: selectedRuntime?.logs.actions || [] })}
@@ -252,8 +402,8 @@
           </div>
           <p>{subject.position ? `${subject.position.x}, ${subject.position.y}, ${subject.position.level}` : 'position unknown'}</p>
           <div class="actions">
-            <button onclick={() => startObserve(subject, 'follow')}>Follow</button>
-            <button onclick={() => startObserve(subject, 'free-camera')}>Free Camera</button>
+            <button disabled={actionBusy} onclick={() => startObserve(subject, 'follow')}>Follow</button>
+            <button disabled={actionBusy} onclick={() => startObserve(subject, 'free-camera')}>Free Camera</button>
           </div>
         </article>
       {/each}
@@ -270,10 +420,19 @@
     </section>
     <section class="split wide">
       <div class="panel observer-pane large">
-        <div class="panel-title">Canvas</div>
-        <div class="spectator-placeholder">{session?.connected ? 'Spectating' : 'Session closed'}</div>
+        <div class="panel-title">Spectator</div>
+        <div class="observer-surface large">
+          <div class="spectator-frame" use:spectatorFrame={session} aria-label="spectator"></div>
+        </div>
       </div>
       <div class="panel">
+        <div class="mini-grid observer-summary">
+          <span>players {sessionSummary(session).players}</span>
+          <span>residents {sessionSummary(session).residents}</span>
+          <span>npcs {sessionSummary(session).npcs}</span>
+          <span>objects {sessionSummary(session).objects}</span>
+          <span>items {sessionSummary(session).items}</span>
+        </div>
         <div class="panel-title">Perception</div>
         <pre>{compactJson(session?.latestPerception)}</pre>
       </div>

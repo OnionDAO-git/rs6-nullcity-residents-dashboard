@@ -1,13 +1,36 @@
+import { resolve } from 'node:path';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [svelte()],
+  resolve: {
+    alias: {
+      client2: resolve(__dirname, '../../../rs6-nullcity-client-ts/src/client/Client.ts'),
+      '#3rdparty': resolve(__dirname, '../../../rs6-nullcity-client-ts/src/3rdparty'),
+      '#': resolve(__dirname, '../../../rs6-nullcity-client-ts/src'),
+    },
+  },
+  define: {
+    'process.env.RUNEJS_SERVER_PROT': JSON.stringify('true'),
+    'process.env.RUNEJS_CUSTOM_COL': JSON.stringify('true'),
+    'process.env.LOGIN_RSAE': JSON.stringify('65537'),
+    'process.env.LOGIN_RSAN': JSON.stringify('119568088839203297999728368933573315070738693395974011872885408638642676871679245723887367232256427712869170521351089799352546294030059890127723509653145359924771433131004387212857375068629466435244653901851504845054452735390701003613803443469723435116497545687393297329052988014281948392136928774011011998343'),
+    'process.env.BUILD_TIME': JSON.stringify(new Date().toISOString()),
+  },
   server: {
     port: 5174,
+    fs: {
+      allow: [resolve(__dirname, '../../..')],
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+      '/rs': {
+        target: 'ws://127.0.0.1:8787',
+        ws: true,
         changeOrigin: true,
       },
     },
@@ -15,5 +38,11 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
+    rollupOptions: {
+      input: {
+        index: resolve(__dirname, 'index.html'),
+        spectator: resolve(__dirname, 'spectator.html'),
+      },
+    },
   },
 });

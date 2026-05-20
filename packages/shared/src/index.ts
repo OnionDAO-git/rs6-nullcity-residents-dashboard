@@ -3,6 +3,7 @@ export const AGENT_PROTOCOL_VERSION = 1;
 export type ResidentFilter = 'online' | 'offline' | 'all';
 export type DisconnectPolicy = 'logout' | 'idle';
 export type SpectatorMode = 'follow' | 'free-camera' | 'picture-in-picture';
+export type SpectatorPacketType = 'FIXED' | 'DYNAMIC_SMALL' | 'DYNAMIC_LARGE';
 
 export type SpectatorSubject =
   | { kind: 'resident'; name: string }
@@ -103,6 +104,7 @@ export interface ResidentEventSummary {
 
 export interface RuntimeReadModel {
   available: boolean;
+  online: boolean;
   state?: RuntimeState;
   thinking: {
     mode: 'idle' | 'executing' | 'deciding' | 'offline' | 'unknown';
@@ -203,9 +205,27 @@ export interface SpectatorSession {
   mode: SpectatorMode;
   connected: boolean;
   position?: Position;
+  regionId?: number;
   latestPerception?: unknown;
+  packets?: SpectatorPacket[];
   lastEventAt?: string;
   error?: string;
+}
+
+export interface SpectatorPacket {
+  opcode: number;
+  payload: SpectatorRsPacketFrame;
+  receivedAt: string;
+}
+
+export interface SpectatorRsPacketFrame {
+  opcode: number;
+  type: SpectatorPacketType;
+  updateTask: boolean;
+  payloadLength: number;
+  payloadBase64: string;
+  frameLength: number;
+  frameBase64: string;
 }
 
 export type ClientMessage =
@@ -239,8 +259,8 @@ export type ServerMessage =
   | AgentFrame<'resident_disconnected', { name: string; cause?: string }>
   | AgentFrame<'spectator_connected', { sessionId: string; subject: SpectatorSubject; initialState: unknown }>
   | AgentFrame<'spectator_rebuild', { sessionId: string; payload: unknown }>
-  | AgentFrame<'spectator_packet', { sessionId: string; opcode: number; payload: unknown }>
-  | AgentFrame<'spectator_perception', { sessionId: string; perception: unknown }>
+  | AgentFrame<'spectator_packet', { sessionId: string; opcode: number; payload: SpectatorRsPacketFrame }>
+  | AgentFrame<'spectator_perception', { sessionId: string; perception: unknown; position?: Position; regionId?: number }>
   | AgentFrame<'spectator_disconnected', { sessionId: string; cause?: string }>
   | AgentFrame<'perception', { resident_id: string; perception: unknown }>
   | AgentFrame<'action_result', { resident_id: string; request_id?: string | number; result: unknown; cause?: string }>
