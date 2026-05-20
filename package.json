@@ -1,0 +1,20 @@
+{
+  "name": "rs6-nullcity-residents-dashboard",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run dev:server & bun run dev:web",
+    "dev:server": "bun --cwd packages/server run dev",
+    "dev:web": "bun --cwd packages/web run dev",
+    "build": "bun --cwd packages/shared run build && bun --cwd packages/observer run build && bun --cwd packages/server run build && bun --cwd packages/web run build",
+    "check": "bun --cwd packages/shared run check && bun --cwd packages/observer run check && bun --cwd packages/server run check && bun --cwd packages/web run check",
+    "typecheck": "bun --cwd packages/shared run typecheck && bun --cwd packages/observer run typecheck && bun --cwd packages/server run typecheck && bun --cwd packages/web run typecheck"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.16",
+    "typescript": "^5.7.3"
+  }
+}
