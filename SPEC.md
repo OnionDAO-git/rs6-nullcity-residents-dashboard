@@ -13,11 +13,19 @@ This spec is derived from:
 - `rs6-nullcity-server/src/server/agent/protocol/messages.ts`
 - `rs6-nullcity-server/src/server/agent/gateway.ts`
 - `rs6-nullcity-server/src/server/agent/config.ts`
+- `rs6-nullcity-server/src/controller/resident-runtime.ts`
+- `rs6-nullcity-server/src/controller/thinking/thinking-module.ts`
+- `rs6-nullcity-server/src/controller/nervous-system/nervous-system.ts`
+- `rs6-nullcity-server/src/controller/nervous-system/rules.ts`
+- `rs6-nullcity-server/src/controller/nervous-system/rules-md.ts`
+- `rs6-nullcity-server/src/controller/body/body.ts`
+- `rs6-nullcity-server/src/controller/memory/runtime-state.ts`
+- `rs6-nullcity-server/src/controller/llm/completion-parser.ts`
 - `rs6-nullcity-server/src/engine/world/actor/resident/perception/perception-types.ts`
 - `rs6-nullcity-server/src/engine/world/actor/resident/perception/perception-builder.ts`
 - `rs6-nullcity-server/src/engine/world/actor/resident/action/agent-action.ts`
 - `rs6-nullcity-client-ts/`
-- `rs6-dashboard/NullCity Design.md`
+- `rs6-nullcity-residents-dashbaord/NullCity Design.md`
 
 Use `NullCity Design.md` only for visual language, typography, palette, and interaction tone. Ignore its narrative/game-lore content when designing this operator tool.
 
@@ -27,9 +35,9 @@ Use `NullCity Design.md` only for visual language, typography, palette, and inte
 
 1. **Spawn residents** from the dashboard: create `res:<name>` identities, choose a soul, choose spawn settings, and connect them into the world.
 2. **Control residents** through the public `AgentAction` protocol rather than engine internals.
-3. **Observe residents** live through tick perceptions, events, action results, controller runtime state, memory, logs, and a visual spectator.
+3. **Observe residents** live through tick perceptions, events, action results, autonomy runtime state, memory, logs, and a visual spectator.
 4. **Observe online players** without using player credentials, through a read-only spectator path that mirrors a selected player.
-5. **Operate the controller**: see each resident's Spark mode, active plan, attention, hooks, budget, inference state, and recovery status.
+5. **Operate the controller**: see each resident's Thinking, Nervous System, and Body state, including Spark mode, active plan, attention, hooks, reflex rules, budget, inference state, action IO, and recovery status.
 6. **Preserve the Null City look** while remaining an efficient operations surface.
 
 Out of scope for v1:
@@ -38,7 +46,7 @@ Out of scope for v1:
 - Free-form code execution against residents.
 - Multi-user dashboard roles beyond a local operator/admin boundary.
 - Public internet hosting.
-- Replacing the controller runtime; the dashboard observes and commands it.
+- Replacing the autonomy runtime; the dashboard observes it and commands residents through gateway actions.
 
 ---
 
@@ -59,7 +67,10 @@ rs6-nullcity-server
 
 nullcity-controller
 |-- ControllerHost                # desired residents + gateway connection
-|-- ResidentRuntime[]             # Spark, plans, hooks, attention, memory
+|-- ResidentRuntime[]             # composes Thinking + Nervous System + Body
+|   |-- ThinkingModule            # Spark, plans, hooks, LLM, budget, attention
+|   |-- NervousSystem             # deterministic reflex rules before thinking
+|   `-- ResidentBody              # gateway submit/observe + action log
 `-- data/memory + data/logs
 ```
 
@@ -70,6 +81,12 @@ The dashboard has its own local server because the browser cannot safely read `d
 - Exposes typed HTTP/WS APIs to the web app.
 - Reads local soul, memory, runtime-state, action-log, and inference-log files.
 - Never imports game engine internals.
+
+Controller observability must follow the refactor boundary:
+
+- **Thinking** is the slow strategic layer. It wraps Spark, evaluates thinking hooks, performs LLM calls, installs plans, spends attention, mutates memory, and writes inference logs.
+- **Nervous System** is the fast reflex layer. It runs before Thinking on every perception, evaluates deterministic rules from soul frontmatter and `nervous-rules.md`, and can submit an immediate action without LLM inference.
+- **Body** is the IO boundary. It records the latest perception and recent events, submits `AgentAction` through the gateway, and appends action-log entries tagged with the source module.
 
 The web app never talks directly to arbitrary filesystem paths. All file reads go through dashboard-server routes that enforce configured roots.
 
@@ -154,11 +171,14 @@ The dashboard server wraps the gateway and local files into stable UI endpoints.
 - `POST /api/residents/:name/actions`
 - `GET /api/residents/:name/stream` for browser WS/SSE fanout
 
-### 5.2 Controller/runtime endpoints
+### 5.2 Autonomy/runtime endpoints
 
 - `GET /api/controller/status`
 - `GET /api/controller/config`
 - `GET /api/runtime/:resident`
+- `GET /api/runtime/:resident/thinking`
+- `GET /api/runtime/:resident/nervous-system`
+- `GET /api/runtime/:resident/body`
 - `GET /api/runtime/:resident/history`
 - `GET /api/runtime/:resident/inference`
 - `GET /api/runtime/:resident/memory/index`
@@ -170,10 +190,17 @@ Runtime data comes from controller-owned files when available:
 - `data/memory/<resident>/runtime-state.json`
 - `data/memory/<resident>/INDEX.md`
 - `data/memory/<resident>/hooks.md`
+- `data/memory/<resident>/nervous-rules.md`
 - `data/logs/<resident>/actions/<date>.jsonl`
 - `data/logs/<resident>/inference/<date>.jsonl`
 
-If the controller is not running or files are missing, the dashboard still shows server resident state and marks runtime sections as unavailable.
+If the ControllerHost is not running or files are missing, the dashboard still shows server resident state and marks autonomy sections as unavailable.
+
+The module endpoints are read models assembled by the dashboard server:
+
+- `thinking`: Spark mode, active/previous intent, thinking hooks, plan state when logged, inference requests, budgets, attention, variables, legacy, and `hooks.md`.
+- `nervous-system`: soul `nervousSystem` rules, memory-learned `nervous-rules.md`, retired rule ids, cooldowns from `runtime-state.json`, last reaction from action logs, and whether it suppressed or interrupted thinking.
+- `body`: control holder, latest perception age, recent events, last submitted action/result, action source, and gateway/action-log health.
 
 ### 5.3 Observer endpoints
 
@@ -219,18 +246,41 @@ Dashboard enriches this with latest perception and runtime data:
 interface ResidentDashboardRow {
   name: string;
   online: boolean;
-  controlHeld: boolean;
   controllerId?: string;
   position?: { x: number; y: number; level: number };
   hp?: { current: number; max: number };
   inCombat?: boolean;
   busy?: boolean;
-  mode?: 'idle' | 'executing' | 'deciding' | 'offline' | 'unknown';
-  activePlan?: string;
-  attentionRemaining?: number;
-  legacy?: { kind: string; progress: number };
+  attention?: number;
+  legacy?: { kind: string; progress: Record<string, unknown>; complete?: boolean };
+  budgets?: {
+    requestsThisMinute?: number;
+    requestsToday?: number;
+    noInferenceUntil?: string;
+  };
+  variables?: Record<string, number>;
+  thinking?: {
+    mode?: 'idle' | 'executing' | 'deciding' | 'offline' | 'unknown';
+    activePlan?: string;
+    previousIntent?: unknown;
+    inFlightRequest?: string;
+    lastInferenceCause?: string;
+  };
+  nervous?: {
+    activeRules?: number;
+    lastReaction?: string;
+    lastRuleId?: string;
+    lastSuppressedThinking?: boolean;
+    lastInterruptedThinking?: boolean;
+  };
+  body?: {
+    controlHeld: boolean;
+    controllerId?: string;
+    perceptionAgeMs?: number;
+    lastAction?: ResidentActionSummary;
+    lastActionSource?: 'thinking' | 'nervous-system' | 'body' | 'manual';
+  };
   lastEvent?: ResidentEventSummary;
-  lastAction?: ResidentActionSummary;
   activeTrade?: unknown;
   errors?: string[];
 }
@@ -291,8 +341,10 @@ Event rows use shard colors consistently:
 3. Operator selects a soul markdown file from configured `souls.dir`.
 4. Operator optionally sets spawn position, initial inventory, and equipment.
 5. Dashboard calls `create_resident`.
-6. Dashboard records the soul association in controller config or dashboard metadata.
+6. Dashboard records the soul association in dashboard metadata or the ControllerHost desired-resident config.
 7. Resident remains offline until connected.
+
+The spawn form should summarize key soul frontmatter that affects autonomy: `attentionProfile`, thinking hooks, variables, legacy kind, and `nervousSystem` rules.
 
 Errors to surface:
 
@@ -322,7 +374,7 @@ Observe-only sessions can view perceptions, events, action results, memory, logs
 
 ### 7.4 Request control
 
-Only one controller can control a resident. If control is held:
+Only one gateway client/body owner can control a resident. The holder may be the autonomy runtime's `ResidentBody`, a dashboard manual-control session, or another admin client. If control is held:
 
 - show `controllerId`
 - disable direct controls
@@ -393,6 +445,8 @@ Each submitted action is tracked with:
 - sent timestamp
 - target resident
 - action payload
+- action source: `thinking`, `nervous-system`, `body`, or `manual`
+- nervous-system `ruleId`, when present
 - gateway acknowledgement
 - eventual `ActionResult`
 - tick observed
@@ -409,27 +463,22 @@ Rejected action reasons are first-class UI copy:
 
 ---
 
-## 9. Controller Runtime Surface
+## 9. Resident Autonomy Surface
 
-The dashboard must expose controller state without requiring users to read JSONL files manually.
+The dashboard must expose resident autonomy state without requiring users to read JSONL files manually. The UI should organize this around the runtime's three modules: Thinking, Nervous System, and Body.
 
 ### 9.1 Runtime header
 
 For each resident show:
 
-- Spark mode: `idle`, `executing`, `deciding`
-- active hook id and priority
-- active plan intent
-- current plan step
-- in-flight LLM request status
-- attention remaining and pressure
-- legacy kind and progress
-- current budget windows
-- `noInferenceUntil`, if set
+- Thinking: Spark mode (`idle`, `executing`, `deciding`), active hook id and priority, active plan intent, current plan step, in-flight LLM request status, last inference cause, and parse/budget status.
+- Nervous System: last matched rule, rule priority, source (`soul` or `memory`), whether it suppressed thinking, whether it interrupted thinking, and active cooldowns.
+- Body: control holder, latest perception age, recent event count, last submitted action/result, and gateway health.
+- Shared state: attention remaining and pressure, legacy kind and progress, variables, current budget windows, and `noInferenceUntil`, if set.
 
-### 9.2 Plans and hooks
+### 9.2 Thinking plans, hooks, and nervous rules
 
-Plan view:
+Thinking plan view:
 
 - intent
 - triggering hook
@@ -440,7 +489,7 @@ Plan view:
 - max ticks remaining
 - last action result
 
-Hook view:
+Thinking hook view:
 
 - system hooks
 - soul hooks
@@ -449,7 +498,21 @@ Hook view:
 - last fired tick
 - last shadowed reason
 
-Editing hooks is out of scope for v1 unless the controller already exposes a safe API. Read-only inspection is required.
+Nervous rule view:
+
+- rule id
+- source: `soul` or `memory`
+- condition kind and value
+- submitted action
+- priority
+- cooldown state
+- `interruptThinking`
+- `suppressThinking`
+- `contextHint`
+- retired rule ids from `nervous-rules.md`
+- last reaction action/result when visible in the action log
+
+Editing thinking hooks or nervous rules is out of scope for v1 unless the controller exposes a safe API. Read-only inspection is required.
 
 ### 9.3 Memory
 
@@ -458,7 +521,8 @@ Memory view:
 - `INDEX.md`
 - recent event notes
 - actor/place/item memory files
-- `hooks.md`
+- `hooks.md` for Thinking/Spark hooks and variables proposed by the LLM
+- `nervous-rules.md` for pre-thinking reflex rules proposed by the LLM
 - `runtime-state.json`
 
 The dashboard can render markdown but must avoid writing to memory in v1. Controller-owned memory remains controller-owned.
@@ -469,10 +533,12 @@ Action log:
 
 - tick
 - event/action/result
+- source: `thinking`, `nervous-system`, or `body`
+- `ruleId` for nervous-system reactions
 - compact perception metadata
 - full perception link if logged
 
-Inference log:
+Thinking inference log:
 
 - request id
 - resident
@@ -484,6 +550,8 @@ Inference log:
 - abort/cancel reason
 - latency
 - installed plan summary
+
+Inference logs belong to Thinking/Spark only. Nervous-system and body-originated actions must still be visible in action logs even when no inference occurred.
 
 ---
 
@@ -675,11 +743,11 @@ The anchor position should update from `spectator_connected.initialState.positio
 Status overview:
 
 - gateway connected/disconnected
-- controller connected/disconnected
+- ControllerHost connected/disconnected
 - online residents
 - offline residents
 - residents in danger
-- active inferences
+- active thinking/inferences
 - recent events ticker
 
 ### 11.2 `/residents`
@@ -693,7 +761,7 @@ Dense roster table with filters:
 - active trade
 - errored
 
-Rows show live status, last event, mode, attention, position, and quick actions.
+Rows show live status, last event, thinking mode, attention, position, body/control state, and quick actions.
 
 ### 11.3 `/residents/new`
 
@@ -717,7 +785,7 @@ Resident detail:
 - events
 - inventory/equipment
 - nearby actors/items/objects
-- runtime plan/hooks/attention
+- thinking plan/hooks, nervous rules/reactions, body status, attention/budget state
 - memory and logs
 
 ### 11.5 `/observe`
@@ -748,7 +816,8 @@ Read-only soul browser:
 - validation status
 - resident associations
 - attention profile
-- hooks and variables
+- thinking hooks and variables
+- `nervousSystem` rules
 
 ### 11.8 `/logs`
 
@@ -757,7 +826,8 @@ Cross-resident log explorer:
 - actions
 - perceptions
 - events
-- inference
+- thinking inference
+- filters for `source=thinking`, `source=nervous-system`, `source=body`, and manual dashboard submissions
 - gateway errors
 
 ---
@@ -859,9 +929,10 @@ Avoid marketing copy. Avoid narrative exposition.
   - trade accept stage 2
   - drop valuable item
   - logout due to attention exhaustion override, if added later
-- Dashboard must never display secrets from controller config.
+- Dashboard must never display secrets from controller/autonomy config.
 - File APIs are rooted and path-normalized.
 - Observer sessions are read-only.
+- `hooks.md` and `nervous-rules.md` are read-only in v1 unless a safe controller API exists.
 - The advanced JSON action editor is hidden behind an explicit advanced mode.
 
 ---
@@ -871,19 +942,19 @@ Avoid marketing copy. Avoid narrative exposition.
 Show these as normal recoverable states:
 
 - gateway offline
-- controller offline
+- autonomy host offline
 - server restart
 - WS reconnecting
 - resident save missing
 - resident save corrupt
 - world full
-- control held by another controller
+- control held by another body/controller/dashboard session
 - delete disabled
 - observable subject missing
 - spectator session missing
 - spectator subject unavailable after session start
 - action timeout
-- inference provider unavailable
+- thinking provider unavailable
 - budget exhausted
 
 The UI should preserve recent perceptions and logs during reconnect, marked as stale with last-seen time.
@@ -916,12 +987,13 @@ The UI should preserve recent perceptions and logs during reconnect, marked as s
 - Add trade and dialogue controls.
 - Add destructive-action confirmations.
 
-### Milestone 4 - Runtime observability
+### Milestone 4 - Autonomy observability
 
-- Read runtime-state, memory index, hooks, action logs, inference logs.
-- Add plan/hook/budget panels.
+- Read `runtime-state.json`, memory index, `hooks.md`, `nervous-rules.md`, action logs, and inference logs.
+- Add Thinking, Nervous System, Body, attention, variable, legacy, and budget panels.
+- Add action source labeling for `thinking`, `nervous-system`, `body`, and manual dashboard actions.
 - Add log explorer.
-- Gracefully degrade when controller files are unavailable.
+- Gracefully degrade when ControllerHost files are unavailable.
 
 ### Milestone 5 - Observer fork
 
@@ -952,22 +1024,24 @@ v1 is complete when:
 2. The dashboard can create, connect, observe, detach, and disconnect a resident.
 3. The dashboard can submit every supported `AgentAction` through validated UI or advanced JSON.
 4. The dashboard shows live perceptions, events, action results, and stale/reconnect state.
-5. The dashboard shows controller runtime state when controller files are present.
+5. The dashboard shows resident autonomy state when controller files are present, including Thinking, Nervous System, Body, attention, budgets, variables, and legacy.
 6. The dashboard renders Null City dark styling with shard colors, Space Mono metadata, and dense operational layouts.
 7. The observer fork can watch an online resident without player username/password.
 8. The observer fork can watch an online real player through `observe_subject` without player username/password.
 9. Delete is unavailable unless the server enables it.
-10. Tests cover gateway framing, observable subject discovery, spectator session lifecycle, resident lifecycle UI state, action validation, and observer read-only behavior.
+10. Nervous-system reactions are visible in the UI with rule id, source, action, suppress/interrupt flags, and resulting action status.
+11. Tests cover gateway framing, observable subject discovery, spectator session lifecycle, resident lifecycle UI state, action validation, action source labeling, nervous-system reaction visibility, and observer read-only behavior.
 
 ---
 
 ## 17. Open Questions
 
-1. Should the dashboard own controller config edits, or remain read-only in v1?
-2. Where should soul-to-resident association live if a resident is created from the dashboard but the controller config is not edited?
+1. Should the dashboard own ControllerHost desired-resident config edits, or remain read-only in v1?
+2. Where should soul-to-resident association live if a resident is created from the dashboard but ControllerHost config is not edited?
 3. Should `spectator_packet` become an emitted render-delta stream, or remain a reserved protocol frame while the observer renders from perception/rebuild frames?
 4. Should the observer fork adapt perceptions into the existing canvas renderer, or should the server produce closer-to-client render packets?
 5. Should observer sessions consume any world slot, or remain purely virtual as currently implemented?
 6. Should SSE remain resident-only, or should observable-subject streams get an HTTP/SSE equivalent?
-7. Should action permissions differ between manual dashboard control and autonomous controller control?
+7. Should action permissions differ between manual dashboard control, runtime Body control, and direct admin/gateway clients?
 8. How much map state should perception expose for non-canvas observation panels?
+9. Should the controller expose a read-only runtime-status endpoint for active Thinking mode/plan, Nervous System rules, and Body state instead of requiring log and file tailing?
