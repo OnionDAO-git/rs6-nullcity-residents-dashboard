@@ -214,6 +214,74 @@ h1 {
   border-left: 3px solid var(--s-gold);
 }
 
+.activity-panel {
+  margin-bottom: 16px;
+  border-left: 3px solid var(--s-green);
+}
+
+.activity-panel.stale {
+  border-left-color: var(--s-amber);
+}
+
+.activity-head {
+  align-items: start;
+}
+
+.activity-head strong {
+  display: block;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.activity-grid div {
+  min-width: 0;
+  padding: 12px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+}
+
+.activity-grid span,
+.activity-grid small,
+.activity-detail {
+  font-family: var(--mono);
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.activity-grid span {
+  display: block;
+  margin-bottom: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.activity-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--text-0);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.activity-grid small {
+  display: block;
+  margin-top: 6px;
+}
+
+.activity-detail {
+  margin-top: 12px;
+  color: var(--text-2);
+}
+
 .metric strong {
   display: block;
   margin-top: 10px;
@@ -515,6 +583,10 @@ pre {
   .split,
   .split.wide {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .activity-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -56,6 +56,7 @@ export interface RuntimeState {
   variables?: Record<string, number>;
   hookCooldowns?: Record<string, number>;
   shadowedHooks?: Array<{ tick: number; id: string; priority: number; shadowedBy: string }>;
+  cognition?: Record<string, unknown>;
   previousIntent?: unknown;
   deceased?: { date: string; tick: number; cause: string };
 }

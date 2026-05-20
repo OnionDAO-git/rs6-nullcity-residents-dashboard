@@ -3,6 +3,7 @@
   import type { DashboardOverview, ObservableSubjectSummary, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, summarizePerception } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
+  import { buildActivitySnapshot } from './lib/activity';
   import { compactJson, subjectLabel, subjectPath, timeAgo } from './lib/format';
 
   let route = window.location.pathname;
@@ -17,7 +18,10 @@
   let sessions: SpectatorSession[] = [];
   let souls: SoulSummary[] = [];
   let logs: { actions: unknown[]; inference: unknown[] } = { actions: [], inference: [] };
+  let visibleResidents: ResidentDashboardRow[] = [];
   let activeSession: SpectatorSession | undefined;
+  let activeObserveSession: SpectatorSession | undefined;
+  let activeResidentSession: SpectatorSession | undefined;
   let sessionStream: EventSource | undefined;
   let sessionStreamId = '';
 
@@ -36,8 +40,11 @@
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
-  $: observeKind = parts[0] === 'observe' ? parts[1] : '';
-  $: observeId = parts[0] === 'observe' ? parts[2] : '';
+  $: observeKind = parts[0] === 'observe' ? parts[1] || '' : '';
+  $: observeId = parts[0] === 'observe' ? parts[2] || '' : '';
+  $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
+  $: activeObserveSession = findSelectedSession(activeSession, sessions, observeKind, observeId);
+  $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
   $: if (route === '/residents/new') seedSpawnDefaults();
 
   onMount(() => {
@@ -77,7 +84,9 @@
         syncResidentStream();
       }
       else if (route === '/observe' || route.startsWith('/observe/')) {
-        [subjects, sessions] = await Promise.all([api.subjects(), api.sessions()]);
+        const observedResident = observeKind === 'resident' && observeId ? decodeURIComponent(observeId) : '';
+        const observedRuntime = observedResident ? api.runtime(observedResident).catch(() => undefined) : Promise.resolve(undefined);
+        [subjects, sessions, selectedRuntime] = await Promise.all([api.subjects(), api.sessions(), observedRuntime]);
         syncObserveStream();
       } else if (route === '/souls') souls = await api.souls();
       else if (route === '/logs') logs = await api.logs();
@@ -170,23 +179,19 @@
     });
   }
 
-  function residentRows(): ResidentDashboardRow[] {
-    return route === '/' ? overview?.residents || [] : residents;
-  }
-
-  function selectedSession(): SpectatorSession | undefined {
-    if (!observeKind || !observeId) return undefined;
-    const decoded = decodeURIComponent(observeId);
-    return [activeSession, ...sessions].find(session => session && subjectMatches(session.subject, observeKind, decoded));
-  }
-
-  function residentSession(): SpectatorSession | undefined {
-    if (!residentName) return undefined;
-    return [activeSession, ...sessions].find(session => session?.subject.kind === 'resident' && session.subject.name.toLowerCase() === residentName.toLowerCase());
-  }
-
   function residentIsOnline(): boolean {
     return selectedRuntime?.online === true;
+  }
+
+  function findSelectedSession(active: SpectatorSession | undefined, available: SpectatorSession[], kind: string, id: string | undefined): SpectatorSession | undefined {
+    if (!kind || !id) return undefined;
+    const decoded = decodeURIComponent(id);
+    return [active, ...available].find(session => session && subjectMatches(session.subject, kind, decoded));
+  }
+
+  function findResidentSession(active: SpectatorSession | undefined, available: SpectatorSession[], name: string): SpectatorSession | undefined {
+    if (!name) return undefined;
+    return [active, ...available].find(session => session?.subject.kind === 'resident' && session.subject.name.toLowerCase() === name.toLowerCase());
   }
 
   function subjectMatches(subject: SpectatorSubject, kind: string, id: string): boolean {
@@ -198,13 +203,13 @@
   }
 
   function syncObserveStream() {
-    const session = selectedSession();
+    const session = findSelectedSession(activeSession, sessions, observeKind, observeId);
     if (session) openSessionStream(session);
     else closeSessionStream();
   }
 
   function syncResidentStream() {
-    const session = residentSession();
+    const session = findResidentSession(activeSession, sessions, residentName);
     if (session) openSessionStream(session);
     else closeSessionStream();
   }
@@ -304,7 +309,7 @@
       <div class="metric"><span>Online</span><strong>{overview?.residents.filter(r => r.online).length || 0}</strong></div>
       <div class="metric"><span>Runtime</span><strong>{overview?.controller.residentsWithRuntime || 0}</strong></div>
     </section>
-    {@render ResidentTable({ rows: residentRows(), onselect: nav })}
+    {@render ResidentTable({ rows: visibleResidents, onselect: nav })}
     <section class="panel">
       <div class="panel-title">Recent Events</div>
       {@render EventList({ events: overview?.recentEvents || [] })}
@@ -324,7 +329,7 @@
         <button class="primary" onclick={() => nav('/residents/new')}>Spawn Resident</button>
       </div>
     </section>
-    {@render ResidentTable({ rows: residentRows(), onselect: nav })}
+    {@render ResidentTable({ rows: visibleResidents, onselect: nav })}
   {:else if route === '/residents/new'}
     <section class="page-head compact">
       <p class="kicker">Lifecycle</p>
@@ -357,14 +362,15 @@
         {/if}
       </div>
     </section>
+    {@render ActivityPanel({ activity: buildActivitySnapshot(selectedRuntime, activeResidentSession) })}
     <section class="split">
       <div class="panel observer-pane">
         <div class="panel-title">Spectator</div>
         <div class="observer-surface">
-          <div class="spectator-frame" use:spectatorFrame={residentSession()} aria-label="resident spectator"></div>
+          <div class="spectator-frame" use:spectatorFrame={activeResidentSession} aria-label="resident spectator"></div>
           {#if !residentIsOnline()}
             <button disabled={actionBusy} class="surface-action" onclick={loginResident}>Login Resident</button>
-          {:else if !residentSession()}
+          {:else if !activeResidentSession}
             <button disabled={actionBusy} class="surface-action" onclick={observeResident}>Start Spectator</button>
           {/if}
         </div>
@@ -410,7 +416,7 @@
     </section>
     {@render SessionList({ sessions, stop: stopObserve })}
   {:else if route.startsWith('/observe/')}
-    {@const session = selectedSession()}
+    {@const session = activeObserveSession}
     <section class="toolbar">
       <div>
         <p class="kicker">Spectator Session</p>
@@ -418,6 +424,9 @@
       </div>
       <button onclick={() => nav('/observe')}>Subjects</button>
     </section>
+    {#if session?.subject.kind === 'resident'}
+      {@render ActivityPanel({ activity: buildActivitySnapshot(selectedRuntime, session) })}
+    {/if}
     <section class="split wide">
       <div class="panel observer-pane large">
         <div class="panel-title">Spectator</div>
@@ -526,6 +535,26 @@
     {:else}
       <div class="empty">No soul files found</div>
     {/each}
+  </section>
+{/snippet}
+
+{#snippet ActivityPanel({ activity }: { activity: ReturnType<typeof buildActivitySnapshot> })}
+  <section class:stale={activity.stale} class="panel activity-panel">
+    <div class="row activity-head">
+      <div>
+        <div class="panel-title">Resident Activity</div>
+        <strong>{activity.statusText}</strong>
+      </div>
+      <span class:ok={activity.onlineLabel === 'online'} class="tag">{activity.onlineLabel}</span>
+    </div>
+    <div class="activity-grid">
+      <div><span>Position</span><strong>{activity.positionLabel}</strong></div>
+      <div><span>Last Action</span><strong>{activity.actionLabel}</strong><small>{activity.actionAgeLabel}</small></div>
+      <div><span>Last Thought</span><strong>{activity.inferenceLabel}</strong><small>{activity.inferenceAgeLabel}</small></div>
+      <div><span>Current Move</span><strong>{activity.moveLabel}</strong><small>{activity.moveDetail}</small></div>
+      <div><span>Goal</span><strong>{activity.goalLabel}</strong></div>
+    </div>
+    <div class="activity-detail">{activity.actionDetail}</div>
   </section>
 {/snippet}
 
