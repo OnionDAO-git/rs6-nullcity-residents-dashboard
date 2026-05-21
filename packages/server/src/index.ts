@@ -6,7 +6,7 @@ import { RuntimeRepository } from './runtime';
 import { jsonResponse, notFound, pathExists, textResponse } from './util';
 
 const gateway = new GatewayClient(config.gatewayUrl, config.gatewayToken);
-const runtime = new RuntimeRepository(config.memoryRoot, config.logsRoot, config.soulsRoot);
+const runtime = new RuntimeRepository(config.memoryRoot, config.logsRoot, config.agentLogsRoot, config.soulsRoot);
 
 type WsMessage = string | ArrayBuffer | Uint8Array;
 
@@ -150,6 +150,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
       rsGatewayHost: config.rsClientHost,
       memoryRoot: config.memoryRoot,
       logsRoot: config.logsRoot,
+      agentLogsRoot: config.agentLogsRoot,
       soulsRoot: config.soulsRoot,
     });
   }
@@ -202,7 +203,9 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   if (runtimeMatch && method === 'GET') {
     const resident = decodeURIComponent(runtimeMatch[1] || '');
     const section = runtimeMatch[2];
-    const model = await runtime.residentRuntime(resident, await safeResidentSummary(resident));
+    const summary = await safeResidentSummary(resident);
+    const feed = summary?.online ? await gateway.subscribeResidentFeed(resident) : gateway.getResidentFeed(resident);
+    const model = await runtime.residentRuntime(resident, summary, feed);
     if (!section) return jsonResponse(model);
     if (section === 'thinking') return jsonResponse(model.thinking);
     if (section === 'nervous-system') return jsonResponse(model.nervous);

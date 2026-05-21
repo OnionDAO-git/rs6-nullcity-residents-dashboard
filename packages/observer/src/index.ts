@@ -28,11 +28,28 @@ export interface ObserverFrame {
   anchor?: SpectatorAnchor;
   actors: ObserverActor[];
   objects: ObserverObject[];
+  zoom?: number;
   tick?: number;
   regionId?: number;
   perception?: unknown;
   packet?: { opcode: number; payload: unknown };
 }
+
+export interface SpectatorDisplayFilters {
+  players: boolean;
+  npcs: boolean;
+  objects: boolean;
+  items: boolean;
+  zoom: number;
+}
+
+const defaultDisplayFilters: SpectatorDisplayFilters = {
+  players: true,
+  npcs: true,
+  objects: false,
+  items: true,
+  zoom: 1,
+};
 
 type SpectatorFrameMessage =
   | { type: 'nullcity:spectator-session'; sessionId: string; subject: SpectatorSubject }
@@ -46,6 +63,7 @@ export class NullCitySpectatorBridge {
   private readonly status: HTMLDivElement;
   private readonly sentPackets = new Set<string>();
   private currentSessionId = '';
+  private filters: SpectatorDisplayFilters = defaultDisplayFilters;
   private started = false;
   private loaded = false;
   private pendingSession: SpectatorSession | undefined;
@@ -89,6 +107,11 @@ export class NullCitySpectatorBridge {
     this.flush();
   }
 
+  setFilters(filters: Partial<SpectatorDisplayFilters>): void {
+    this.filters = { ...defaultDisplayFilters, ...filters };
+    this.flush();
+  }
+
   destroy(): void {
     if (this.started) this.post({ type: 'nullcity:spectator-clear' });
     if (this.statusListener) window.removeEventListener('message', this.statusListener);
@@ -108,7 +131,7 @@ export class NullCitySpectatorBridge {
       return;
     }
 
-    this.fallbackRenderer.setFrame(frameFromSession(session));
+    this.fallbackRenderer.setFrame(frameFromSession(session, this.filters));
 
     if (this.started && this.loaded) {
       this.post({ type: 'nullcity:spectator-session', sessionId: session.id, subject: session.subject });
@@ -243,13 +266,14 @@ export class NullCityObserverRenderer {
     ctx.fillRect(0, 0, width, height);
 
     const anchor = this.frame?.anchor;
-    this.drawGrid(ctx, width, height, anchor?.position);
+    const zoom = safeZoom(this.frame?.zoom);
+    this.drawGrid(ctx, width, height, anchor?.position, zoom);
     if (!this.frame || !anchor) {
       this.drawEmpty(ctx, width, height);
       return;
     }
 
-    const tile = this.tileSize(width, height);
+    const tile = this.tileSize(width, height, zoom);
     const origin = { x: width / 2, y: height / 2 };
     const project = (position: Position) => ({
       x: origin.x + (position.x - anchor.position.x) * tile,
@@ -273,8 +297,8 @@ export class NullCityObserverRenderer {
     this.drawHud(ctx, width, height, anchor, this.frame);
   }
 
-  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, anchor?: Position): void {
-    const tile = this.tileSize(width, height);
+  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, anchor?: Position, zoom = 1): void {
+    const tile = this.tileSize(width, height, zoom);
     const offsetX = anchor ? ((anchor.x % 8) * tile) % (tile * 8) : 0;
     const offsetY = anchor ? ((anchor.y % 8) * tile) % (tile * 8) : 0;
     ctx.lineWidth = 1;
@@ -341,8 +365,8 @@ export class NullCityObserverRenderer {
     ctx.textAlign = 'left';
   }
 
-  private tileSize(width: number, height: number): number {
-    return Math.max(18, Math.min(34, Math.floor(Math.min(width, height) / 18)));
+  private tileSize(width: number, height: number, zoom = 1): number {
+    return Math.max(10, Math.min(82, Math.floor((Math.min(width, height) / 18) * zoom)));
   }
 
   private label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string): void {
@@ -365,16 +389,24 @@ export class NullCityObserverRenderer {
   }
 }
 
-export function frameFromSession(session: SpectatorSession | undefined): ObserverFrame | undefined {
+export function frameFromSession(session: SpectatorSession | undefined, filters: Partial<SpectatorDisplayFilters> = defaultDisplayFilters): ObserverFrame | undefined {
   if (!session) return undefined;
   const perception = record(session.latestPerception);
   const anchor = anchorFromPerception(session.subject, session.latestPerception, session.position);
   const nearby = record(perception.nearby);
+  const displayFilters = { ...defaultDisplayFilters, ...filters };
   const frame: ObserverFrame = {
     sessionId: session.id,
     anchor,
-    actors: [...actorsFrom(nearby.players, ['player', 'resident']), ...actorsFrom(nearby.npcs, ['npc'])],
-    objects: [...objectsFrom(nearby.objects, 'object'), ...objectsFrom(nearby.worldItems, 'item')],
+    actors: [
+      ...actorsFrom(nearby.players, ['player', 'resident']).filter(actor => displayFilters.players || actor.kind !== 'player'),
+      ...(displayFilters.npcs ? actorsFrom(nearby.npcs, ['npc']) : []),
+    ],
+    objects: [
+      ...(displayFilters.objects ? objectsFrom(nearby.objects, 'object') : []),
+      ...(displayFilters.items ? objectsFrom(nearby.worldItems, 'item') : []),
+    ],
+    zoom: safeZoom(displayFilters.zoom),
     perception: session.latestPerception,
   };
   const packet = session.packets?.at(-1);
@@ -474,4 +506,9 @@ function array(value: unknown): unknown[] {
 function numberOrUndefined(value: unknown): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+function safeZoom(value: unknown): number {
+  const zoom = Number(value);
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 }

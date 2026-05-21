@@ -2,6 +2,7 @@ import type {
   ClientMessage,
   GatewayStatus,
   ObservableSubjectSummary,
+  Position,
   ResidentSummary,
   ServerMessage,
   SpectatorMode,
@@ -19,11 +20,24 @@ type Pending = {
 
 type SessionListener = (session: SpectatorSession) => void;
 
+export interface ResidentFeedSnapshot {
+  resident: string;
+  attached: boolean;
+  latestPerception?: unknown;
+  latestEvent?: unknown;
+  actionResults: Array<{ requestId?: string; result: unknown; cause?: string; t: string }>;
+  events: Array<{ event: unknown; t: string }>;
+  lastFeedAt?: string;
+  lastError?: string;
+}
+
 export class GatewayClient {
   private ws?: WebSocket;
   private pending = new Map<string | number, Pending>();
   private sessions = new Map<string, SpectatorSession>();
   private sessionListeners = new Map<string, Set<SessionListener>>();
+  private residentFeeds = new Map<string, ResidentFeedSnapshot>();
+  private attachingResidents = new Map<string, Promise<void>>();
   private connected = false;
   private connecting?: Promise<void>;
   private lastConnectedAt?: string;
@@ -65,6 +79,37 @@ export class GatewayClient {
 
   async submitAction(name: string, action: unknown): Promise<ServerMessage> {
     return this.request(makeFrame('submit_action', { name, action }));
+  }
+
+  async subscribeResidentFeed(name: string): Promise<ResidentFeedSnapshot> {
+    const key = residentKey(name);
+    const existing = this.ensureResidentFeed(key, name);
+    if (existing.attached) return existing;
+    if (!this.attachingResidents.has(key)) {
+      this.attachingResidents.set(
+        key,
+        this.request(makeFrame('attach', { name, observe: true, control: false }))
+          .then(() => {
+            const feed = this.ensureResidentFeed(key, name);
+            feed.attached = true;
+            feed.lastError = undefined;
+          })
+          .catch(error => {
+            const feed = this.ensureResidentFeed(key, name);
+            feed.attached = false;
+            feed.lastError = error instanceof Error ? error.message : 'Resident feed attach failed';
+          })
+          .finally(() => {
+            this.attachingResidents.delete(key);
+          }),
+      );
+    }
+    await this.attachingResidents.get(key);
+    return this.ensureResidentFeed(key, name);
+  }
+
+  getResidentFeed(name: string): ResidentFeedSnapshot | undefined {
+    return this.residentFeeds.get(residentKey(name));
   }
 
   async observe(subject: SpectatorSubject, mode: SpectatorMode): Promise<SpectatorSession> {
@@ -222,6 +267,40 @@ export class GatewayClient {
         lastEventAt: new Date().toISOString(),
       };
       this.setSession(session.id, session);
+      this.applyResidentFeedFromSession(session.subject, session.latestPerception, session.position);
+    }
+    if (message.kind === 'resident_connected') {
+      const key = residentKey(message.payload.resident.name);
+      const feed = this.ensureResidentFeed(key, message.payload.resident.name);
+      feed.attached = true;
+      feed.latestPerception = message.payload.perception;
+      feed.lastFeedAt = new Date().toISOString();
+    }
+    if (message.kind === 'perception') {
+      const key = residentKey(message.payload.resident_id);
+      const feed = this.ensureResidentFeed(key, message.payload.resident_id);
+      feed.latestPerception = message.payload.perception;
+      feed.lastFeedAt = new Date().toISOString();
+    }
+    if (message.kind === 'event') {
+      const key = residentKey(message.payload.resident_id);
+      const feed = this.ensureResidentFeed(key, message.payload.resident_id);
+      const entry = { event: message.payload.event, t: new Date().toISOString() };
+      feed.latestEvent = message.payload.event;
+      feed.events = [...feed.events.slice(-49), entry];
+      feed.lastFeedAt = entry.t;
+    }
+    if (message.kind === 'action_result') {
+      const key = residentKey(message.payload.resident_id);
+      const feed = this.ensureResidentFeed(key, message.payload.resident_id);
+      const entry = {
+        requestId: message.payload.request_id === undefined ? undefined : String(message.payload.request_id),
+        result: message.payload.result,
+        cause: message.payload.cause,
+        t: new Date().toISOString(),
+      };
+      feed.actionResults = [...feed.actionResults.slice(-49), entry];
+      feed.lastFeedAt = entry.t;
     }
     if (message.kind === 'spectator_perception') {
       const session = this.sessions.get(message.payload.sessionId);
@@ -237,6 +316,7 @@ export class GatewayClient {
           regionId: typeof message.payload.regionId === 'number' ? message.payload.regionId : session.regionId,
           lastEventAt: new Date().toISOString(),
         });
+        this.applyResidentFeedFromSession(session.subject, message.payload.perception, position);
       }
     }
     if (message.kind === 'spectator_rebuild') {
@@ -250,6 +330,7 @@ export class GatewayClient {
           latestPerception: payload.perception ?? session.latestPerception,
           lastEventAt: new Date().toISOString(),
         });
+        this.applyResidentFeedFromSession(session.subject, payload.perception ?? session.latestPerception, parsePosition(payload.position) ?? session.position);
       }
     }
     if (message.kind === 'spectator_packet') {
@@ -284,6 +365,35 @@ export class GatewayClient {
     }
   }
 
+  private applyResidentFeedFromSession(subject: SpectatorSubject, perception: unknown, position?: Position): void {
+    if (subject.kind !== 'resident' || !perception) return;
+    const key = residentKey(subject.name);
+    const feed = this.ensureResidentFeed(key, subject.name);
+    feed.attached = true;
+    feed.latestPerception = perception;
+    feed.lastFeedAt = new Date().toISOString();
+    if (!position) return;
+    const perceptionRecord = typeof perception === 'object' && perception !== null && !Array.isArray(perception)
+      ? perception as Record<string, unknown>
+      : {};
+    if (typeof perceptionRecord.position !== 'object' || perceptionRecord.position === null) {
+      feed.latestPerception = { ...perceptionRecord, position };
+    }
+  }
+
+  private ensureResidentFeed(key: string, resident: string): ResidentFeedSnapshot {
+    const existing = this.residentFeeds.get(key);
+    if (existing) return existing;
+    const feed: ResidentFeedSnapshot = {
+      resident,
+      attached: false,
+      actionResults: [],
+      events: [],
+    };
+    this.residentFeeds.set(key, feed);
+    return feed;
+  }
+
   private rejectAll(error: Error): void {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
@@ -291,6 +401,10 @@ export class GatewayClient {
       this.pending.delete(id);
     }
   }
+}
+
+function residentKey(value: string): string {
+  return value.trim().toLowerCase().replace(/^res:/, '');
 }
 
 function assertAgentGatewayUrl(value: string): void {

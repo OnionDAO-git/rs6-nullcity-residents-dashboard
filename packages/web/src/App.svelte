@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DashboardOverview, ObservableSubjectSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
-  import { NullCitySpectatorBridge, summarizePerception } from '@nullcity-dashboard/observer';
+  import type { DashboardOverview, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
-  import { compactJson, subjectLabel, subjectPath, timeAgo } from './lib/format';
+  import { compactJson, timeAgo } from './lib/format';
 
   let route = window.location.pathname;
   let loading = false;
@@ -14,20 +14,28 @@
   let overview: DashboardOverview | undefined;
   let residents: ResidentDashboardRow[] = [];
   let selectedRuntime: RuntimeReadModel | undefined;
-  let subjects: ObservableSubjectSummary[] = [];
   let sessions: SpectatorSession[] = [];
   let souls: SoulSummary[] = [];
   let logs: { actions: unknown[]; inference: unknown[] } = { actions: [], inference: [] };
   let visibleResidents: ResidentDashboardRow[] = [];
   let activeSession: SpectatorSession | undefined;
-  let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
+  let liveSelectedRuntime: RuntimeReadModel | undefined;
   let sessionStream: EventSource | undefined;
   let sessionStreamId = '';
+  let showSpectatorPlayers = true;
+  let showSpectatorNpcs = true;
+  let showSpectatorObjects = false;
+  let showSpectatorItems = true;
+  let spectatorZoom = 1;
+  let spectatorModalOpen = false;
 
   const defaultSpawnX = '3225';
   const defaultSpawnY = '3217';
   const defaultSpawnLevel = '0';
+  const spectatorZoomMin = 0.5;
+  const spectatorZoomMax = 3;
+  const spectatorZoomStep = 0.25;
   const namePrefixes = ['ash', 'brim', 'cove', 'dusk', 'fern', 'glen', 'mire', 'rune', 'vale', 'west'];
   const nameRoles = ['adept', 'baker', 'mason', 'miner', 'scribe', 'smith', 'weaver', 'walker'];
   const appearanceParts = {
@@ -52,11 +60,16 @@
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
-  $: observeKind = parts[0] === 'observe' ? parts[1] || '' : '';
-  $: observeId = parts[0] === 'observe' ? parts[2] || '' : '';
   $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
-  $: activeObserveSession = findSelectedSession(activeSession, sessions, observeKind, observeId);
   $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
+  $: liveSelectedRuntime = withLiveResidentBody(selectedRuntime, activeResidentSession);
+  $: spectatorFilters = {
+    players: showSpectatorPlayers,
+    npcs: showSpectatorNpcs,
+    objects: showSpectatorObjects,
+    items: showSpectatorItems,
+    zoom: spectatorZoom,
+  };
   $: {
     if (route === '/residents/new' && spawnDraftRoute !== route) {
       seedSpawnDraft();
@@ -102,14 +115,9 @@
         [selectedRuntime, sessions] = await Promise.all([api.runtime(residentName), api.sessions()]);
         syncResidentStream();
       }
-      else if (route === '/observe' || route.startsWith('/observe/')) {
-        const observedResident = observeKind === 'resident' && observeId ? decodeURIComponent(observeId) : '';
-        const observedRuntime = observedResident ? api.runtime(observedResident).catch(() => undefined) : Promise.resolve(undefined);
-        [subjects, sessions, selectedRuntime] = await Promise.all([api.subjects(), api.sessions(), observedRuntime]);
-        syncObserveStream();
-      } else if (route === '/souls') souls = await api.souls();
+      else if (route === '/souls') souls = await api.souls();
       else if (route === '/logs') logs = await api.logs();
-      if (!route.startsWith('/observe/') && !residentName) closeSessionStream();
+      if (!residentName) closeSessionStream();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Request failed';
     } finally {
@@ -247,7 +255,7 @@
     if (!residentName) return;
     await runAction(async () => {
       await api.residentCommand(residentName, 'connect', { observe: false, control: false, onDisconnect: disconnectPolicy });
-      await openObserveSubject({ kind: 'resident', name: residentName }, 'follow');
+      await openResidentSpectator();
     });
   }
 
@@ -259,46 +267,25 @@
     });
   }
 
-  async function startObserve(subject: ObservableSubjectSummary, mode: SpectatorMode = 'follow') {
-    await observeSubject(subject.subject, mode);
-  }
-
   async function observeResident() {
     if (!residentName) return;
     await runAction(async () => {
       await api.residentCommand(residentName, 'connect', { observe: false, control: false, onDisconnect: disconnectPolicy });
-      await openObserveSubject({ kind: 'resident', name: residentName }, 'follow');
+      await openResidentSpectator();
     });
   }
 
-  async function observeSubject(subject: SpectatorSubject, mode: SpectatorMode = 'follow') {
-    await runAction(async () => openObserveSubject(subject, mode));
-  }
-
-  async function openObserveSubject(subject: SpectatorSubject, mode: SpectatorMode = 'follow') {
-    const session = await api.observe(subject, mode);
+  async function openResidentSpectator() {
+    if (!residentName) return;
+    const subject: SpectatorSubject = { kind: 'resident', name: residentName };
+    const session = await api.observe(subject, 'follow');
     upsertSession(session);
     activeSession = session;
-    nav(`/observe/${subjectPath(subject)}`);
     openSessionStream(session);
-  }
-
-  async function stopObserve(sessionId: string) {
-    await runAction(async () => {
-      await api.unobserve(sessionId);
-      if (activeSession?.id === sessionId) activeSession = { ...activeSession, connected: false };
-      await loadRoute();
-    });
   }
 
   function residentIsOnline(): boolean {
     return selectedRuntime?.online === true;
-  }
-
-  function findSelectedSession(active: SpectatorSession | undefined, available: SpectatorSession[], kind: string, id: string | undefined): SpectatorSession | undefined {
-    if (!kind || !id) return undefined;
-    const decoded = decodeURIComponent(id);
-    return [active, ...available].find(session => session && subjectMatches(session.subject, kind, decoded));
   }
 
   function findResidentSession(active: SpectatorSession | undefined, available: SpectatorSession[], name: string): SpectatorSession | undefined {
@@ -306,18 +293,42 @@
     return [active, ...available].find(session => session?.subject.kind === 'resident' && session.subject.name.toLowerCase() === name.toLowerCase());
   }
 
-  function subjectMatches(subject: SpectatorSubject, kind: string, id: string): boolean {
-    return subject.kind === kind && (subject.kind === 'resident' ? subject.name.toLowerCase() === id.toLowerCase() : subject.username.toLowerCase() === id.toLowerCase());
+  function withLiveResidentBody(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined): RuntimeReadModel | undefined {
+    if (!runtime || !session?.latestPerception) return runtime;
+    const lastFeedAt = session.lastEventAt || runtime.body.lastFeedAt;
+    const perceptionTick = numberField(session.latestPerception, 'tick') ?? runtime.body.perceptionTick;
+    const position = session.position || livePositionFromPerception(session.latestPerception) || runtime.body.position;
+    const perceptionAgeMs = ageMsFromTimestamp(lastFeedAt) ?? runtime.body.perceptionAgeMs;
+    const body: RuntimeReadModel['body'] = {
+      ...runtime.body,
+      latestPerception: session.latestPerception,
+      gatewayHealthy: runtime.body.gatewayHealthy ?? session.connected,
+    };
+    if (position) body.position = position;
+    if (perceptionTick !== undefined) body.perceptionTick = perceptionTick;
+    if (lastFeedAt) body.lastFeedAt = lastFeedAt;
+    if (perceptionAgeMs !== undefined) body.perceptionAgeMs = perceptionAgeMs;
+    return {
+      ...runtime,
+      body,
+    };
+  }
+
+  function livePositionFromPerception(perception: unknown): Position | undefined {
+    const root = asRecord(perception);
+    return positionFromRecord(asRecord(root.resident).position) || positionFromRecord(root.position);
+  }
+
+  function positionFromRecord(value: unknown): Position | undefined {
+    const record = asRecord(value);
+    const x = numberField(record, 'x');
+    const y = numberField(record, 'y');
+    if (x === undefined || y === undefined) return undefined;
+    return { x, y, level: numberField(record, 'level') ?? 0 };
   }
 
   function upsertSession(session: SpectatorSession) {
     sessions = [session, ...sessions.filter(candidate => candidate.id !== session.id)];
-  }
-
-  function syncObserveStream() {
-    const session = findSelectedSession(activeSession, sessions, observeKind, observeId);
-    if (session) openSessionStream(session);
-    else closeSessionStream();
   }
 
   function syncResidentStream() {
@@ -349,6 +360,20 @@
     sessionStreamId = '';
   }
 
+  function clampSpectatorZoom(value: number): number {
+    if (!Number.isFinite(value)) return 1;
+    const clamped = Math.min(spectatorZoomMax, Math.max(spectatorZoomMin, value));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  function openSpectatorModal() {
+    spectatorModalOpen = true;
+  }
+
+  function closeSpectatorModal() {
+    spectatorModalOpen = false;
+  }
+
   async function runAction(fn: () => Promise<void>) {
     actionBusy = true;
     actionError = '';
@@ -361,12 +386,14 @@
     }
   }
 
-  function spectatorFrame(node: HTMLElement, session: SpectatorSession | undefined) {
+  function spectatorFrame(node: HTMLElement, params: { session: SpectatorSession | undefined; filters: SpectatorDisplayFilters }) {
     const bridge = new NullCitySpectatorBridge(node);
-    bridge.setSession(session);
+    bridge.setFilters(params.filters);
+    bridge.setSession(params.session);
     return {
-      update(next: SpectatorSession | undefined) {
-        bridge.setSession(next);
+      update(next: { session: SpectatorSession | undefined; filters: SpectatorDisplayFilters }) {
+        bridge.setFilters(next.filters);
+        bridge.setSession(next.session);
       },
       destroy() {
         bridge.destroy();
@@ -374,8 +401,140 @@
     };
   }
 
-  function sessionSummary(session: SpectatorSession | undefined) {
-    return summarizePerception(session?.latestPerception);
+  type BodyModel = RuntimeReadModel['body'];
+  type BodyRow = { key: string; label: string; value: unknown };
+
+  const bodyFieldOrder = [
+    'gatewayHealthy',
+    'controlHeld',
+    'controllerId',
+    'position',
+    'perceptionTick',
+    'perceptionAgeMs',
+    'lastFeedAt',
+    'lastAction',
+    'lastActionSource',
+    'latestEvent',
+    'latestPerception',
+  ];
+
+  function bodyRows(body: BodyModel | undefined): BodyRow[] {
+    const record = asRecord(body);
+    const known = bodyFieldOrder.filter(key => key in record);
+    const extra = Object.keys(record).filter(key => !bodyFieldOrder.includes(key)).sort((a, b) => a.localeCompare(b));
+    return [...known, ...extra].map(key => ({ key, label: labelize(key), value: record[key] }));
+  }
+
+  function labelize(key: string): string {
+    return key.replace(/([A-Z])/g, ' $1').replace(/^./, char => char.toUpperCase());
+  }
+
+  function bodyValue(key: string, value: unknown): string {
+    if (value === undefined || value === null || value === '') return '-';
+    if (key === 'gatewayHealthy') return value === true ? 'healthy' : 'offline';
+    if (key === 'controlHeld') return value === true ? 'held' : 'free';
+    if (key === 'position') return formatPosition(value);
+    if (key === 'perceptionAgeMs') return formatDuration(Number(value));
+    if (key === 'lastFeedAt') return `${timeAgo(String(value))} ago`;
+    if (key === 'lastAction') return actionSummary(value);
+    if (key === 'latestEvent') return eventSummary(value);
+    if (key === 'latestPerception') return perceptionSummary(value);
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'number' || typeof value === 'string') return String(value);
+    return inlineObject(value);
+  }
+
+  function formatPosition(value: unknown): string {
+    const position = asRecord(value);
+    const x = numberField(position, 'x');
+    const y = numberField(position, 'y');
+    const level = numberField(position, 'level') ?? 0;
+    return x === undefined || y === undefined ? '-' : `${x}, ${y}, ${level}`;
+  }
+
+  function actionSummary(value: unknown): string {
+    const action = asRecord(value);
+    const parts = [
+      stringField(action, 'kind'),
+      stringField(action, 'source') ? `source ${stringField(action, 'source')}` : '',
+      stringField(action, 'result') ? `result ${stringField(action, 'result')}` : '',
+      numberField(action, 'tick') !== undefined ? `tick ${numberField(action, 'tick')}` : '',
+      stringField(action, 'cause'),
+    ].filter(Boolean);
+    return parts.join(' | ') || inlineObject(value);
+  }
+
+  function eventSummary(value: unknown): string {
+    const event = asRecord(value);
+    const kind = stringField(event, 'kind') || 'event';
+    const text = stringField(event, 'text') || stringField(event, 'message');
+    return text ? `${kind}: ${text}` : inlineObject(value);
+  }
+
+  function perceptionSummary(value: unknown): string {
+    const perception = asRecord(value);
+    const nearby = asRecord(perception.nearby);
+    const resident = asRecord(perception.resident);
+    const parts = [
+      numberField(perception, 'tick') !== undefined ? `tick ${numberField(perception, 'tick')}` : '',
+      formatPosition(resident.position || perception.position) !== '-' ? `pos ${formatPosition(resident.position || perception.position)}` : '',
+      `players ${arrayCount(nearby.players)}`,
+      `npcs ${arrayCount(nearby.npcs)}`,
+      `objects ${arrayCount(nearby.objects)}`,
+      `items ${arrayCount(nearby.worldItems)}`,
+      `actions ${arrayCount(perception.availableActions)}`,
+      `events ${arrayCount(perception.events)}`,
+    ].filter(Boolean);
+    return parts.join(' | ') || inlineObject(value);
+  }
+
+  function formatDuration(value: number): string {
+    if (!Number.isFinite(value)) return '-';
+    const seconds = Math.max(0, Math.round(value / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.round(minutes / 60)}h`;
+  }
+
+  function ageMsFromTimestamp(value: string | undefined): number | undefined {
+    if (!value) return undefined;
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? Math.max(0, Date.now() - time) : undefined;
+  }
+
+  function inlineObject(value: unknown): string {
+    if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
+    const record = asRecord(value);
+    const entries = Object.entries(record);
+    if (!entries.length) return '-';
+    return entries.map(([key, entry]) => `${labelize(key)} ${inlinePrimitive(entry)}`).join(' | ');
+  }
+
+  function inlinePrimitive(value: unknown): string {
+    if (value === undefined || value === null || value === '') return '-';
+    if (Array.isArray(value)) return `${value.length}`;
+    if (typeof value === 'object') return '{...}';
+    return String(value);
+  }
+
+  function arrayCount(value: unknown): number {
+    return Array.isArray(value) ? value.length : 0;
+  }
+
+  function asRecord(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  }
+
+  function stringField(value: unknown, key: string): string | undefined {
+    const field = asRecord(value)[key];
+    return typeof field === 'string' ? field : undefined;
+  }
+
+  function numberField(value: unknown, key: string): number | undefined {
+    const field = asRecord(value)[key];
+    const number = Number(field);
+    return Number.isFinite(number) ? number : undefined;
   }
 
   function soulTitle(soul: SoulSummary): string {
@@ -392,7 +551,6 @@
   <div class="navlinks">
     <button class:active={route === '/'} onclick={() => nav('/')}>Overview</button>
     <button class:active={route.startsWith('/residents')} onclick={() => nav('/residents')}>Residents</button>
-    <button class:active={route.startsWith('/observe')} onclick={() => nav('/observe')}>Observe</button>
     <button class:active={route === '/souls'} onclick={() => nav('/souls')}>Souls</button>
     <button class:active={route === '/logs'} onclick={() => nav('/logs')}>Logs</button>
   </div>
@@ -481,7 +639,7 @@
       </div>
       <div class="actions">
         {#if residentIsOnline()}
-          <button disabled={actionBusy} onclick={observeResident}>Observe</button>
+          <button disabled={actionBusy} onclick={observeResident}>Spectate</button>
           <button disabled={actionBusy} onclick={() => commandResident('connect')}>Control</button>
           <button disabled={actionBusy} onclick={() => commandResident('detach')}>Detach</button>
           <button disabled={actionBusy} class="danger" onclick={pauseResident}>Pause + Logout</button>
@@ -492,22 +650,16 @@
         {/if}
       </div>
     </section>
-    {@render ActivityPanel({ activity: buildActivitySnapshot(selectedRuntime, activeResidentSession) })}
+    {@render ActivityPanel({ activity: buildActivitySnapshot(liveSelectedRuntime, activeResidentSession) })}
     <section class="split">
       <div class="panel observer-pane">
         <div class="panel-title">Spectator</div>
-        <div class="observer-surface">
-          <div class="spectator-frame" use:spectatorFrame={activeResidentSession} aria-label="resident spectator"></div>
-          {#if !residentIsOnline()}
-            <button disabled={actionBusy} class="surface-action" onclick={loginResident}>Login Resident</button>
-          {:else if !activeResidentSession}
-            <button disabled={actionBusy} class="surface-action" onclick={observeResident}>Start Spectator</button>
-          {/if}
-        </div>
+        {@render SpectatorSurface({ large: false })}
+        {@render SpectatorControls()}
       </div>
       <div class="panel">
         <div class="panel-title">Body</div>
-        {@render KeyValue({ data: selectedRuntime?.body || {} })}
+        {@render BodyTable({ body: liveSelectedRuntime?.body })}
       </div>
     </section>
     <section class="modules">
@@ -523,58 +675,6 @@
     <section class="modules">
       {@render LogPanel({ title: 'Actions', rows: selectedRuntime?.logs.actions || [] })}
       {@render LogPanel({ title: 'Thinking Inference', rows: selectedRuntime?.logs.inference || [] })}
-    </section>
-  {:else if route === '/observe'}
-    <section class="page-head compact">
-      <p class="kicker">Read Only</p>
-      <h1>Observe</h1>
-    </section>
-    <section class="subject-grid">
-      {#each subjects as subject}
-        <article class="card">
-          <div class="row">
-            <strong>{subjectLabel(subject.subject)}</strong>
-            <span class="tag">{subject.subject.kind}</span>
-          </div>
-          <p>{subject.position ? `${subject.position.x}, ${subject.position.y}, ${subject.position.level}` : 'position unknown'}</p>
-          <div class="actions">
-            <button disabled={actionBusy} onclick={() => startObserve(subject, 'follow')}>Follow</button>
-            <button disabled={actionBusy} onclick={() => startObserve(subject, 'free-camera')}>Free Camera</button>
-          </div>
-        </article>
-      {/each}
-    </section>
-    {@render SessionList({ sessions, stop: stopObserve })}
-  {:else if route.startsWith('/observe/')}
-    {@const session = activeObserveSession}
-    <section class="toolbar">
-      <div>
-        <p class="kicker">Spectator Session</p>
-        <h1>{session ? subjectLabel(session.subject) : 'Subject unavailable'}</h1>
-      </div>
-      <button onclick={() => nav('/observe')}>Subjects</button>
-    </section>
-    {#if session?.subject.kind === 'resident'}
-      {@render ActivityPanel({ activity: buildActivitySnapshot(selectedRuntime, session) })}
-    {/if}
-    <section class="split wide">
-      <div class="panel observer-pane large">
-        <div class="panel-title">Spectator</div>
-        <div class="observer-surface large">
-          <div class="spectator-frame" use:spectatorFrame={session} aria-label="spectator"></div>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="mini-grid observer-summary">
-          <span>players {sessionSummary(session).players}</span>
-          <span>residents {sessionSummary(session).residents}</span>
-          <span>npcs {sessionSummary(session).npcs}</span>
-          <span>objects {sessionSummary(session).objects}</span>
-          <span>items {sessionSummary(session).items}</span>
-        </div>
-        <div class="panel-title">Perception</div>
-        <pre>{compactJson(session?.latestPerception)}</pre>
-      </div>
     </section>
   {:else if route === '/souls'}
     <section class="page-head compact">
@@ -593,6 +693,55 @@
     </section>
   {/if}
 </main>
+
+{#if spectatorModalOpen}
+  <div class="modal-backdrop">
+    <div class="spectator-modal" role="dialog" aria-modal="true" aria-label="Expanded spectator">
+      <div class="spectator-modal-head">
+        <div class="panel-title">Spectator</div>
+        <button class="icon-button" aria-label="Close expanded spectator" title="Close expanded spectator" onclick={closeSpectatorModal}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        </button>
+      </div>
+      {@render SpectatorSurface({ large: true })}
+      {@render SpectatorControls()}
+    </div>
+  </div>
+{/if}
+
+{#snippet SpectatorSurface({ large }: { large: boolean })}
+  <div class="observer-surface" class:large>
+    <div class="spectator-frame" use:spectatorFrame={{ session: activeResidentSession, filters: spectatorFilters }} aria-label="resident spectator"></div>
+    <div class="spectator-tools" aria-label="spectator view tools">
+      {#if !large}
+        <button class="icon-button" aria-label="Open larger spectator" title="Open larger spectator" onclick={openSpectatorModal}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+        </button>
+      {/if}
+      <button class="icon-button" aria-label="Zoom out spectator" title="Zoom out" disabled={spectatorZoom <= spectatorZoomMin} onclick={() => (spectatorZoom = clampSpectatorZoom(spectatorZoom - spectatorZoomStep))}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <span class="zoom-readout">{Math.round(spectatorZoom * 100)}%</span>
+      <button class="icon-button" aria-label="Zoom in spectator" title="Zoom in" disabled={spectatorZoom >= spectatorZoomMax} onclick={() => (spectatorZoom = clampSpectatorZoom(spectatorZoom + spectatorZoomStep))}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </button>
+      {#if !residentIsOnline()}
+        <button disabled={actionBusy} class="tool-action" onclick={loginResident}>Login Resident</button>
+      {:else if !activeResidentSession}
+        <button disabled={actionBusy} class="tool-action" onclick={observeResident}>Start Spectator</button>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+{#snippet SpectatorControls()}
+  <div class="spectator-controls" aria-label="spectator display toggles">
+    <label><input type="checkbox" bind:checked={showSpectatorPlayers} /> Players</label>
+    <label><input type="checkbox" bind:checked={showSpectatorNpcs} /> NPCs</label>
+    <label><input type="checkbox" bind:checked={showSpectatorObjects} /> Objects</label>
+    <label><input type="checkbox" bind:checked={showSpectatorItems} /> Items</label>
+  </div>
+{/snippet}
 
 {#snippet ResidentTable({ rows, onselect, ondelete }: { rows: ResidentDashboardRow[]; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
   <section class="table-wrap">
@@ -630,6 +779,21 @@
 
 {#snippet KeyValue({ data }: { data: unknown })}
   <pre>{compactJson(data)}</pre>
+{/snippet}
+
+{#snippet BodyTable({ body }: { body: BodyModel | undefined })}
+  <table class="dense-table body-table">
+    <tbody>
+      {#each bodyRows(body) as row}
+        <tr>
+          <th>{row.label}</th>
+          <td>{bodyValue(row.key, row.value)}</td>
+        </tr>
+      {:else}
+        <tr><td class="empty" colspan="2">No body state reported</td></tr>
+      {/each}
+    </tbody>
+  </table>
 {/snippet}
 
 {#snippet ModulePanel({ title, data }: { title: string; data: unknown })}
@@ -698,20 +862,5 @@
       <div><span>SPARK Module</span><strong>{activity.moduleLabel}</strong><small>{activity.moduleDetail}</small></div>
     </div>
     <div class="activity-detail">{activity.actionDetail}</div>
-  </section>
-{/snippet}
-
-{#snippet SessionList({ sessions, stop }: { sessions: SpectatorSession[]; stop: (id: string) => void })}
-  <section class="panel">
-    <div class="panel-title">Current Spectators</div>
-    {#each sessions as session}
-      <div class="event-row">
-        <span>{subjectLabel(session.subject)}</span>
-        <span class="tag">{session.mode}</span>
-        <button onclick={() => stop(session.id)}>Close</button>
-      </div>
-    {:else}
-      <div class="empty">No active spectator sessions</div>
-    {/each}
   </section>
 {/snippet}

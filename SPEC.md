@@ -788,27 +788,11 @@ Resident detail:
 - thinking plan/hooks, nervous rules/reactions, body status, attention/budget state
 - memory and logs
 
-### 11.5 `/observe`
+### 11.5 Resident spectator
 
-Subject browser:
+The standalone `/observe` and `/observe/:subject` dashboard routes are removed. Resident spectating is embedded in `/residents/:name` so the operator can see live feed status, body state, logs, and the spectator in one place.
 
-- online residents
-- online players
-- search/filter
-- current spectators
-
-### 11.6 `/observe/:subject`
-
-Full spectator view:
-
-- main canvas from observer fork
-- subject switcher
-- event ticker
-- compact perception side rail
-- camera mode controls
-- read-only badge
-
-### 11.7 `/souls`
+### 11.6 `/souls`
 
 Read-only soul browser:
 
@@ -819,7 +803,7 @@ Read-only soul browser:
 - thinking hooks and variables
 - `nervousSystem` rules
 
-### 11.8 `/logs`
+### 11.7 `/logs`
 
 Cross-resident log explorer:
 
@@ -1004,7 +988,7 @@ The UI should preserve recent perceptions and logs during reconnect, marked as s
 - Disable gameplay input packets.
 - Render spectator sessions from connected/rebuild/perception frames.
 - Handle `spectator_packet` frames when the gateway emits them.
-- Embed observer in `/observe/:subject` and resident detail.
+- Embed observer in resident detail.
 
 ### Milestone 6 - Player spectating integration
 

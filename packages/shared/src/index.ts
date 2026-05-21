@@ -159,6 +159,11 @@ export interface RuntimeReadModel {
     controlHeld: boolean;
     controllerId?: string;
     perceptionAgeMs?: number;
+    position?: Position;
+    latestPerception?: unknown;
+    latestEvent?: unknown;
+    perceptionTick?: number;
+    lastFeedAt?: string;
     lastAction?: ResidentActionSummary;
     lastActionSource?: ActionSource;
     gatewayHealthy?: boolean;

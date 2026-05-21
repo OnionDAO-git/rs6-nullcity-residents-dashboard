@@ -356,6 +356,45 @@ td strong {
   font-size: 18px;
 }
 
+.dense-table {
+  min-width: 0;
+  table-layout: fixed;
+  border: 1px solid var(--ground-3);
+}
+
+.dense-table th,
+.dense-table td {
+  padding: 7px 9px;
+  vertical-align: top;
+  border-bottom-color: var(--ground-4);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.dense-table th {
+  width: 38%;
+  background: var(--ground-2);
+  letter-spacing: 1.2px;
+}
+
+.dense-table td {
+  color: var(--text-1);
+  font-family: var(--mono);
+  word-break: break-word;
+}
+
+.dense-table tbody tr {
+  cursor: default;
+}
+
+.dense-table tbody tr:hover {
+  background: transparent;
+}
+
+.body-table {
+  max-height: 280px;
+}
+
 .num,
 pre {
   font-family: var(--mono);
@@ -589,26 +628,117 @@ textarea {
   overflow: hidden;
 }
 
-.surface-action {
+.spectator-tools {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(14, 12, 10, 0.84);
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  max-width: calc(100% - 24px);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.spectator-tools button,
+.spectator-tools .zoom-readout {
+  height: 32px;
+  min-height: 32px;
+  border-color: rgba(228, 184, 64, 0.34);
+  background: rgba(14, 12, 10, 0.86);
+  color: var(--text-1);
+}
+
+.spectator-tools .tool-action {
+  padding: 0 10px;
+  color: var(--text-0);
+}
+
+.spectator-tools .zoom-readout {
+  display: inline-flex;
+  min-width: 54px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 1px solid rgba(228, 184, 64, 0.34);
+  color: var(--text-2);
+  font: 11px var(--mono);
 }
 
 .spectator-status {
   position: absolute;
-  left: 12px;
+  right: 12px;
   bottom: 12px;
   z-index: 2;
-  max-width: calc(100% - 24px);
+  max-width: min(420px, calc(100% - 24px));
   padding: 6px 8px;
   border: 1px solid rgba(228, 184, 64, 0.34);
   background: rgba(5, 4, 3, 0.86);
   color: var(--text-2);
   font: 12px var(--mono);
   text-transform: none;
+}
+
+.spectator-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.spectator-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--ground-4);
+  background: var(--ground-2);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.spectator-controls input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--s-gold);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 4, 3, 0.84);
+}
+
+.spectator-modal {
+  display: grid;
+  width: min(1180px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  gap: 12px;
+  padding: 18px;
+  overflow: auto;
+  background: var(--ground-1);
+  border: 1px solid var(--ground-4);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.spectator-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.spectator-modal-head .panel-title {
+  margin-bottom: 0;
 }
 
 .observer-summary {

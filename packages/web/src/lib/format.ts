@@ -1,13 +1,3 @@
-import type { SpectatorSubject } from '@nullcity-dashboard/shared';
-
-export function subjectLabel(subject: SpectatorSubject): string {
-  return subject.kind === 'resident' ? subject.name : subject.username;
-}
-
-export function subjectPath(subject: SpectatorSubject): string {
-  return subject.kind === 'resident' ? `resident/${encodeURIComponent(subject.name)}` : `player/${encodeURIComponent(subject.username)}`;
-}
-
 export function compactJson(value: unknown): string {
   if (value === undefined || value === null) return '-';
   try {

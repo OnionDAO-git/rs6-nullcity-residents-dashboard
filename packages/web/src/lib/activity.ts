@@ -20,17 +20,22 @@ export interface ActivitySnapshot {
 const STALE_ACTION_MS = 120_000;
 
 export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined, now = Date.now()): ActivitySnapshot {
-  const latestAction = runtime?.logs.actions.at(-1);
+  const latestAction = [...(runtime?.logs.actions || [])].reverse().find(entry => {
+    const action = asRecord(entry.action);
+    return action.kind || action.type || entry.result;
+  });
   const latestInference = runtime?.thinking.latestInference || runtime?.logs.inference.at(-1);
   const actionAgeMs = ageMs(latestAction?.t, now);
   const inferenceAgeMs = ageMs(latestInference?.t, now);
+  const feedAgeMs = ageMs(runtime?.body.lastFeedAt, now);
   const online = runtime?.online === true;
-  const stale = online && (!latestAction || actionAgeMs === undefined || actionAgeMs > STALE_ACTION_MS);
+  const feedLive = feedAgeMs !== undefined && feedAgeMs <= STALE_ACTION_MS;
+  const stale = online && !feedLive && (!latestAction || actionAgeMs === undefined || actionAgeMs > STALE_ACTION_MS);
 
   return {
     onlineLabel: online ? 'online' : runtime?.available ? 'offline' : 'unknown',
-    statusText: statusText(online, stale, actionAgeMs),
-    positionLabel: formatPosition(session?.position),
+    statusText: statusText(online, stale, actionAgeMs, feedLive, runtime?.body.perceptionTick),
+    positionLabel: formatPosition(session?.position || runtime?.body.position || positionFromPerception(runtime?.body.latestPerception)),
     actionLabel: formatAction(latestAction),
     actionAgeLabel: formatAge(actionAgeMs),
     actionDetail: formatActionDetail(latestAction),
@@ -43,8 +48,10 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
   };
 }
 
-function statusText(online: boolean, stale: boolean, actionAgeMs: number | undefined): string {
+function statusText(online: boolean, stale: boolean, actionAgeMs: number | undefined, feedLive: boolean, tick: number | undefined): string {
   if (!online) return 'Resident is not online.';
+  if (feedLive && tick !== undefined) return `Resident feed live at tick ${tick}.`;
+  if (feedLive) return 'Resident feed live.';
   if (stale) return `No visible action for ${formatDuration(actionAgeMs)}.`;
   return 'Recent action visible.';
 }
@@ -146,6 +153,11 @@ function formatActiveMove(runtime: RuntimeReadModel | undefined): { moveLabel: s
 function formatPosition(position: unknown): string {
   const parsed = asPosition(position);
   return parsed ? `${parsed.x}, ${parsed.y}, ${parsed.level}` : '-';
+}
+
+function positionFromPerception(perception: unknown): { x: number; y: number; level: number } | undefined {
+  const root = asRecord(perception);
+  return asPosition(asRecord(root.resident).position) || asPosition(root.position);
 }
 
 function asPosition(value: unknown): { x: number; y: number; level: number } | undefined {

@@ -10,13 +10,16 @@ import type {
   RuntimeReadModel,
   RuntimeState,
   SoulSummary,
+  Position,
 } from '@nullcity-dashboard/shared';
+import type { ResidentFeedSnapshot } from './gateway';
 import { asRecord, latestDatedJsonl, listFiles, pathExists, readJsonFile, readJsonl, readTextFile, residentSlug, safeJoin } from './util';
 
 export class RuntimeRepository {
   constructor(
     private readonly memoryRoot: string,
     private readonly logsRoot: string,
+    private readonly agentLogsRoot: string,
     private readonly soulsRoot: string,
   ) {}
 
@@ -37,7 +40,7 @@ export class RuntimeRepository {
     };
   }
 
-  async residentRuntime(resident: string, summary?: ResidentSummary): Promise<RuntimeReadModel> {
+  async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
     const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference] = await Promise.all([
@@ -50,13 +53,17 @@ export class RuntimeRepository {
       this.readResidentInference(resident),
     ]);
 
-    const latestAction = actions.at(-1);
+    const liveActions = feedToActionEntries(feed);
+    const mergedActions = [...actions, ...liveActions].sort(byTime);
+    const latestAction = [...mergedActions].reverse().find(entry => entry.action || entry.result);
     const latestInference = inference.at(-1);
-    const reaction = latestAction?.source === 'nervous-system' ? latestAction : [...actions].reverse().find(entry => entry.source === 'nervous-system');
-    const spark = buildSparkRuntimeSummary(actions, inference);
+    const reaction = latestAction?.source === 'nervous-system' ? latestAction : [...mergedActions].reverse().find(entry => entry.source === 'nervous-system');
+    const spark = buildSparkRuntimeSummary(mergedActions, inference);
+    const livePosition = positionFromPerception(feed?.latestPerception);
+    const perceptionTick = numberField(feed?.latestPerception, 'tick');
 
     return {
-      available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || actions.length || inference.length),
+      available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || mergedActions.length || inference.length || feed?.latestPerception),
       online: Boolean(summary?.online),
       state,
       thinking: {
@@ -78,6 +85,12 @@ export class RuntimeRepository {
       body: {
         controlHeld: Boolean(summary?.controlHeld),
         controllerId: summary?.controllerId,
+        position: livePosition,
+        latestPerception: feed?.latestPerception,
+        latestEvent: feed?.latestEvent,
+        perceptionTick,
+        lastFeedAt: feed?.lastFeedAt,
+        perceptionAgeMs: ageMs(feed?.lastFeedAt),
         lastAction: latestAction
           ? {
               kind: actionKind(latestAction.action),
@@ -97,10 +110,10 @@ export class RuntimeRepository {
         files: memoryFiles,
       },
       logs: {
-        actions,
+        actions: mergedActions,
         inference,
       },
-      errors: [],
+      errors: [feed?.lastError].filter((error): error is string => Boolean(error)),
     };
   }
 
@@ -188,12 +201,22 @@ export class RuntimeRepository {
 
   private async readResidentActions(resident: string): Promise<ActionLogEntry[]> {
     const roots = [path.join(this.logsRoot, resident, 'actions'), path.join(this.logsRoot, residentSlug(resident), 'actions')];
-    return readLatestFromRoots<ActionLogEntry>(roots, 100);
+    const [controllerActions, agentActions] = await Promise.all([
+      readLatestFromRoots<ActionLogEntry>(roots, 100),
+      this.readResidentAgentLog(resident),
+    ]);
+    return [...controllerActions, ...agentActions].sort(byTime).slice(-100);
   }
 
   private async readResidentInference(resident: string): Promise<InferenceLogEntry[]> {
     const roots = [path.join(this.logsRoot, resident, 'inference'), path.join(this.logsRoot, residentSlug(resident), 'inference')];
     return readLatestFromRoots<InferenceLogEntry>(roots, 100);
+  }
+
+  private async readResidentAgentLog(resident: string): Promise<ActionLogEntry[]> {
+    const roots = [path.join(this.agentLogsRoot, resident), path.join(this.agentLogsRoot, residentSlug(resident))];
+    const entries = await readLatestFromRoots<ActionLogEntry>(roots, 200);
+    return entries.filter(entry => entry.type !== 'perception');
   }
 }
 
@@ -365,6 +388,45 @@ function numberField(value: unknown, key: string): number | undefined {
 function booleanField(value: unknown, key: string): boolean | undefined {
   const field = asRecord(value)[key];
   return typeof field === 'boolean' ? field : undefined;
+}
+
+function feedToActionEntries(feed: ResidentFeedSnapshot | undefined): ActionLogEntry[] {
+  if (!feed) return [];
+  return [
+    ...feed.events.map(entry => ({
+      t: entry.t,
+      type: 'event',
+      event: entry.event,
+      source: 'body' as const,
+    })),
+    ...feed.actionResults.map(entry => ({
+      t: entry.t,
+      type: 'action_result',
+      requestId: entry.requestId,
+      result: entry.result,
+      cause: entry.cause,
+      source: 'body' as const,
+    })),
+  ];
+}
+
+function positionFromPerception(perception: unknown): Position | undefined {
+  const root = asRecord(perception);
+  return parsePosition(asRecord(root.resident).position) || parsePosition(root.position);
+}
+
+function parsePosition(value: unknown): Position | undefined {
+  const record = asRecord(value);
+  const x = Number(record.x);
+  const y = Number(record.y);
+  const level = Number(record.level ?? 0);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y, level: Number.isFinite(level) ? level : 0 } : undefined;
+}
+
+function ageMs(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? Math.max(0, Date.now() - time) : undefined;
 }
 
 function filterPrefix(value: Record<string, number> | undefined, prefix: string): Record<string, number> | undefined {
