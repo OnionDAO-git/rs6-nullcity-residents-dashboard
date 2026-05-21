@@ -87,6 +87,20 @@ export interface InferenceLogEntry {
   [key: string]: unknown;
 }
 
+export interface SparkModuleSummary {
+  id: string;
+  version?: string;
+  config?: Record<string, unknown>;
+  source: 'soul' | 'runtime-state' | 'inference-log' | 'action-log';
+  activeFacets: string[];
+  lastSeenAt?: string;
+}
+
+export interface SparkRuntimeSummary {
+  modules: SparkModuleSummary[];
+  activeModule?: SparkModuleSummary;
+}
+
 export interface ResidentActionSummary {
   kind?: string;
   cause?: string;
@@ -133,6 +147,7 @@ export interface RuntimeReadModel {
     lastActionSource?: ActionSource;
     gatewayHealthy?: boolean;
   };
+  spark?: SparkRuntimeSummary;
   memory: {
     indexMarkdown?: string;
     files: string[];
@@ -159,6 +174,7 @@ export interface ResidentDashboardRow {
   thinking?: RuntimeReadModel['thinking'];
   nervous?: RuntimeReadModel['nervous'];
   body?: RuntimeReadModel['body'];
+  spark?: SparkRuntimeSummary;
   lastEvent?: ResidentEventSummary;
   activeTrade?: unknown;
   errors?: string[];

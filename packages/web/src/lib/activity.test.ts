@@ -132,4 +132,34 @@ describe('buildActivitySnapshot', () => {
     expect(snapshot.moveLabel).toBe('move to 3231, 3239, 0');
     expect(snapshot.moveDetail).toBe('continue_move | range 1 | still 2');
   });
+
+  test('shows the active SPARK module driving the resident', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        spark: {
+          modules: [
+            {
+              id: 'onion.runescape.standard',
+              version: '0.1.0',
+              source: 'inference-log',
+              activeFacets: ['thinking'],
+              lastSeenAt: '2026-05-20T17:43:38.000Z',
+            },
+          ],
+          activeModule: {
+            id: 'onion.runescape.standard',
+            version: '0.1.0',
+            source: 'inference-log',
+            activeFacets: ['thinking'],
+            lastSeenAt: '2026-05-20T17:43:38.000Z',
+          },
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(snapshot.moduleLabel).toBe('onion.runescape.standard@0.1.0');
+    expect(snapshot.moduleDetail).toBe('thinking | inference-log');
+  });
 });
