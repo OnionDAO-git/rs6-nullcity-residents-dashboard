@@ -4,8 +4,13 @@ import type {
   ActionLogEntry,
   ControllerStatus,
   InferenceLogEntry,
+  PerceptionFeedSummary,
   ResidentDashboardRow,
   ResidentSummary,
+  CreateResidentSoulOptions,
+  InferenceProfileSummary,
+  ResidentAppearance,
+  ResidentSavedState,
   SparkRuntimeSummary,
   RuntimeReadModel,
   RuntimeState,
@@ -21,6 +26,7 @@ export class RuntimeRepository {
     private readonly logsRoot: string,
     private readonly agentLogsRoot: string,
     private readonly soulsRoot: string,
+    private readonly residentSaveRoot = path.join(path.dirname(memoryRoot), 'residents'),
   ) {}
 
   async status(): Promise<ControllerStatus> {
@@ -43,7 +49,7 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference, saved] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
@@ -51,6 +57,7 @@ export class RuntimeRepository {
       listFiles(memoryDir, ['.md', '.json']).catch(() => []),
       this.readResidentActions(resident),
       this.readResidentInference(resident),
+      this.readResidentSave(resident),
     ]);
 
     const liveActions = feedToActionEntries(feed);
@@ -61,6 +68,7 @@ export class RuntimeRepository {
     const spark = buildSparkRuntimeSummary(mergedActions, inference);
     const livePosition = positionFromPerception(feed?.latestPerception);
     const perceptionTick = numberField(feed?.latestPerception, 'tick');
+    const feedSummary = feedToSummary(feed);
 
     return {
       available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || mergedActions.length || inference.length || feed?.latestPerception),
@@ -85,6 +93,7 @@ export class RuntimeRepository {
       body: {
         controlHeld: Boolean(summary?.controlHeld),
         controllerId: summary?.controllerId,
+        feed: feedSummary,
         position: livePosition,
         latestPerception: feed?.latestPerception,
         latestEvent: feed?.latestEvent,
@@ -103,6 +112,7 @@ export class RuntimeRepository {
           : undefined,
         lastActionSource: latestAction?.source,
         gatewayHealthy: summary?.online,
+        saved,
       },
       spark,
       memory: {
@@ -117,14 +127,18 @@ export class RuntimeRepository {
     };
   }
 
-  async enrichResidents(residents: ResidentSummary[]): Promise<ResidentDashboardRow[]> {
+  async enrichResidents(residents: ResidentSummary[], feeds = new Map<string, ResidentFeedSnapshot | undefined>()): Promise<ResidentDashboardRow[]> {
     return Promise.all(
       residents.map(async resident => {
-        const runtime = await this.residentRuntime(resident.name, resident);
+        const runtime = await this.residentRuntime(resident.name, resident, feeds.get(feedKey(resident.name)));
         return {
           name: resident.name,
           online: resident.online,
           controllerId: resident.controllerId,
+          position: runtime.body.position,
+          hp: runtime.body.feed?.hp,
+          inCombat: runtime.body.feed?.inCombat,
+          busy: runtime.body.feed?.busy,
           attention: runtime.state?.attention,
           legacy: runtime.state?.legacy,
           budgets: runtime.state?.budgets,
@@ -132,6 +146,7 @@ export class RuntimeRepository {
           thinking: runtime.thinking,
           nervous: runtime.nervous,
           body: runtime.body,
+          feed: runtime.body.feed,
           spark: runtime.spark,
           lastEvent: latestEvent(runtime.logs.actions),
           errors: runtime.errors,
@@ -142,7 +157,41 @@ export class RuntimeRepository {
 
   async listSouls(): Promise<SoulSummary[]> {
     const files = await listFiles(this.soulsRoot, ['.md']);
-    return Promise.all(files.map(file => this.readSoul(file)));
+    const souls = await Promise.all(files.map(file => this.readSoul(file)));
+    return souls.filter(soul => !soul.errors.length);
+  }
+
+  async writeResidentSoul(
+    resident: string,
+    options: CreateResidentSoulOptions = {},
+    spawnPosition?: { x: number; y: number; level?: number },
+  ): Promise<SoulSummary> {
+    const slug = resident.replace(/^res:/, '');
+    const source = options.sourceSoulFile ? await this.readSourceSoul(options.sourceSoulFile) : undefined;
+    const sourceFrontmatter = source?.frontmatter || {};
+    const display = typeof sourceFrontmatter.display === 'string' ? sourceFrontmatter.display : titleCase(slug);
+    const archetype = archetypeValue(sourceFrontmatter.archetype) || 'endurer';
+    const temperature = normalizedTemperature(options.temperature ?? numberField(asRecord(sourceFrontmatter.model), 'temperature'));
+    const endpoint = cleanScalar(options.endpoint) || stringField(asRecord(sourceFrontmatter.model), 'endpoint') || 'default';
+    const model = cleanScalar(options.model) || stringField(asRecord(sourceFrontmatter.model), 'model');
+    const position = normalizePosition(spawnPosition || sourceFrontmatter.spawnPosition);
+    const body = source?.body?.trim() || generatedSoulBody(slug);
+    const content = renderResidentSoul({
+      name: resident,
+      display,
+      archetype,
+      endpoint,
+      temperature,
+      body,
+      autonomous: options.autonomous !== false,
+      ...(model ? { model } : {}),
+      ...(position ? { spawnPosition: position } : {}),
+    });
+    const fileName = `${slug}.md`;
+    const target = safeJoin(this.soulsRoot, fileName);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, content, 'utf8');
+    return this.readSoul(fileName);
   }
 
   async readMemoryFile(resident: string, relativePath: string): Promise<string | undefined> {
@@ -151,10 +200,22 @@ export class RuntimeRepository {
   }
 
   async deleteResidentFiles(resident: string): Promise<{ removed: string[] }> {
+    const displaySlug = resident
+      .trim()
+      .toLowerCase()
+      .replace(/^res:/, '')
+      .replace(/[^a-z0-9_-]+/gi, '-')
+      .replace(/^-|-$/g, '');
+    const safeSlug = residentSlug(resident);
     const candidates = [
-      path.join(this.memoryRoot, residentSlug(resident)),
+      path.join(this.memoryRoot, safeSlug),
+      path.join(this.memoryRoot, displaySlug),
       path.join(this.logsRoot, resident),
-      path.join(this.logsRoot, residentSlug(resident)),
+      path.join(this.logsRoot, safeSlug),
+      path.join(this.logsRoot, displaySlug),
+      path.join(this.agentLogsRoot, resident),
+      path.join(this.agentLogsRoot, safeSlug),
+      path.join(this.agentLogsRoot, displaySlug),
     ];
     const removed: string[] = [];
     for (const candidate of [...new Set(candidates)]) {
@@ -184,19 +245,29 @@ export class RuntimeRepository {
     const text = (await readTextFile(path.join(this.soulsRoot, file))) || '';
     const frontmatter = parseYamlishFrontmatter(text);
     const heading = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
-    const name = typeof frontmatter.name === 'string' ? frontmatter.name : file.replace(/\.md$/, '');
+    const hasName = typeof frontmatter.name === 'string';
+    const name = hasName ? String(frontmatter.name) : file.replace(/\.md$/, '');
     const variables = asRecord(frontmatter.variables);
     return {
       id: name,
       file,
       title: typeof frontmatter.display === 'string' ? frontmatter.display : heading || name,
+      model: modelSummary(frontmatter.model),
+      behavior: behaviorSummary(frontmatter.behavior),
       attentionProfile: frontmatter.attentionProfile,
       variables: Object.keys(variables).length ? variables : undefined,
       hooks: Array.isArray(frontmatter.hooks) ? frontmatter.hooks : undefined,
       nervousRules: Array.isArray(frontmatter.nervousSystem) ? frontmatter.nervousSystem : undefined,
       legacyKind: typeof asRecord(frontmatter.legacy).kind === 'string' ? String(asRecord(frontmatter.legacy).kind) : undefined,
-      errors: [],
+      errors: hasName ? [] : ['Missing soul name'],
     };
+  }
+
+  private async readSourceSoul(file: string): Promise<{ frontmatter: Record<string, unknown>; body: string } | undefined> {
+    if (!file.endsWith('.md')) return undefined;
+    const text = await readTextFile(safeJoin(this.soulsRoot, file));
+    if (!text) return undefined;
+    return { frontmatter: parseYamlishFrontmatter(text), body: text.replace(/^---\n[\s\S]*?\n---\s*/, '') };
   }
 
   private async readResidentActions(resident: string): Promise<ActionLogEntry[]> {
@@ -218,6 +289,143 @@ export class RuntimeRepository {
     const entries = await readLatestFromRoots<ActionLogEntry>(roots, 200);
     return entries.filter(entry => entry.type !== 'perception');
   }
+
+  private async readResidentSave(resident: string): Promise<ResidentSavedState | undefined> {
+    const normalized = resident.trim().toLowerCase();
+    const slug = residentSlug(resident);
+    const candidates = [
+      normalized,
+      normalized.startsWith('res:') ? slug : `res:${slug}`,
+      slug,
+    ];
+    let save: Record<string, unknown> | undefined;
+    for (const candidate of [...new Set(candidates)]) {
+      save = await readJsonFile<Record<string, unknown>>(path.join(this.residentSaveRoot, `${candidate}.json`));
+      if (save) break;
+    }
+    if (!save) return undefined;
+    const appearance = normalizeSavedAppearance(save.appearance);
+    const skills = normalizeSavedSkills(save.skills);
+    return {
+      ...(appearance ? { appearance } : {}),
+      ...(Array.isArray(save.inventory) ? { inventory: save.inventory } : {}),
+      ...(Array.isArray(save.equipment) ? { equipment: save.equipment } : {}),
+      ...(skills ? { skills } : {}),
+    };
+  }
+}
+
+function feedKey(resident: string): string {
+  return resident.trim().toLowerCase().replace(/^res:/, '');
+}
+
+function feedToSummary(feed: ResidentFeedSnapshot | undefined): PerceptionFeedSummary | undefined {
+  if (!feed?.latestPerception && !feed?.latestEvent) return feed ? emptyFeedSummary(feed) : undefined;
+  const perception = asRecord(feed.latestPerception);
+  const resident = asRecord(perception.resident);
+  const nearby = asRecord(perception.nearby);
+  const latestEvent = asRecord(feed.latestEvent) || {};
+  const lastFeedAt = feed.lastFeedAt;
+  return {
+    attached: feed.attached,
+    tick: numberField(perception, 'tick'),
+    ageMs: ageMs(lastFeedAt),
+    lastFeedAt,
+    position: positionFromPerception(feed.latestPerception),
+    hp: hpFromResident(resident),
+    inCombat: booleanField(resident, 'inCombat'),
+    busy: booleanField(resident, 'busy'),
+    nearby: {
+      players: arrayCount(nearby.players),
+      npcs: arrayCount(nearby.npcs),
+      objects: arrayCount(nearby.objects),
+      worldItems: arrayCount(nearby.worldItems),
+    },
+    events: arrayCount(perception.events),
+    availableActions: arrayCount(perception.availableActions),
+    latestEventKind: stringField(latestEvent, 'kind'),
+    latestEventText: stringField(latestEvent, 'text') || stringField(latestEvent, 'message'),
+  };
+}
+
+function emptyFeedSummary(feed: ResidentFeedSnapshot): PerceptionFeedSummary {
+  return {
+    attached: feed.attached,
+    ageMs: ageMs(feed.lastFeedAt),
+    lastFeedAt: feed.lastFeedAt,
+    nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+    events: 0,
+    availableActions: 0,
+  };
+}
+
+const savedSkillNames = [
+  'attack',
+  'defence',
+  'strength',
+  'hitpoints',
+  'ranged',
+  'prayer',
+  'magic',
+  'cooking',
+  'woodcutting',
+  'fletching',
+  'fishing',
+  'firemaking',
+  'crafting',
+  'smithing',
+  'mining',
+  'herblore',
+  'agility',
+  'thieving',
+  'slayer',
+  'farming',
+  'runecrafting',
+  'unused',
+  'construction',
+] as const;
+
+function normalizeSavedAppearance(value: unknown): ResidentAppearance | undefined {
+  const record = asRecord(value);
+  const appearance = {
+    gender: Number(record.gender),
+    head: Number(record.head),
+    torso: Number(record.torso),
+    arms: Number(record.arms),
+    legs: Number(record.legs),
+    hands: Number(record.hands),
+    feet: Number(record.feet),
+    facialHair: Number(record.facialHair),
+    hairColor: Number(record.hairColor),
+    torsoColor: Number(record.torsoColor),
+    legColor: Number(record.legColor),
+    feetColor: Number(record.feetColor),
+    skinColor: Number(record.skinColor),
+  };
+  return Object.values(appearance).every(Number.isInteger) ? appearance : undefined;
+}
+
+function normalizeSavedSkills(value: unknown): ResidentSavedState['skills'] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const entries: Array<[string, { level: number; xp: number; modifiedLevel?: number }]> = [];
+  value.forEach((skill, index) => {
+    const name = savedSkillNames[index];
+    if (!name || name === 'unused') return;
+    const record = asRecord(skill);
+    const level = numberField(record, 'level');
+    const xp = numberField(record, 'exp') ?? numberField(record, 'xp');
+    const modifiedLevel = numberField(record, 'modifiedLevel');
+    if (level === undefined || xp === undefined) return;
+    entries.push([
+      name,
+      {
+        level,
+        xp,
+        ...(modifiedLevel !== undefined ? { modifiedLevel } : {}),
+      },
+    ]);
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 export function buildSparkRuntimeSummary(actions: ActionLogEntry[], inference: InferenceLogEntry[]): SparkRuntimeSummary {
@@ -286,11 +494,161 @@ function parseScalar(value: string): unknown {
   return trimmed.replace(/^['"]|['"]$/g, '');
 }
 
+function modelSummary(value: unknown): SoulSummary['model'] | undefined {
+  const model = asRecord(value);
+  const summary = inferenceProfileSummary(model);
+  return Object.keys(summary).length ? summary : undefined;
+}
+
+function behaviorSummary(value: unknown): SoulSummary['behavior'] | undefined {
+  const behavior = asRecord(value);
+  const brain = inferenceProfileSummary(asRecord(behavior.brain));
+  const body = inferenceProfileSummary(asRecord(behavior.body));
+  const summary = {
+    kind: stringField(behavior, 'kind'),
+    ...(Object.keys(brain).length ? { brain } : {}),
+    ...(Object.keys(body).length ? { body } : {}),
+  };
+  return Object.keys(summary).some(key => summary[key as keyof typeof summary] !== undefined) ? summary : undefined;
+}
+
+function inferenceProfileSummary(value: Record<string, unknown>): InferenceProfileSummary {
+  return {
+    ...(stringField(value, 'endpoint') ? { endpoint: stringField(value, 'endpoint') } : {}),
+    ...(stringField(value, 'model') ? { model: stringField(value, 'model') } : {}),
+    ...(numberField(value, 'temperature') !== undefined ? { temperature: numberField(value, 'temperature') } : {}),
+    ...(booleanField(value, 'thinking') !== undefined ? { thinking: booleanField(value, 'thinking') } : {}),
+  };
+}
+
+function renderResidentSoul(options: {
+  name: string;
+  display: string;
+  archetype: string;
+  endpoint: string;
+  model?: string;
+  temperature: number;
+  spawnPosition?: { x: number; y: number; level?: number };
+  body: string;
+  autonomous: boolean;
+}): string {
+  const lines = [
+    '---',
+    `name: ${yamlString(options.name)}`,
+    `display: ${yamlString(options.display)}`,
+    `archetype: ${options.archetype}`,
+    'model:',
+    `  endpoint: ${yamlString(options.endpoint)}`,
+    ...(options.model ? [`  model: ${yamlString(options.model)}`] : []),
+    `  temperature: ${options.temperature}`,
+    'attentionProfile:',
+    '  startingAttention: 5000',
+    '  decayCurve: standard',
+    ...(options.spawnPosition
+      ? [
+          'spawnPosition:',
+          `  x: ${options.spawnPosition.x}`,
+          `  y: ${options.spawnPosition.y}`,
+          `  level: ${options.spawnPosition.level ?? 0}`,
+        ]
+      : []),
+    'initialInventory:',
+    '  - itemId: 590',
+    '  - itemId: 1351',
+    '  - itemId: 315',
+    '  - itemId: 315',
+    'legacy:',
+    `  kind: ${options.archetype}`,
+    '  parameters: {}',
+    'nervousSystem:',
+    '  - id: presence-beacon',
+    '    priority: 10',
+    '    cooldownTicks: 120',
+    '    condition:',
+    '      kind: always',
+    '    action:',
+    '      kind: say',
+    '      text: "I am awake and watching the world."',
+    '    suppressThinking: false',
+    ...(options.autonomous
+      ? [
+          'modules:',
+          '  - id: onion.runescape.standard',
+          '    enabled: true',
+          'behavior:',
+          '  kind: hybrid-agent',
+          `  commandPrefix: ${yamlString(options.name.replace(/^res:/, ''))}`,
+          '  brainEveryTicks: 60',
+          '  bodyEveryTicks: 8',
+          '  shareGoalsEveryTicks: 120',
+          '  returnToAnchorEveryTicks: 600',
+          '  returnToAnchorRadius: 12',
+          '  brain:',
+          '    thinking: true',
+          `    temperature: ${Math.min(2, options.temperature + 0.1)}`,
+          ...(options.model ? [`    model: ${yamlString(options.model)}`] : []),
+          '  body:',
+          '    thinking: false',
+          `    temperature: ${Math.max(0, options.temperature - 0.4)}`,
+          ...(options.model ? [`    model: ${yamlString(options.model)}`] : []),
+        ]
+      : []),
+    '---',
+    '',
+    options.body.trim(),
+    '',
+  ];
+  return `${lines.join('\n')}`;
+}
+
+function generatedSoulBody(slug: string): string {
+  const display = titleCase(slug);
+  return [
+    `# ${display}`,
+    '',
+    `${display} is a local resident with a practical routine: stay visible, observe the nearby world, pick a useful goal, and take safe typed actions.`,
+    '',
+  ].join('\n');
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase())
+    .trim() || 'Resident';
+}
+
+function archetypeValue(value: unknown): 'mentor' | 'achiever' | 'endurer' | undefined {
+  return value === 'mentor' || value === 'achiever' || value === 'endurer' ? value : undefined;
+}
+
+function cleanScalar(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function normalizedTemperature(value: unknown): number {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(2, Math.round(number * 100) / 100)) : 0.6;
+}
+
+function normalizePosition(value: unknown): { x: number; y: number; level?: number } | undefined {
+  const record = asRecord(value);
+  const x = numberField(record, 'x');
+  const y = numberField(record, 'y');
+  const level = numberField(record, 'level');
+  return x === undefined || y === undefined ? undefined : { x, y, level: level ?? 0 };
+}
+
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
 function inferThinkingMode(entry?: InferenceLogEntry): RuntimeReadModel['thinking']['mode'] {
   if (!entry) return 'idle';
   const status = String(entry.status || '');
   if (status.includes('decid')) return 'deciding';
   if (status.includes('execut')) return 'executing';
+  if (Number(entry.actions_emitted) > 0) return 'executing';
   return 'idle';
 }
 
@@ -388,6 +746,17 @@ function numberField(value: unknown, key: string): number | undefined {
 function booleanField(value: unknown, key: string): boolean | undefined {
   const field = asRecord(value)[key];
   return typeof field === 'boolean' ? field : undefined;
+}
+
+function hpFromResident(resident: Record<string, unknown>): { current: number; max: number } | undefined {
+  const hp = asRecord(resident.hp);
+  const current = numberField(hp, 'current');
+  const max = numberField(hp, 'max');
+  return current === undefined || max === undefined ? undefined : { current, max };
+}
+
+function arrayCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
 }
 
 function feedToActionEntries(feed: ResidentFeedSnapshot | undefined): ActionLogEntry[] {

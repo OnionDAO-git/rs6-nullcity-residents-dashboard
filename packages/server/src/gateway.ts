@@ -19,6 +19,7 @@ type Pending = {
 };
 
 type SessionListener = (session: SpectatorSession) => void;
+type ResidentFeedListener = (feed: ResidentFeedSnapshot) => void;
 
 export interface ResidentFeedSnapshot {
   resident: string;
@@ -37,6 +38,7 @@ export class GatewayClient {
   private sessions = new Map<string, SpectatorSession>();
   private sessionListeners = new Map<string, Set<SessionListener>>();
   private residentFeeds = new Map<string, ResidentFeedSnapshot>();
+  private residentFeedListeners = new Map<string, Set<ResidentFeedListener>>();
   private attachingResidents = new Map<string, Promise<void>>();
   private connected = false;
   private connecting?: Promise<void>;
@@ -122,6 +124,19 @@ export class GatewayClient {
 
   getResidentFeed(name: string): ResidentFeedSnapshot | undefined {
     return this.residentFeeds.get(residentKey(name));
+  }
+
+  subscribeResidentFeedUpdates(name: string, listener: ResidentFeedListener): () => void {
+    const key = residentKey(name);
+    const listeners = this.residentFeedListeners.get(key) || new Set<ResidentFeedListener>();
+    listeners.add(listener);
+    this.residentFeedListeners.set(key, listeners);
+    const feed = this.residentFeeds.get(key);
+    if (feed) listener(feed);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.residentFeedListeners.delete(key);
+    };
   }
 
   async observe(subject: SpectatorSubject, mode: SpectatorMode): Promise<SpectatorSession> {
@@ -290,12 +305,14 @@ export class GatewayClient {
       feed.attached = true;
       feed.latestPerception = message.payload.perception;
       feed.lastFeedAt = new Date().toISOString();
+      this.notifyResidentFeed(key, feed);
     }
     if (message.kind === 'perception') {
       const key = residentKey(message.payload.resident_id);
       const feed = this.ensureResidentFeed(key, message.payload.resident_id);
       feed.latestPerception = message.payload.perception;
       feed.lastFeedAt = new Date().toISOString();
+      this.notifyResidentFeed(key, feed);
     }
     if (message.kind === 'event') {
       const key = residentKey(message.payload.resident_id);
@@ -304,6 +321,7 @@ export class GatewayClient {
       feed.latestEvent = message.payload.event;
       feed.events = [...feed.events.slice(-49), entry];
       feed.lastFeedAt = entry.t;
+      this.notifyResidentFeed(key, feed);
     }
     if (message.kind === 'action_result') {
       const key = residentKey(message.payload.resident_id);
@@ -316,6 +334,7 @@ export class GatewayClient {
       };
       feed.actionResults = [...feed.actionResults.slice(-49), entry];
       feed.lastFeedAt = entry.t;
+      this.notifyResidentFeed(key, feed);
     }
     if (message.kind === 'spectator_perception') {
       const session = this.sessions.get(message.payload.sessionId);
@@ -387,13 +406,17 @@ export class GatewayClient {
     feed.attached = true;
     feed.latestPerception = perception;
     feed.lastFeedAt = new Date().toISOString();
-    if (!position) return;
+    if (!position) {
+      this.notifyResidentFeed(key, feed);
+      return;
+    }
     const perceptionRecord = typeof perception === 'object' && perception !== null && !Array.isArray(perception)
       ? perception as Record<string, unknown>
       : {};
     if (typeof perceptionRecord.position !== 'object' || perceptionRecord.position === null) {
       feed.latestPerception = { ...perceptionRecord, position };
     }
+    this.notifyResidentFeed(key, feed);
   }
 
   private ensureResidentFeed(key: string, resident: string): ResidentFeedSnapshot {
@@ -407,6 +430,12 @@ export class GatewayClient {
     };
     this.residentFeeds.set(key, feed);
     return feed;
+  }
+
+  private notifyResidentFeed(key: string, feed: ResidentFeedSnapshot): void {
+    for (const listener of this.residentFeedListeners.get(key) || []) {
+      listener(feed);
+    }
   }
 
   private rejectAll(error: Error): void {

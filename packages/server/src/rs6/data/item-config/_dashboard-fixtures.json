@@ -1,0 +1,19 @@
+{
+    "_comment": "Dashboard-owned test fixtures. The upstream rs6-nullcity-server data does not currently include any equipment_type: 'full_top' items, so we add synthetic ones here so the dashboard's compose + load-save hide-rule logic can be exercised by tests. game_id 90001+ is chosen above any real RS3 item id range to avoid collisions.",
+    "rs:dashboard_test_full_top": {
+        "game_id": 90001,
+        "equippable": true,
+        "equipment_data": {
+            "equipment_slot": "torso",
+            "equipment_type": "full_top"
+        }
+    },
+    "rs:dashboard_test_plain_torso": {
+        "game_id": 90002,
+        "equippable": true,
+        "equipment_data": {
+            "equipment_slot": "torso",
+            "equipment_type": "torso"
+        }
+    }
+}

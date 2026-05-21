@@ -1,0 +1,60 @@
+{
+    "presets": {
+        "rs:adamant_armour_base": {
+            "tradable": true,
+            "equippable": true,
+            "equipment_data": {
+                "requirements": {
+                    "skills": {
+                        "defence": 30
+                    }
+                }
+            },
+            "groups": ["adamant_metal", "equipment"]
+        }
+    },
+
+    "rs:adamant_platelegs": {
+        "extends": "rs:adamant_armour_base",
+        "game_id": 1073,
+        "examine": "These look pretty heavy.",
+        "weight": 10.432,
+        "equipment_data": {
+            "equipment_slot": "legs",
+            "offensive_bonuses": {
+                "magic": -21,
+                "ranged": -7
+            },
+            "defensive_bonuses": {
+                "stab": 33,
+                "slash": 31,
+                "crush": 29,
+                "magic": -4,
+                "ranged": 31
+            }
+        },
+        "groups": ["legs"]
+    },
+
+    "rs:adamant_plateskirt": {
+        "extends": "rs:adamant_armour_base",
+        "game_id": 1091,
+        "examine": "Designer leg protection.",
+        "weight": 9.071,
+        "equipment_data": {
+            "equipment_slot": "legs",
+            "offensive_bonuses": {
+                "magic": -21,
+                "ranged": -7
+            },
+            "defensive_bonuses": {
+                "stab": 33,
+                "slash": 31,
+                "crush": 29,
+                "magic": -4,
+                "ranged": 31
+            }
+        },
+        "groups": ["legs"]
+    }
+}

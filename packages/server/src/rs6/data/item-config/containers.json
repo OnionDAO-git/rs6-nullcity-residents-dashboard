@@ -1,0 +1,43 @@
+{
+    "rs:pot": {
+        "game_id": 1931,
+        "examine": "This pot is empty.",
+        "tradable": true,
+        "weight": 0.453
+    },
+    "rs:vial": {
+        "game_id": 229,
+        "examine": "An empty glass vial.",
+        "tradable": true,
+        "weight": 0.015,
+        "variations": [
+            {
+                "game_id": 227,
+                "suffix": "water",
+                "examine": "A glass vial containing water."
+            }
+        ]
+    },
+    "rs:jug": {
+        "game_id": 1935,
+        "examine": "This jug is empty.",
+        "tradable": true,
+        "weight": 0.453
+    },
+    "rs:bucket": {
+        "game_id": 1925,
+        "examine": "It's a wooden bucket.",
+        "tradable": true,
+        "weight": 1
+    },
+    "rs:bowl": {
+        "game_id": 1923,
+        "examine": "Useful for mixing things.",
+        "tradable": true
+    },
+    "rs:pie_dish": {
+        "game_id": 2313,
+        "examine": "Deceptively pie shaped.",
+        "tradable": true
+    }
+}

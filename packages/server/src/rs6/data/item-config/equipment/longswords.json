@@ -1,0 +1,38 @@
+{
+    "rs:dragon_longsword": {
+        "game_id": 1305,
+        "examine": "A very powerful sword.",
+        "tradable": true,
+        "weight": 1.814,
+        "equippable": true,
+        "equipment_data": {
+            "equipment_slot": "main_hand",
+            "requirements": {
+                "skills": {
+                    "attack": 60
+                }
+            },
+            "offensive_bonuses": {
+                "speed": 5,
+                "stab": 58,
+                "slash": 69,
+                "crush": -2,
+                "magic": 0,
+                "ranged": 0
+            },
+            "defensive_bonuses": {
+                "stab": 0,
+                "slash": 3,
+                "crush": 2,
+                "magic": 0,
+                "ranged": 0
+            },
+            "skill_bonuses": {
+                "prayer": 0,
+                "strength": 71,
+                "ranged": 0,
+                "magic": 0
+            }
+        }
+    }
+}

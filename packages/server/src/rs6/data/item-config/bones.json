@@ -1,0 +1,200 @@
+{
+    "rs:bones": {
+        "game_id": 526,
+        "tradable": true,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 4.5,
+            "wikiId": "Bones"
+        }
+    },
+    "rs:bones_burnt": {
+        "game_id": 528,
+        "tradable": true,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 4.5,
+            "wikiId": "Burnt_bones"
+        }
+    },
+    "rs:bones_wolf": {
+        "game_id": 2859,
+        "tradable": true,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 4.5,
+            "wikiId": "Wolf_bones"
+        }
+    },
+    "rs:bones_bat": {
+        "game_id": 530,
+        "tradable": true,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 5.3,
+            "wikiId": "Bat_bones"
+        }
+    },
+    "rs:bones_big": {
+        "game_id": 532,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 15,
+            "wikiId": "Big_bones"
+        }
+    },
+    "rs:bones_dagannoth": {
+        "game_id": 6729,
+        "tradable": true,
+        "weight": 1.5,
+        "metadata": {
+            "prayerBuryXp": 125,
+            "wikiId": "Dagannoth_bones"
+        }
+    },
+    "rs:bones_babydragon": {
+        "game_id": 534,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 30,
+            "wikiId": "Babydragon_bones"
+        }
+    },
+    "rs:bones_dragon": {
+        "game_id": 536,
+        "tradable": true,
+        "weight": 1.5,
+        "metadata": {
+            "prayerBuryXp": 72,
+            "wikiId": "Dragon_bones"
+        }
+    },
+    "rs:bones_wyvern": {
+        "game_id": 6812,
+        "tradable": true,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 72,
+            "wikiId": "Wyvern_bones"
+        }
+    },
+    "rs:bones_monkey_normal": {
+        "game_id": 3183,
+        "tradable": true,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 5,
+            "wikiId": "Monkey_bones"
+        }
+    },
+    "rs:bones_monkey_small_zombie": {
+        "game_id": 3185,
+        "tradable": false,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 5,
+            "wikiId": "Small_zombie_monkey_bones"
+        }
+    },
+    "rs:bones_monkey_large_zombie": {
+        "game_id": 3186,
+        "tradable": false,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 5,
+            "wikiId": "Large_zombie_monkey_bones"
+        }
+    },
+    "rs:bones_monkey_gorilla": {
+        "game_id": 3181,
+        "tradable": false,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 18,
+            "wikiId": "Gorilla_bones"
+        }
+    },
+    "rs:bones_monkey_bearded_gorilla": {
+        "game_id": 3182,
+        "tradable": false,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 18,
+            "wikiId": "Bearded_gorilla_bones"
+        }
+    },
+    "rs:bones_monkey_small_ninja": {
+        "game_id": 3179,
+        "tradable": false,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 16,
+            "wikiId": "Small_ninja_monkey_bones"
+        }
+    },
+    "rs:bones_monkey_medium_ninja": {
+        "game_id": 3180,
+        "tradable": false,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 18,
+            "wikiId": "Medium_ninja_monkey_bones"
+        }
+    },
+    "rs:bones_monkey_skeleton_gorilla": {
+        "game_id": 3187,
+        "tradable": false,
+        "weight": 0.5,
+        "metadata": {
+            "prayerBuryXp": 3,
+            "wikiId": "Bones_(Ape_Atoll)"
+        }
+    },
+    "rs:bones_jogre": {
+        "game_id": 3152,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 15,
+            "wikiId": "Jogre_bones"
+        }
+    },
+    "rs:bones_zogre": {
+        "game_id": 4812,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 22.5,
+            "wikiId": "Zogre_bones"
+        }
+    },
+    "rs:bones_fayrg": {
+        "game_id": 4830,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 84,
+            "wikiId": "Fayrg_bones"
+        }
+    },
+    "rs:bones_raurg": {
+        "game_id": 4832,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 96,
+            "wikiId": "Raurg_bones"
+        }
+    },
+    "rs:bones_ourg": {
+        "game_id": 4834,
+        "tradable": true,
+        "weight": 0.8,
+        "metadata": {
+            "prayerBuryXp": 140,
+            "wikiId": "Ourg_bones"
+        }
+    }
+}

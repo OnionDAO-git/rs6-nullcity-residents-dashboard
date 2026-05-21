@@ -5,6 +5,7 @@
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { compactJson, timeAgo } from './lib/format';
+  import ModelViewer from './lib/rs6/ModelViewer.svelte';
 
   let route = window.location.pathname;
   let loading = false;
@@ -24,6 +25,8 @@
   let liveSelectedRuntime: RuntimeReadModel | undefined;
   let sessionStream: EventSource | undefined;
   let sessionStreamId = '';
+  let runtimeStream: EventSource | undefined;
+  let runtimeStreamResident = '';
   let showSpectatorPlayers = true;
   let showSpectatorNpcs = true;
   let showSpectatorObjects = false;
@@ -31,10 +34,17 @@
   let spectatorZoom = 1;
   let spectatorModalOpen = false;
   let perceptionFeedLoadingResident = '';
+  let sparkActivityTab: 'activity' | 'stats' = 'activity';
+  let statsModelBytes: ArrayBuffer | null = null;
+  let statsModelStatus = '';
+  let statsModelKey = '';
 
   const defaultSpawnX = '3225';
   const defaultSpawnY = '3217';
   const defaultSpawnLevel = '0';
+  const defaultInferenceEndpoint = 'default';
+  const defaultInferenceTemperature = '0.6';
+  const spawnInferenceStorageKey = 'nullcity.spawnInference';
   const spectatorZoomMin = 0.5;
   const spectatorZoomMax = 3;
   const spectatorZoomStep = 0.25;
@@ -56,9 +66,21 @@
   let spawnX = defaultSpawnX;
   let spawnY = defaultSpawnY;
   let spawnLevel = defaultSpawnLevel;
+  let selectedSoulFile = '';
+  let inferenceEndpoint = defaultInferenceEndpoint;
+  let inferenceModel = '';
+  let inferenceTemperature = defaultInferenceTemperature;
+  let autonomousSpawn = true;
+  let spawnInferenceDefaultsLoaded = false;
   let spawnDraftRoute = '';
   let disconnectPolicy = 'idle';
-  let jsonAction = '{\n  "kind": "noop",\n  "cause": "dashboard"\n}';
+
+  const basePartMap = [8, 11, 4, 6, 9, 7, 10] as const;
+  const defaultIdkIdsByGender = {
+    M: [0, 10, 18, 26, 33, 36, 42],
+    F: [45, -1, 56, 61, 67, 70, 79],
+  } as const;
+  const skillOrder = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 'runecrafting', 'construction'];
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
@@ -82,6 +104,11 @@
       !activeResidentSession?.latestPerception,
   );
   $: liveSelectedRuntime = withLiveResidentBody(selectedRuntime, activeResidentSession);
+  $: statsAppearance = buildResidentAppearance(liveSelectedRuntime);
+  $: currentStatsModelKey = statsAppearance ? JSON.stringify(statsAppearance) : '';
+  $: if (sparkActivityTab === 'stats' && currentStatsModelKey && currentStatsModelKey !== statsModelKey) {
+    void loadStatsModel(statsAppearance, currentStatsModelKey);
+  }
   $: spectatorFilters = {
     players: showSpectatorPlayers,
     npcs: showSpectatorNpcs,
@@ -109,6 +136,8 @@
     return () => {
       window.removeEventListener('popstate', listener);
       clearInterval(timer);
+      closeRuntimeStream();
+      closeSessionStream();
     };
   });
 
@@ -137,11 +166,15 @@
       }
       else if (residentName) {
         [selectedRuntime, sessions, gatewayStatus] = await Promise.all([api.runtime(residentName), api.sessions(), api.gatewayStatus()]);
+        openRuntimeStream(residentName);
         syncResidentStream();
       }
       else if (route === '/souls') souls = await api.souls();
       else if (route === '/logs') logs = await api.logs();
-      if (!residentName) closeSessionStream();
+      if (!residentName) {
+        closeRuntimeStream();
+        closeSessionStream();
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Request failed';
     } finally {
@@ -157,6 +190,13 @@
     if (!spawnX.trim()) spawnX = defaultSpawnX;
     if (!spawnY.trim()) spawnY = defaultSpawnY;
     if (!spawnLevel.trim()) spawnLevel = defaultSpawnLevel;
+    if (spawnInferenceDefaultsLoaded) return;
+    const saved = loadSpawnInferenceDefaults();
+    if (!inferenceEndpoint.trim()) inferenceEndpoint = saved.endpoint || defaultInferenceEndpoint;
+    if (!inferenceModel.trim()) inferenceModel = saved.model || '';
+    if (!inferenceTemperature.trim()) inferenceTemperature = saved.temperature || defaultInferenceTemperature;
+    autonomousSpawn = saved.autonomous ?? true;
+    spawnInferenceDefaultsLoaded = true;
   }
 
   function seedSpawnDraft() {
@@ -229,32 +269,45 @@
       const y = Number(spawnY);
       const level = Number(spawnLevel);
       if (Number.isInteger(x) && Number.isInteger(y)) body.spawnPosition = { x, y, level: Number.isInteger(level) ? level : 0 };
+      const temperature = Number(inferenceTemperature);
+      body.soul = {
+        autonomous: autonomousSpawn,
+        ...(selectedSoulFile ? { sourceSoulFile: selectedSoulFile } : {}),
+        ...(inferenceEndpoint.trim() ? { endpoint: inferenceEndpoint.trim() } : {}),
+        ...(inferenceModel.trim() ? { model: inferenceModel.trim() } : {}),
+        ...(Number.isFinite(temperature) ? { temperature } : {}),
+      };
+      saveSpawnInferenceDefaults();
       await api.createResident(body);
       await api.residentCommand(name, 'connect', { observe: true, control: false, onDisconnect: disconnectPolicy });
       nav(`/residents/${encodeURIComponent(name)}`);
     });
   }
 
-  async function commandResident(command: 'connect' | 'attach' | 'detach' | 'disconnect') {
-    if (!residentName) return;
-    await runAction(async () => {
-      await api.residentCommand(residentName, command, command === 'connect' ? { observe: true, control: true, onDisconnect: disconnectPolicy } : {});
-      await loadRoute();
-    });
+  function loadSpawnInferenceDefaults(): { endpoint?: string; model?: string; temperature?: string; autonomous?: boolean } {
+    try {
+      return JSON.parse(window.localStorage.getItem(spawnInferenceStorageKey) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function saveSpawnInferenceDefaults() {
+    window.localStorage.setItem(
+      spawnInferenceStorageKey,
+      JSON.stringify({
+        endpoint: inferenceEndpoint.trim() || defaultInferenceEndpoint,
+        model: inferenceModel.trim(),
+        temperature: inferenceTemperature.trim() || defaultInferenceTemperature,
+        autonomous: autonomousSpawn,
+      }),
+    );
   }
 
   async function logoutResident() {
     if (!residentName) return;
     await runAction(async () => {
-      await api.residentCommand(residentName, 'disconnect', { cause: 'dashboard_logout' });
-      await loadRoute();
-    });
-  }
-
-  async function pauseResident() {
-    if (!residentName) return;
-    await runAction(async () => {
-      await api.residentCommand(residentName, 'pause', { cause: 'dashboard_pause' });
+      await api.residentCommand(residentName, 'pause', { cause: 'dashboard_logout' });
       await loadRoute();
     });
   }
@@ -281,21 +334,19 @@
   }
 
   function confirmDeleteResident(name: string): boolean {
-    const typed = window.prompt(`Delete ${residentDisplayName(name)}? Type the resident name to confirm.`);
-    return typed?.trim().toLowerCase() === name.toLowerCase();
+    const displayName = residentDisplayName(name);
+    const residentId = name.trim().toLowerCase();
+    const typed = window.prompt(`Delete ${displayName}? Type "${displayName}" to confirm.`);
+    if (typed === null) return false;
+    const normalized = typed.trim().toLowerCase();
+    const confirmed = normalized === displayName || normalized === residentId;
+    if (!confirmed) actionError = `Delete cancelled: typed "${typed.trim()}", expected "${displayName}".`;
+    return confirmed;
   }
 
   async function loginResident() {
     if (!residentName) return;
     await connectResidentSpectator();
-  }
-
-  async function sendJsonAction() {
-    if (!residentName) return;
-    await runAction(async () => {
-      await api.submitAction(residentName, JSON.parse(jsonAction));
-      await loadRoute();
-    });
   }
 
   async function observeResident() {
@@ -334,6 +385,9 @@
 
   function withLiveResidentBody(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined): RuntimeReadModel | undefined {
     if (!runtime || !session?.latestPerception) return runtime;
+    const sessionTime = timestampMs(session.lastEventAt);
+    const runtimeTime = timestampMs(runtime.body.lastFeedAt);
+    if (runtime.body.latestPerception && sessionTime !== undefined && runtimeTime !== undefined && sessionTime < runtimeTime) return runtime;
     const lastFeedAt = session.lastEventAt || runtime.body.lastFeedAt;
     const perceptionTick = numberField(session.latestPerception, 'tick') ?? runtime.body.perceptionTick;
     const position = session.position || livePositionFromPerception(session.latestPerception) || runtime.body.position;
@@ -374,6 +428,26 @@
     const session = findResidentSession(activeSession, sessions, residentName);
     if (session) openSessionStream(session);
     else closeSessionStream();
+  }
+
+  function openRuntimeStream(name: string) {
+    if (runtimeStreamResident.toLowerCase() === name.toLowerCase() && runtimeStream) return;
+    closeRuntimeStream();
+    runtimeStreamResident = name;
+    runtimeStream = api.streamRuntime(name);
+    runtimeStream.addEventListener('runtime', event => {
+      if (runtimeStreamResident.toLowerCase() !== residentName.toLowerCase()) return;
+      selectedRuntime = JSON.parse((event as MessageEvent).data) as RuntimeReadModel;
+    });
+    runtimeStream.onerror = () => {
+      closeRuntimeStream();
+    };
+  }
+
+  function closeRuntimeStream() {
+    runtimeStream?.close();
+    runtimeStream = undefined;
+    runtimeStreamResident = '';
   }
 
   function openSessionStream(session: SpectatorSession) {
@@ -442,8 +516,10 @@
 
   type BodyModel = RuntimeReadModel['body'];
   type BodyRow = { key: string; label: string; value: unknown };
+  type SparkActivityItem = { label: string; value: string; detail: string | undefined };
 
   const bodyFieldOrder = [
+    'feed',
     'gatewayHealthy',
     'controlHeld',
     'controllerId',
@@ -473,6 +549,7 @@
     if (key === 'gatewayHealthy') return value === true ? 'healthy' : 'offline';
     if (key === 'controlHeld') return value === true ? 'held' : 'free';
     if (key === 'position') return formatPosition(value);
+    if (key === 'feed') return feedSummary(value);
     if (key === 'perceptionAgeMs') return formatDuration(Number(value));
     if (key === 'lastFeedAt') return `${timeAgo(String(value))} ago`;
     if (key === 'lastAction') return actionSummary(value);
@@ -527,6 +604,368 @@
     return parts.join(' | ') || inlineObject(value);
   }
 
+  function feedSummary(value: unknown): string {
+    const feed = asRecord(value);
+    const nearby = asRecord(feed.nearby);
+    const parts = [
+      numberField(feed, 'tick') !== undefined ? `tick ${numberField(feed, 'tick')}` : '',
+      numberField(feed, 'ageMs') !== undefined ? `${formatDuration(Number(feed.ageMs))} ago` : '',
+      formatPosition(feed.position) !== '-' ? `pos ${formatPosition(feed.position)}` : '',
+      asRecord(feed.hp).current !== undefined ? `hp ${asRecord(feed.hp).current}/${asRecord(feed.hp).max}` : '',
+      `players ${numberField(nearby, 'players') ?? 0}`,
+      `npcs ${numberField(nearby, 'npcs') ?? 0}`,
+      `objects ${numberField(nearby, 'objects') ?? 0}`,
+      `items ${numberField(nearby, 'worldItems') ?? 0}`,
+      `actions ${numberField(feed, 'availableActions') ?? 0}`,
+      `events ${numberField(feed, 'events') ?? 0}`,
+    ].filter(Boolean);
+    return parts.join(' | ') || '-';
+  }
+
+  function residentFeedLabel(row: ResidentDashboardRow): string {
+    if (!row.feed) return row.online ? 'awaiting feed' : '-';
+    const parts = [
+      row.feed.tick !== undefined ? `tick ${row.feed.tick}` : '',
+      row.feed.ageMs !== undefined ? `${formatDuration(row.feed.ageMs)} ago` : '',
+      row.feed.attached ? 'attached' : '',
+    ].filter(Boolean);
+    return parts.join(' | ') || '-';
+  }
+
+  function residentSurroundingsLabel(row: ResidentDashboardRow): string {
+    const nearby = row.feed?.nearby;
+    if (!nearby) return '-';
+    return `p ${nearby.players} | n ${nearby.npcs} | o ${nearby.objects} | i ${nearby.worldItems}`;
+  }
+
+  function residentVitalsLabel(row: ResidentDashboardRow): string {
+    const hp = row.hp;
+    const flags = [row.inCombat ? 'combat' : '', row.busy ? 'busy' : ''].filter(Boolean);
+    const hpLabel = hp ? `hp ${hp.current}/${hp.max}` : '';
+    return [hpLabel, ...flags].filter(Boolean).join(' | ') || '-';
+  }
+
+  function thinkingActivity(runtime: RuntimeReadModel | undefined, activity: ReturnType<typeof buildActivitySnapshot>): SparkActivityItem[] {
+    const state = asRecord(runtime?.state);
+    const cognition = asRecord(state.cognition);
+    const goal = asRecord(cognition.activeGoal);
+    const inference = runtime?.thinking.latestInference;
+    return [
+      { label: 'Controller', value: runtime?.state ? 'runtime active' : runtime?.online ? 'waiting for runtime' : 'offline', detail: runtime?.state ? undefined : 'controller has not written runtime-state yet' },
+      { label: 'Mode', value: runtime?.thinking.mode || 'unknown', detail: runtime?.thinking.lastInferenceCause || undefined },
+      { label: 'Thought', value: activity.inferenceLabel, detail: activity.inferenceAgeLabel },
+      { label: 'Goal', value: stringField(goal, 'description') || activity.goalLabel, detail: goalDetail(goal) },
+      { label: 'Move Intent', value: activity.moveLabel, detail: activity.moveDetail },
+      { label: 'Resources', value: activity.attentionLabel, detail: budgetLabel(runtime) },
+      { label: 'SPARK Module', value: activity.moduleLabel, detail: activity.moduleDetail },
+      { label: 'Inference', value: inferenceStatus(inference), detail: inferenceProvider(inference) },
+      { label: 'Previous Intent', value: previousIntentLabel(runtime), detail: previousIntentDetail(runtime) },
+    ];
+  }
+
+  function nervousActivity(runtime: RuntimeReadModel | undefined): SparkActivityItem[] {
+    const nervous = runtime?.nervous;
+    return [
+      { label: 'Rules', value: nervous?.activeRules === undefined ? '-' : `${nervous.activeRules} active`, detail: cooldownLabel(nervous?.cooldowns) },
+      { label: 'Last Reaction', value: nervous?.lastReaction || 'none', detail: nervous?.lastRuleId ? `rule ${nervous.lastRuleId}` : undefined },
+      { label: 'Thinking Gate', value: nervous?.lastSuppressedThinking ? 'suppressed' : 'open', detail: nervous?.lastInterruptedThinking ? 'interrupted thinking' : undefined },
+      { label: 'Low-Level State', value: hookStateLabel(runtime), detail: shadowedHooksLabel(runtime) },
+    ];
+  }
+
+  function bodyActivity(runtime: RuntimeReadModel | undefined, activity: ReturnType<typeof buildActivitySnapshot>): SparkActivityItem[] {
+    const perception = asRecord(runtime?.body.latestPerception);
+    const resident = asRecord(perception.resident);
+    const activeTrade = asRecord(resident.activeTrade);
+    return [
+      { label: 'Feed', value: activity.feedLabel, detail: runtime?.body.gatewayHealthy ? 'gateway healthy' : undefined },
+      { label: 'Position', value: activity.positionLabel, detail: residentBusyLabel(runtime) },
+      { label: 'Vitals', value: vitalsFromRuntime(runtime), detail: activeTrade.partner ? 'trade active' : undefined },
+      { label: 'Last Action', value: activity.actionLabel, detail: activity.actionDetail },
+      { label: 'Nearby', value: activity.surroundingsLabel, detail: actionCountLabel(runtime) },
+      { label: 'Inventory', value: inventoryLabel(runtime), detail: equipmentLabel(runtime) },
+      { label: 'Event', value: activity.eventLabel, detail: runtime?.body.lastFeedAt ? `feed ${timeAgo(runtime.body.lastFeedAt)} ago` : undefined },
+    ];
+  }
+
+  function goalDetail(goal: Record<string, unknown>): string {
+    const steps = Array.isArray(goal.steps) ? goal.steps.length : 0;
+    const success = stringField(goal, 'success');
+    const ttl = numberField(goal, 'ttlTicks');
+    return [steps ? `${steps} steps` : '', success, ttl !== undefined ? `ttl ${ttl}` : ''].filter(Boolean).join(' | ') || '-';
+  }
+
+  function budgetLabel(runtime: RuntimeReadModel | undefined): string {
+    const budgets = runtime?.state?.budgets;
+    if (!budgets) return '-';
+    const parts = [
+      `${budgets.requestsThisMinute}/m`,
+      `${budgets.requestsToday}/d`,
+      budgets.requestsThisTick !== undefined ? `${budgets.requestsThisTick}/tick` : '',
+      budgets.noInferenceUntil ? `blocked until ${timeAgo(budgets.noInferenceUntil)}` : '',
+    ].filter(Boolean);
+    return parts.join(' | ');
+  }
+
+  function inferenceStatus(inference: unknown): string {
+    const record = asRecord(inference);
+    return stringField(record, 'status') || stringField(record, 'cause') || '-';
+  }
+
+  function inferenceProvider(inference: unknown): string {
+    const record = asRecord(inference);
+    const parts = [
+      stringField(record, 'provider'),
+      stringField(record, 'model'),
+      stringField(record, 'endpoint'),
+      numberField(record, 'latencyMs') !== undefined ? `${numberField(record, 'latencyMs')}ms` : '',
+    ].filter(Boolean);
+    return parts.join(' | ') || '-';
+  }
+
+  function previousIntentLabel(runtime: RuntimeReadModel | undefined): string {
+    const intent = asRecord(runtime?.thinking.previousIntent || runtime?.state?.previousIntent);
+    return stringField(intent, 'goal') || stringField(intent, 'description') || stringField(intent, 'kind') || (Object.keys(intent).length ? 'recorded' : '-');
+  }
+
+  function previousIntentDetail(runtime: RuntimeReadModel | undefined): string {
+    const intent = asRecord(runtime?.thinking.previousIntent || runtime?.state?.previousIntent);
+    return Object.keys(intent).length ? inlineObject(intent) : '-';
+  }
+
+  function cooldownLabel(cooldowns: Record<string, number> | undefined): string {
+    const entries = Object.entries(cooldowns || {});
+    if (!entries.length) return 'no cooldowns';
+    return entries.slice(0, 3).map(([key, value]) => `${key.replace(/^nervous:/, '')} ${value}`).join(' | ');
+  }
+
+  function hookStateLabel(runtime: RuntimeReadModel | undefined): string {
+    const state = runtime?.state;
+    const variables = Object.keys(state?.variables || {}).length;
+    const cooldowns = Object.keys(state?.hookCooldowns || {}).length;
+    return `${variables} vars | ${cooldowns} cooldowns`;
+  }
+
+  function shadowedHooksLabel(runtime: RuntimeReadModel | undefined): string {
+    const count = runtime?.state?.shadowedHooks?.length || 0;
+    return count ? `${count} shadowed hooks` : '-';
+  }
+
+  function residentBusyLabel(runtime: RuntimeReadModel | undefined): string {
+    const perception = asRecord(runtime?.body.latestPerception);
+    const resident = asRecord(perception.resident);
+    return [
+      booleanField(resident, 'busy') ? 'busy' : '',
+      booleanField(resident, 'inCombat') ? 'in combat' : '',
+    ].filter(Boolean).join(' | ') || '-';
+  }
+
+  function vitalsFromRuntime(runtime: RuntimeReadModel | undefined): string {
+    const feed = runtime?.body.feed;
+    if (!feed?.hp) return '-';
+    return `hp ${feed.hp.current}/${feed.hp.max}`;
+  }
+
+  function actionCountLabel(runtime: RuntimeReadModel | undefined): string {
+    const feed = runtime?.body.feed;
+    return feed ? `${feed.availableActions} available actions` : '-';
+  }
+
+  function inventoryLabel(runtime: RuntimeReadModel | undefined): string {
+    const resident = asRecord(asRecord(runtime?.body.latestPerception).resident);
+    const inventory = Array.isArray(resident.inventory) ? resident.inventory : [];
+    const occupied = inventory.filter(Boolean).length;
+    return inventory.length ? `${occupied}/${inventory.length} slots` : '-';
+  }
+
+  function equipmentLabel(runtime: RuntimeReadModel | undefined): string {
+    const resident = asRecord(asRecord(runtime?.body.latestPerception).resident);
+    const equipment = Array.isArray(resident.equipment) ? resident.equipment : [];
+    const occupied = equipment.filter(Boolean).length;
+    return equipment.length ? `${occupied} equipped` : '-';
+  }
+
+  type ItemRef = { itemId: number; key?: string; amount?: number; noted?: boolean };
+  type SkillRow = { key: string; label: string; level: number; xp: number };
+  type ItemSlot = { slot: number; item: ItemRef | null };
+  type ResidentModelAppearance = { gender: 'M' | 'F'; parts: number[]; colors: number[] };
+
+  function residentRecord(runtime: RuntimeReadModel | undefined): Record<string, unknown> {
+    return asRecord(asRecord(runtime?.body.latestPerception).resident);
+  }
+
+  function savedRecord(runtime: RuntimeReadModel | undefined): Record<string, unknown> {
+    return asRecord(runtime?.body.saved);
+  }
+
+  function residentArray(runtime: RuntimeReadModel | undefined, key: 'inventory' | 'equipment'): unknown[] {
+    const live = residentRecord(runtime)[key];
+    if (Array.isArray(live)) return live;
+    const saved = savedRecord(runtime)[key];
+    return Array.isArray(saved) ? saved : [];
+  }
+
+  function skillRows(runtime: RuntimeReadModel | undefined): SkillRow[] {
+    const liveSkills = asRecord(residentRecord(runtime).skills);
+    const savedSkills = asRecord(savedRecord(runtime).skills);
+    const skills = Object.keys(liveSkills).length ? liveSkills : savedSkills;
+    const rows = Object.entries(skills).map(([key, value]) => {
+      const record = asRecord(value);
+      return {
+        key,
+        label: labelize(key),
+        level: numberField(record, 'level') ?? 0,
+        xp: numberField(record, 'xp') ?? numberField(record, 'exp') ?? 0,
+      };
+    });
+    return rows.sort((a, b) => {
+      const ai = skillOrder.indexOf(a.key);
+      const bi = skillOrder.indexOf(b.key);
+      if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      return a.label.localeCompare(b.label);
+    });
+  }
+
+  function inventorySlots(runtime: RuntimeReadModel | undefined): ItemSlot[] {
+    return itemSlots(residentArray(runtime, 'inventory'), 28);
+  }
+
+  function equipmentSlots(runtime: RuntimeReadModel | undefined): ItemSlot[] {
+    return itemSlots(residentArray(runtime, 'equipment'), 14);
+  }
+
+  function equipmentSlot(runtime: RuntimeReadModel | undefined, slot: number): ItemSlot {
+    return equipmentSlots(runtime).find(entry => entry.slot === slot) || { slot, item: null };
+  }
+
+  function itemSlots(value: unknown, size: number): ItemSlot[] {
+    const source = Array.isArray(value) ? value : [];
+    return Array.from({ length: Math.max(size, source.length) }, (_, slot) => ({
+      slot,
+      item: normalizeItem(source[slot]),
+    }));
+  }
+
+  function normalizeItem(value: unknown): ItemRef | null {
+    const record = asRecord(value);
+    const itemId = numberField(record, 'itemId');
+    if (itemId === undefined) return null;
+    const item: ItemRef = { itemId };
+    const key = stringField(record, 'key');
+    const amount = numberField(record, 'amount');
+    const noted = booleanField(record, 'noted');
+    if (key) item.key = key;
+    if (amount !== undefined) item.amount = amount;
+    if (noted !== undefined) item.noted = noted;
+    return item;
+  }
+
+  function itemLabel(item: ItemRef | null): string {
+    if (!item) return '';
+    return item.key ? item.key.replace(/^rs:/, '').replace(/_/g, ' ') : `item ${item.itemId}`;
+  }
+
+  function itemShortLabel(item: ItemRef | null): string {
+    if (!item) return '';
+    const label = itemLabel(item);
+    const words = label.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}`.toUpperCase();
+    return label.slice(0, 2).toUpperCase();
+  }
+
+  function itemSlotTitle(slot: ItemSlot): string {
+    if (!slot.item) return `Slot ${slot.slot + 1}: empty`;
+    const amount = slot.item.amount && slot.item.amount > 1 ? ` x${slot.item.amount}` : '';
+    return `Slot ${slot.slot + 1}: ${itemLabel(slot.item)}${amount}`;
+  }
+
+  function itemIconStyle(item: ItemRef | null): string {
+    if (!item) return '';
+    const hue = (item.itemId * 47) % 360;
+    return `--item-hue: ${hue}`;
+  }
+
+  function buildResidentAppearance(runtime: RuntimeReadModel | undefined): ResidentModelAppearance | undefined {
+    const equipment = equipmentSlots(runtime);
+    const equippedItemId = (slot: number): number | undefined => equipment.find(entry => entry.slot === slot)?.item?.itemId;
+    const savedAppearance = asRecord(savedRecord(runtime).appearance);
+    const gender: 'M' | 'F' = numberField(savedAppearance, 'gender') === 1 ? 'F' : 'M';
+    const parts = new Array<number>(12).fill(0);
+    const basePartIds = [
+      numberField(savedAppearance, 'head'),
+      numberField(savedAppearance, 'facialHair'),
+      numberField(savedAppearance, 'torso'),
+      numberField(savedAppearance, 'arms'),
+      numberField(savedAppearance, 'hands'),
+      numberField(savedAppearance, 'legs'),
+      numberField(savedAppearance, 'feet'),
+    ];
+    for (let designerPart = 0; designerPart < basePartMap.length; designerPart++) {
+      const savedId = basePartIds[designerPart];
+      const fallbackId = defaultIdkIdsByGender[gender][designerPart];
+      const idkId = savedId ?? fallbackId;
+      const slot = basePartMap[designerPart];
+      if (idkId !== undefined && slot !== undefined && idkId >= 0 && !(gender === 'F' && slot === 11)) {
+        parts[slot] = idkId + 256;
+      }
+    }
+
+    const head = equippedItemId(0);
+    const cape = equippedItemId(1);
+    const neck = equippedItemId(2);
+    const weapon = equippedItemId(3);
+    const torsoItem = equippedItemId(4);
+    const offHand = equippedItemId(5);
+    const legsItem = equippedItemId(7);
+    const handsItem = equippedItemId(9);
+    const feetItem = equippedItemId(10);
+
+    if (head !== undefined) parts[0] = head + 512;
+    if (cape !== undefined) parts[1] = cape + 512;
+    if (neck !== undefined) parts[2] = neck + 512;
+    if (weapon !== undefined) parts[3] = weapon + 512;
+    if (torsoItem !== undefined) parts[4] = torsoItem + 512;
+    if (offHand !== undefined) parts[5] = offHand + 512;
+    if (legsItem !== undefined) parts[7] = legsItem + 512;
+    if (handsItem !== undefined) parts[9] = handsItem + 512;
+    if (feetItem !== undefined) parts[10] = feetItem + 512;
+
+    return {
+      gender,
+      parts,
+      colors: [
+        numberField(savedAppearance, 'hairColor') ?? 0,
+        numberField(savedAppearance, 'torsoColor') ?? 0,
+        numberField(savedAppearance, 'legColor') ?? 0,
+        numberField(savedAppearance, 'feetColor') ?? 0,
+        numberField(savedAppearance, 'skinColor') ?? 0,
+      ],
+    };
+  }
+
+  async function loadStatsModel(appearance: ResidentModelAppearance | undefined, key: string): Promise<void> {
+    if (!appearance) {
+      statsModelBytes = null;
+      statsModelStatus = '';
+      statsModelKey = '';
+      return;
+    }
+    statsModelKey = key;
+    statsModelStatus = 'loading';
+    try {
+      statsModelBytes = await api.composeResidentModel(appearance);
+      statsModelStatus = '';
+    } catch (err) {
+      statsModelBytes = null;
+      statsModelStatus = err instanceof Error ? err.message : 'model compose failed';
+    }
+  }
+
+  function booleanField(value: unknown, key: string): boolean | undefined {
+    const field = asRecord(value)[key];
+    return typeof field === 'boolean' ? field : undefined;
+  }
+
   function formatDuration(value: number): string {
     if (!Number.isFinite(value)) return '-';
     const seconds = Math.max(0, Math.round(value / 1000));
@@ -540,6 +979,12 @@
     if (!value) return undefined;
     const time = new Date(value).getTime();
     return Number.isFinite(time) ? Math.max(0, Date.now() - time) : undefined;
+  }
+
+  function timestampMs(value: string | undefined): number | undefined {
+    if (!value) return undefined;
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : undefined;
   }
 
   function inlineObject(value: unknown): string {
@@ -666,7 +1111,19 @@
       <label>X <input bind:value={spawnX} inputmode="numeric" placeholder={defaultSpawnX} /></label>
       <label>Y <input bind:value={spawnY} inputmode="numeric" placeholder={defaultSpawnY} /></label>
       <label>Level <input bind:value={spawnLevel} inputmode="numeric" placeholder={defaultSpawnLevel} /></label>
+      <label>Soul file
+        <select bind:value={selectedSoulFile}>
+          <option value="">Generated living soul</option>
+          {#each souls as soul}
+            <option value={soul.file}>{soulTitle(soul)}</option>
+          {/each}
+        </select>
+      </label>
+      <label>Inference endpoint <input bind:value={inferenceEndpoint} placeholder={defaultInferenceEndpoint} /></label>
+      <label>Inference model <input bind:value={inferenceModel} placeholder="endpoint default" /></label>
+      <label>Temperature <input type="number" min="0" max="2" step="0.05" bind:value={inferenceTemperature} /></label>
       <label>Disconnect policy <select bind:value={disconnectPolicy}><option value="idle">idle</option><option value="logout">logout</option></select></label>
+      <label class="checkbox-field"><input type="checkbox" bind:checked={autonomousSpawn} /> Autonomy</label>
       <button class="primary" disabled={actionBusy} onclick={createResident}>Create</button>
     </section>
     {@render SoulGrid({ souls })}
@@ -678,10 +1135,6 @@
       </div>
       <div class="actions">
         {#if residentIsOnline()}
-          <button disabled={actionBusy} onclick={observeResident}>Spectate</button>
-          <button disabled={actionBusy} onclick={() => commandResident('connect')}>Control</button>
-          <button disabled={actionBusy} onclick={() => commandResident('detach')}>Detach</button>
-          <button disabled={actionBusy} class="danger" onclick={pauseResident}>Pause + Logout</button>
           <button disabled={actionBusy} class="danger" onclick={logoutResident}>Logout</button>
         {:else}
           <button disabled={actionBusy} class="primary" onclick={loginResident}>Login</button>
@@ -691,7 +1144,6 @@
         {/if}
       </div>
     </section>
-    {@render ActivityPanel({ activity: buildActivitySnapshot(liveSelectedRuntime, activeResidentSession) })}
     <section class="split">
       <div class="panel observer-pane">
         <div class="panel-title">Spectator</div>
@@ -703,16 +1155,7 @@
         {@render BodyTable({ body: liveSelectedRuntime?.body })}
       </div>
     </section>
-    <section class="modules">
-      {@render ModulePanel({ title: 'Thinking', data: selectedRuntime?.thinking })}
-      {@render ModulePanel({ title: 'Nervous System', data: selectedRuntime?.nervous })}
-      {@render ModulePanel({ title: 'Shared State', data: selectedRuntime?.state })}
-    </section>
-    <section class="panel">
-      <div class="panel-title">Manual Action</div>
-      <textarea bind:value={jsonAction}></textarea>
-      <button class="primary" disabled={actionBusy || !residentIsOnline()} onclick={sendJsonAction}>Submit Action</button>
-    </section>
+    {@render ActivityPanel({ activity: buildActivitySnapshot(liveSelectedRuntime, activeResidentSession), runtime: liveSelectedRuntime })}
     <section class="modules">
       {@render LogPanel({ title: 'Actions', rows: selectedRuntime?.logs.actions || [] })}
       {@render LogPanel({ title: 'Thinking Inference', rows: selectedRuntime?.logs.inference || [] })}
@@ -791,7 +1234,7 @@
 {#snippet ResidentTable({ rows, canDelete, onselect, ondelete }: { rows: ResidentDashboardRow[]; canDelete: boolean; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
   <section class="table-wrap">
     <table>
-      <thead><tr><th>Resident</th><th>Status</th><th>Thinking</th><th>Attention</th><th>Body</th><th>Last Action</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Resident</th><th>Status</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
       <tbody>
         {#each rows as row}
           <tr onclick={() => onselect(`/residents/${encodeURIComponent(row.name)}`)}>
@@ -799,7 +1242,9 @@
             <td><span class:ok={row.online} class="dot"></span>{row.online ? 'online' : 'offline'}</td>
             <td>{row.thinking?.mode || 'unknown'}</td>
             <td class="num">{row.attention ?? '-'}</td>
-            <td>{row.body?.controlHeld ? 'control held' : 'free'}</td>
+            <td>{residentFeedLabel(row)}</td>
+            <td>{residentSurroundingsLabel(row)}</td>
+            <td>{residentVitalsLabel(row)}</td>
             <td>{row.body?.lastAction?.kind || row.lastEvent?.kind || '-'}</td>
             <td>
               {#if canDelete}
@@ -817,7 +1262,7 @@
             </td>
           </tr>
         {:else}
-          <tr><td colspan="7" class="empty">No residents reported</td></tr>
+          <tr><td colspan="9" class="empty">No residents reported</td></tr>
         {/each}
       </tbody>
     </table>
@@ -891,23 +1336,123 @@
   </section>
 {/snippet}
 
-{#snippet ActivityPanel({ activity }: { activity: ReturnType<typeof buildActivitySnapshot> })}
+{#snippet ActivityPanel({ activity, runtime }: { activity: ReturnType<typeof buildActivitySnapshot>; runtime: RuntimeReadModel | undefined })}
   <section class:stale={activity.stale} class="panel activity-panel">
     <div class="row activity-head">
       <div>
-        <div class="panel-title">Resident Activity</div>
+        <div class="panel-title">SPARK Activity</div>
         <strong>{activity.statusText}</strong>
       </div>
       <span class:ok={activity.onlineLabel === 'online'} class="tag">{activity.onlineLabel}</span>
     </div>
-    <div class="activity-grid">
-      <div><span>Position</span><strong>{activity.positionLabel}</strong></div>
-      <div><span>Last Action</span><strong>{activity.actionLabel}</strong><small>{activity.actionAgeLabel}</small></div>
-      <div><span>Last Thought</span><strong>{activity.inferenceLabel}</strong><small>{activity.inferenceAgeLabel}</small></div>
-      <div><span>Current Move</span><strong>{activity.moveLabel}</strong><small>{activity.moveDetail}</small></div>
-      <div><span>Goal</span><strong>{activity.goalLabel}</strong></div>
-      <div><span>SPARK Module</span><strong>{activity.moduleLabel}</strong><small>{activity.moduleDetail}</small></div>
+    <div class="spark-tabs" role="tablist" aria-label="SPARK activity views">
+      <button class:active={sparkActivityTab === 'activity'} role="tab" aria-selected={sparkActivityTab === 'activity'} onclick={() => (sparkActivityTab = 'activity')}>Activity</button>
+      <button class:active={sparkActivityTab === 'stats'} role="tab" aria-selected={sparkActivityTab === 'stats'} onclick={() => (sparkActivityTab = 'stats')}>Stats</button>
     </div>
-    <div class="activity-detail">{activity.actionDetail}</div>
+    {#if sparkActivityTab === 'stats'}
+      {@render CharacterStatsPanel({ runtime })}
+    {:else}
+      <div class="spark-activity-grid">
+        {@render SparkActivitySection({ title: 'Thinking', rows: thinkingActivity(runtime, activity) })}
+        {@render SparkActivitySection({ title: 'Nervous System', rows: nervousActivity(runtime) })}
+        {@render SparkActivitySection({ title: 'Body', rows: bodyActivity(runtime, activity) })}
+      </div>
+    {/if}
   </section>
+{/snippet}
+
+{#snippet SparkActivitySection({ title, rows }: { title: string; rows: SparkActivityItem[] })}
+  <section class="spark-activity-section">
+    <div class="panel-title">{title}</div>
+    <div class="spark-activity-list">
+      {#each rows as row}
+        <div class="spark-activity-row">
+          <span>{row.label}</span>
+          <strong>{row.value}</strong>
+          {#if row.detail}
+            <small>{row.detail}</small>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CharacterStatsPanel({ runtime }: { runtime: RuntimeReadModel | undefined })}
+  <div class="stats-layout">
+    <section class="stats-skills">
+      <div class="panel-title">Skills</div>
+      <div class="skill-grid">
+        {#each skillRows(runtime) as skill}
+          <div class="skill-row">
+            <span>{skill.label}</span>
+            <strong>{skill.level}</strong>
+            <small>{Math.floor(skill.xp).toLocaleString()} xp</small>
+          </div>
+        {:else}
+          <div class="empty">No skills reported</div>
+        {/each}
+      </div>
+    </section>
+    <section class="stats-model">
+      <div class="panel-title">Character</div>
+      <div class="model-frame">
+        {#if statsModelStatus}
+          <div class="empty">{statsModelStatus}</div>
+        {/if}
+        <ModelViewer glbBytes={statsModelBytes} />
+      </div>
+      {@render EquipmentPaperDoll({ runtime })}
+    </section>
+    <section class="stats-inventory">
+      <div class="panel-title">Inventory</div>
+      <div class="inventory-grid">
+        {#each inventorySlots(runtime) as slot}
+          {@render ItemSlotIcon({ slot, compact: false })}
+        {/each}
+      </div>
+    </section>
+  </div>
+{/snippet}
+
+{#snippet EquipmentPaperDoll({ runtime }: { runtime: RuntimeReadModel | undefined })}
+  <div class="equipment-paper-doll" aria-label="Equipped items">
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 0), area: 'head', label: 'Head' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 1), area: 'back', label: 'Back' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 2), area: 'neck', label: 'Neck' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 13), area: 'quiver', label: 'Quiver' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 3), area: 'main-hand', label: 'Main hand' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 4), area: 'torso', label: 'Torso' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 5), area: 'off-hand', label: 'Off hand' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 7), area: 'legs', label: 'Legs' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 9), area: 'hands', label: 'Hands' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 10), area: 'feet', label: 'Feet' })}
+    {@render EquipmentSlotBox({ slot: equipmentSlot(runtime, 12), area: 'ring', label: 'Ring' })}
+  </div>
+{/snippet}
+
+{#snippet EquipmentSlotBox({ slot, area, label }: { slot: ItemSlot; area: string; label: string })}
+  <div class:empty-slot={!slot.item} class="equipment-slot item-slot" data-area={area} title={slot.item ? `${label}: ${itemLabel(slot.item)}` : `${label}: empty`} style={itemIconStyle(slot.item)}>
+    {#if slot.item}
+      <span class="item-glyph">{itemShortLabel(slot.item)}</span>
+      {#if slot.item.amount && slot.item.amount > 1}
+        <small>{slot.item.amount}</small>
+      {/if}
+    {:else}
+      <span class="equipment-placeholder">{label}</span>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet ItemSlotIcon({ slot, compact }: { slot: ItemSlot; compact: boolean })}
+  <div class:compact class:empty-slot={!slot.item} class="item-slot" title={itemSlotTitle(slot)} style={itemIconStyle(slot.item)}>
+    {#if slot.item}
+      <span class="item-glyph">{itemShortLabel(slot.item)}</span>
+      {#if slot.item.amount && slot.item.amount > 1}
+        <small>{slot.item.amount}</small>
+      {/if}
+    {:else}
+      <span class="slot-index">{slot.slot + 1}</span>
+    {/if}
+  </div>
 {/snippet}

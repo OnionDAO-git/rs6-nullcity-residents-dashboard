@@ -14,6 +14,10 @@ export interface ActivitySnapshot {
   goalLabel: string;
   moduleLabel: string;
   moduleDetail: string;
+  attentionLabel: string;
+  feedLabel: string;
+  surroundingsLabel: string;
+  eventLabel: string;
   stale: boolean;
 }
 
@@ -28,6 +32,7 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
   const actionAgeMs = ageMs(latestAction?.t, now);
   const inferenceAgeMs = ageMs(latestInference?.t, now);
   const feedAgeMs = ageMs(runtime?.body.lastFeedAt, now);
+  const livePerception = session?.latestPerception || runtime?.body.latestPerception;
   const online = runtime?.online === true;
   const feedLive = feedAgeMs !== undefined && feedAgeMs <= STALE_ACTION_MS;
   const stale = online && !feedLive && (!latestAction || actionAgeMs === undefined || actionAgeMs > STALE_ACTION_MS);
@@ -44,6 +49,10 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     ...formatActiveMove(runtime),
     goalLabel: formatGoal(runtime),
     ...formatSparkModule(runtime),
+    attentionLabel: formatAttention(runtime),
+    feedLabel: formatFeed(runtime, session, livePerception, now),
+    surroundingsLabel: formatSurroundings(livePerception),
+    eventLabel: formatEvents(runtime, livePerception),
     stale,
   };
 }
@@ -116,6 +125,48 @@ function formatGoal(runtime: RuntimeReadModel | undefined): string {
   const cognition = asRecord(state.cognition);
   const activeGoal = asRecord(cognition.activeGoal);
   return stringField(activeGoal, 'description') || stringField(activeGoal, 'id') || '-';
+}
+
+function formatAttention(runtime: RuntimeReadModel | undefined): string {
+  const attention = runtime?.state?.attention;
+  if (typeof attention !== 'number') return '-';
+  const requestsThisMinute = runtime?.state?.budgets?.requestsThisMinute;
+  const requestsToday = runtime?.state?.budgets?.requestsToday;
+  const budget = typeof requestsThisMinute === 'number' || typeof requestsToday === 'number'
+    ? ` | ${requestsThisMinute ?? 0}/m ${requestsToday ?? 0}/d`
+    : '';
+  return `${attention}${budget}`;
+}
+
+function formatFeed(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined, perception: unknown, now: number): string {
+  const tick = numberField(perception, 'tick') ?? runtime?.body.perceptionTick;
+  const lastFeedAt = session?.lastEventAt || runtime?.body.lastFeedAt;
+  const age = ageMs(lastFeedAt, now);
+  const parts = [
+    tick !== undefined ? `tick ${tick}` : '',
+    age !== undefined ? `${formatDuration(age)} ago` : '',
+    session?.connected ? 'spectator' : runtime?.body.feed?.attached ? 'attached' : '',
+  ].filter(Boolean);
+  return parts.join(' | ') || '-';
+}
+
+function formatSurroundings(perception: unknown): string {
+  const nearby = asRecord(asRecord(perception).nearby);
+  return [
+    `players ${arrayCount(nearby.players)}`,
+    `npcs ${arrayCount(nearby.npcs)}`,
+    `objects ${arrayCount(nearby.objects)}`,
+    `items ${arrayCount(nearby.worldItems)}`,
+  ].join(' | ');
+}
+
+function formatEvents(runtime: RuntimeReadModel | undefined, perception: unknown): string {
+  const feedEvent = runtime?.body.feed?.latestEventKind;
+  const feedText = runtime?.body.feed?.latestEventText;
+  if (feedEvent && feedText) return `${feedEvent}: ${truncate(feedText, 42)}`;
+  if (feedEvent) return feedEvent;
+  const events = asRecord(perception).events;
+  return Array.isArray(events) && events.length ? `${events.length} event${events.length === 1 ? '' : 's'}` : '-';
 }
 
 function formatSparkModule(runtime: RuntimeReadModel | undefined): { moduleLabel: string; moduleDetail: string } {
@@ -199,6 +250,16 @@ function stringField(value: unknown, key: string): string | undefined {
 
 function numberOrString(value: unknown): number | string | undefined {
   return typeof value === 'number' || typeof value === 'string' ? value : undefined;
+}
+
+function numberField(value: unknown, key: string): number | undefined {
+  const field = asRecord(value)[key];
+  const number = Number(field);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function arrayCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
 }
 
 function truncate(value: string, max: number): string {

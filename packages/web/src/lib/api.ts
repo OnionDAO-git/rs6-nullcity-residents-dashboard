@@ -25,6 +25,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestArrayBuffer(path: string, init?: RequestInit): Promise<ArrayBuffer> {
+  const response = await fetchJson(path, init).catch(async error => {
+    if (!isFetchFailure(error) || !path.startsWith('/api/rs6/')) throw error;
+    const fallbackUrl = `http://127.0.0.1:8787${path}`;
+    if (globalThis.location?.origin === 'http://127.0.0.1:8787') throw error;
+    return fetchJson(fallbackUrl, init);
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(formatErrorMessage(text) || `${response.status} ${response.statusText}`);
+  }
+  return response.arrayBuffer();
+}
+
+function fetchJson(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...init?.headers,
+    },
+  });
+}
+
+function isFetchFailure(error: unknown): boolean {
+  return error instanceof TypeError && /fetch/i.test(error.message);
+}
+
 function formatErrorMessage(text: string): string {
   let message = text;
   try {
@@ -51,10 +79,13 @@ export const api = {
   deleteResident: (resident: string) => request(`/api/residents/${encodeURIComponent(resident)}`, { method: 'DELETE' }),
   submitAction: (resident: string, action: unknown) =>
     request(`/api/residents/${encodeURIComponent(resident)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
+  composeResidentModel: (appearance: unknown) =>
+    requestArrayBuffer('/api/rs6/compose', { method: 'POST', body: JSON.stringify({ appearance }) }),
   sessions: () => request<SpectatorSession[]>('/api/observe/sessions'),
   observe: (subject: SpectatorSubject, mode: SpectatorMode) =>
     request<SpectatorSession>('/api/observe/session', { method: 'POST', body: JSON.stringify({ subject, mode }) }),
   unobserve: (sessionId: string) => request(`/api/observe/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
+  streamRuntime: (resident: string) => new EventSource(`/api/runtime/${encodeURIComponent(resident)}/stream`),
   streamSession: (sessionId: string) => new EventSource(`/api/observe/session/${encodeURIComponent(sessionId)}/stream`),
   souls: () => request<SoulSummary[]>('/api/souls'),
   logs: () => request<{ actions: unknown[]; inference: unknown[] }>('/api/logs'),

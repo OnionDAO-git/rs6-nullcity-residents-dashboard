@@ -1,0 +1,19 @@
+{
+    "rs:cape_of_legends": {
+        "game_id": 1052,
+        "examine": "The cape worn by members of the Legends Guild.",
+        "tradable": false,
+        "weight": 1.814,
+        "equippable": true,
+        "equipment_data": {
+            "equipment_slot": "back",
+            "defensive_bonuses": {
+                "stab": 7,
+                "slash": 7,
+                "crush": 7,
+                "magic": 7,
+                "ranged": 7
+            }
+        }
+    }
+}

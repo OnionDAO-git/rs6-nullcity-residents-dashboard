@@ -1,0 +1,9 @@
+{
+    "rs:dramen_branch": {
+        "game_id": 771,
+        "examine": "A limb of the fabled Dramen tree.",
+        "tradable": false,
+        "weight": 2.267,
+        "equippable": false
+    }
+}

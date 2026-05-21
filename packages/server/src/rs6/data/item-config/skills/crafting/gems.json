@@ -1,0 +1,72 @@
+{
+    "presets": {
+        "rs:uncut_gem_base": {
+            "examine": "This would be worth more cut.",
+            "weight": 0.003,
+            "tradable": true,
+            "equippable": false
+        },
+        "rs:cut_gem_base": {
+            "examine": "A precious gem.",
+            "weight": 0.002,
+            "tradable": true,
+            "equippable": false
+        }
+    },
+    "rs:uncut_opal": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1625
+    },
+    "rs:uncut_jade": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1627
+    },
+    "rs:uncut_red_topaz": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1629
+    },
+    "rs:uncut_sapphire": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1623
+    },
+    "rs:uncut_emerald": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1621
+    },
+    "rs:uncut_ruby": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1619
+    },
+    "rs:uncut_diamond": {
+        "extends": "rs:uncut_gem_base",
+        "game_id": 1617
+    },
+    "rs:opal": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1609
+    },
+    "rs:jade": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1611
+    },
+    "rs:red_topaz": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1613
+    },
+    "rs:sapphire": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1607
+    },
+    "rs:emerald": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1605
+    },
+    "rs:ruby": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1603
+    },
+    "rs:diamond": {
+        "extends": "rs:cut_gem_base",
+        "game_id": 1601
+    }
+}

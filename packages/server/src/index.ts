@@ -1,12 +1,13 @@
 import path from 'node:path';
-import type { ResidentAppearance } from '@nullcity-dashboard/shared';
+import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
 import { config } from './config';
 import { GatewayClient } from './gateway';
 import { RuntimeRepository } from './runtime';
+import { routeRs6Api } from './rs6/routes';
 import { jsonResponse, notFound, pathExists, textResponse } from './util';
 
 const gateway = new GatewayClient(config.gatewayUrl, config.gatewayToken);
-const runtime = new RuntimeRepository(config.memoryRoot, config.logsRoot, config.agentLogsRoot, config.soulsRoot);
+const runtime = new RuntimeRepository(config.memoryRoot, config.logsRoot, config.agentLogsRoot, config.soulsRoot, config.residentSaveRoot);
 
 type WsMessage = string | ArrayBuffer | Uint8Array;
 
@@ -139,6 +140,8 @@ function parseHostPort(value: string): { host: string; port: number } {
 async function routeApi(request: Request, url: URL): Promise<Response> {
   const method = request.method;
   const pathname = url.pathname;
+  const rs6Response = await routeRs6Api(request, pathname);
+  if (rs6Response) return rs6Response;
 
   if (method === 'GET' && pathname === '/api/gateway/status') return jsonResponse(await gateway.probeStatus());
   if (method === 'GET' && pathname === '/api/controller/status') return jsonResponse(await runtime.status());
@@ -152,12 +155,13 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
       logsRoot: config.logsRoot,
       agentLogsRoot: config.agentLogsRoot,
       soulsRoot: config.soulsRoot,
+      residentSaveRoot: config.residentSaveRoot,
     });
   }
 
   if (method === 'GET' && pathname === '/api/overview') {
     const residents = await safeResidents(url.searchParams.get('filter') || 'all');
-    const rows = await runtime.enrichResidents(residents);
+    const rows = await enrichResidentRows(residents);
     const logs = await runtime.readAllLogs(60);
     return jsonResponse({
       gateway: await gateway.probeStatus(),
@@ -175,9 +179,16 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   if (method === 'GET' && pathname === '/api/residents') {
     const filter = normalizeFilter(url.searchParams.get('filter'));
     const residents = await safeResidents(filter);
-    return jsonResponse(await runtime.enrichResidents(residents));
+    return jsonResponse(await enrichResidentRows(residents));
   }
-  if (method === 'POST' && pathname === '/api/residents') return jsonResponse(await gateway.createResident(normalizeCreateResident(await request.json())));
+  if (method === 'POST' && pathname === '/api/residents') {
+    const { soul, ...resident } = normalizeCreateResident(await request.json());
+    if (!isResidentId(resident.name)) {
+      return jsonResponse({ error: 'Resident names must match res:[a-z0-9_]{1,20}' }, { status: 400 });
+    }
+    if (soul?.autonomous !== false) await runtime.writeResidentSoul(resident.name, soul, resident.spawnPosition);
+    return jsonResponse(await gateway.createResident(resident));
+  }
 
   const residentAction = pathname.match(/^\/api\/residents\/([^/]+)\/(connect|attach|detach|disconnect|pause|actions)$/);
   if (residentAction && method === 'POST') {
@@ -208,13 +219,16 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
     return jsonResponse({ gateway: gatewayResult, files });
   }
 
+  const runtimeStream = pathname.match(/^\/api\/runtime\/([^/]+)\/stream$/);
+  if (runtimeStream && method === 'GET') {
+    return streamRuntime(decodeURIComponent(runtimeStream[1] || ''));
+  }
+
   const runtimeMatch = pathname.match(/^\/api\/runtime\/([^/]+)(?:\/(thinking|nervous-system|body|history|inference|memory\/index|memory\/files|memory\/file))?$/);
   if (runtimeMatch && method === 'GET') {
     const resident = decodeURIComponent(runtimeMatch[1] || '');
     const section = runtimeMatch[2];
-    const summary = await safeResidentSummary(resident);
-    const feed = summary?.online ? await gateway.subscribeResidentFeed(resident) : gateway.getResidentFeed(resident);
-    const model = await runtime.residentRuntime(resident, summary, feed);
+    const model = await readResidentRuntime(resident);
     if (!section) return jsonResponse(model);
     if (section === 'thinking') return jsonResponse(model.thinking);
     if (section === 'nervous-system') return jsonResponse(model.nervous);
@@ -263,6 +277,22 @@ async function safeResidents(filter: string) {
   }
 }
 
+async function enrichResidentRows(residents: Awaited<ReturnType<typeof safeResidents>>) {
+  const feedEntries = await Promise.all(
+    residents.map(async resident => {
+      const feed = resident.online ? await gateway.subscribeResidentFeed(resident.name) : gateway.getResidentFeed(resident.name);
+      return [residentKey(resident.name), feed] as const;
+    }),
+  );
+  return runtime.enrichResidents(residents, new Map(feedEntries));
+}
+
+async function readResidentRuntime(resident: string) {
+  const summary = await safeResidentSummary(resident);
+  const feed = summary?.online ? await gateway.subscribeResidentFeed(resident) : gateway.getResidentFeed(resident);
+  return runtime.residentRuntime(resident, summary, feed);
+}
+
 async function safeObservableSubjects() {
   try {
     return await gateway.listObservableSubjects();
@@ -273,14 +303,23 @@ async function safeObservableSubjects() {
 
 async function safeResidentSummary(name: string) {
   try {
-    return (await gateway.listResidents('all')).find(resident => resident.name.toLowerCase() === name.toLowerCase());
+    const key = residentKey(name);
+    return (await gateway.listResidents('all')).find(resident => resident.name.toLowerCase() === name.toLowerCase() || residentKey(resident.name) === key);
   } catch {
     return undefined;
   }
 }
 
+function residentKey(value: string): string {
+  return value.trim().toLowerCase().replace(/^res:/, '');
+}
+
 function normalizeFilter(value: string | null): 'online' | 'offline' | 'all' {
   return value === 'online' || value === 'offline' ? value : 'all';
+}
+
+function isResidentId(value: string): boolean {
+  return /^res:[a-z0-9_]{1,20}$/.test(value);
 }
 
 async function readBody(request: Request): Promise<Record<string, unknown>> {
@@ -294,18 +333,42 @@ function normalizeCreateResident(raw: unknown): {
   appearance?: ResidentAppearance;
   initialInventory?: unknown[];
   initialEquipment?: unknown[];
+  soul?: CreateResidentSoulOptions;
 } {
   const body = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
   const name = String(body.name || '').trim().toLowerCase();
   const spawnPosition = normalizePosition(body.spawnPosition);
   const appearance = normalizeAppearance(body.appearance);
+  const soul = normalizeSoulOptions(body.soul);
   return {
     name,
     ...(spawnPosition ? { spawnPosition } : {}),
     ...(appearance ? { appearance } : {}),
     ...(Array.isArray(body.initialInventory) ? { initialInventory: body.initialInventory } : {}),
     ...(Array.isArray(body.initialEquipment) ? { initialEquipment: body.initialEquipment } : {}),
+    ...(soul ? { soul } : {}),
   };
+}
+
+function normalizeSoulOptions(value: unknown): CreateResidentSoulOptions | undefined {
+  const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+  const sourceSoulFile = cleanString(record.sourceSoulFile);
+  const endpoint = cleanString(record.endpoint);
+  const model = cleanString(record.model);
+  const temperature = Number(record.temperature);
+  const autonomous = typeof record.autonomous === 'boolean' ? record.autonomous : true;
+  const options: CreateResidentSoulOptions = {
+    autonomous,
+    ...(sourceSoulFile?.endsWith('.md') ? { sourceSoulFile } : {}),
+    ...(endpoint ? { endpoint } : {}),
+    ...(model ? { model } : {}),
+    ...(Number.isFinite(temperature) ? { temperature: Math.max(0, Math.min(2, Math.round(temperature * 100) / 100)) } : {}),
+  };
+  return Object.keys(options).length ? options : undefined;
+}
+
+function cleanString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function normalizePosition(value: unknown): { x: number; y: number; level?: number } | undefined {
@@ -354,6 +417,61 @@ function streamSession(sessionId: string): Response {
     cancel() {
       unsubscribe?.();
       if (heartbeat) clearInterval(heartbeat);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    },
+  });
+}
+
+function streamRuntime(resident: string): Response {
+  const encoder = new TextEncoder();
+  let unsubscribe: (() => void) | undefined;
+  let poll: ReturnType<typeof setInterval> | undefined;
+  let closed = false;
+  let sending = false;
+  let dirty = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+      const sendRuntime = async () => {
+        if (closed) return;
+        if (sending) {
+          dirty = true;
+          return;
+        }
+        sending = true;
+        try {
+          send('runtime', await readResidentRuntime(resident));
+        } catch (error) {
+          send('error', { message: error instanceof Error ? error.message : 'Runtime stream update failed' });
+        } finally {
+          sending = false;
+          if (dirty) {
+            dirty = false;
+            void sendRuntime();
+          }
+        }
+      };
+      unsubscribe = gateway.subscribeResidentFeedUpdates(resident, () => void sendRuntime());
+      poll = setInterval(() => void sendRuntime(), 5000);
+      void sendRuntime();
+    },
+    cancel() {
+      closed = true;
+      unsubscribe?.();
+      if (poll) clearInterval(poll);
     },
   });
   return new Response(stream, {

@@ -79,6 +79,27 @@ export interface RuntimeState {
 
 export type ActionSource = 'thinking' | 'nervous-system' | 'body' | 'manual';
 
+export interface PerceptionFeedSummary {
+  attached: boolean;
+  tick?: number;
+  ageMs?: number;
+  lastFeedAt?: string;
+  position?: Position;
+  hp?: { current: number; max: number };
+  inCombat?: boolean;
+  busy?: boolean;
+  nearby: {
+    players: number;
+    npcs: number;
+    objects: number;
+    worldItems: number;
+  };
+  events: number;
+  availableActions: number;
+  latestEventKind?: string;
+  latestEventText?: string;
+}
+
 export interface ActionLogEntry {
   t?: string;
   tick?: number;
@@ -133,6 +154,19 @@ export interface ResidentEventSummary {
   at?: string;
 }
 
+export interface ResidentSavedSkill {
+  level: number;
+  xp: number;
+  modifiedLevel?: number;
+}
+
+export interface ResidentSavedState {
+  appearance?: ResidentAppearance;
+  inventory?: unknown[];
+  equipment?: unknown[];
+  skills?: Record<string, ResidentSavedSkill>;
+}
+
 export interface RuntimeReadModel {
   available: boolean;
   online: boolean;
@@ -158,6 +192,7 @@ export interface RuntimeReadModel {
   body: {
     controlHeld: boolean;
     controllerId?: string;
+    feed?: PerceptionFeedSummary;
     perceptionAgeMs?: number;
     position?: Position;
     latestPerception?: unknown;
@@ -167,6 +202,7 @@ export interface RuntimeReadModel {
     lastAction?: ResidentActionSummary;
     lastActionSource?: ActionSource;
     gatewayHealthy?: boolean;
+    saved?: ResidentSavedState;
   };
   spark?: SparkRuntimeSummary;
   memory: {
@@ -195,6 +231,7 @@ export interface ResidentDashboardRow {
   thinking?: RuntimeReadModel['thinking'];
   nervous?: RuntimeReadModel['nervous'];
   body?: RuntimeReadModel['body'];
+  feed?: PerceptionFeedSummary;
   spark?: SparkRuntimeSummary;
   lastEvent?: ResidentEventSummary;
   activeTrade?: unknown;
@@ -230,12 +267,37 @@ export interface SoulSummary {
   id: string;
   file: string;
   title: string;
+  model?: {
+    endpoint?: string;
+    model?: string;
+    temperature?: number;
+  };
+  behavior?: {
+    kind?: string;
+    brain?: InferenceProfileSummary;
+    body?: InferenceProfileSummary;
+  };
   attentionProfile?: unknown;
   variables?: Record<string, unknown>;
   hooks?: unknown[];
   nervousRules?: unknown[];
   legacyKind?: string;
   errors: string[];
+}
+
+export interface InferenceProfileSummary {
+  endpoint?: string;
+  model?: string;
+  temperature?: number;
+  thinking?: boolean;
+}
+
+export interface CreateResidentSoulOptions {
+  sourceSoulFile?: string;
+  endpoint?: string;
+  model?: string;
+  temperature?: number;
+  autonomous?: boolean;
 }
 
 export interface SpectatorSession {

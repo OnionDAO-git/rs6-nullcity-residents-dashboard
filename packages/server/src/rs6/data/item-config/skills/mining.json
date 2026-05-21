@@ -1,0 +1,128 @@
+{
+    "rs:rune_essence": {
+        "game_id": 1436,
+        "examine": "An unimbued rune.",
+        "tradable": true,
+        "weight": 0.002,
+        "equippable": false
+    },
+    "rs:clay": {
+        "game_id": 434,
+        "examine": "Some hard dry clay.",
+        "tradable": true,
+        "weight": 1,
+        "equippable": false
+    },
+    "rs:copper_ore": {
+        "game_id": 436,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:tin_ore": {
+        "game_id": 438,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:blurite_ore": {
+        "game_id": 668,
+        "examine": "Definitely blue.",
+        "tradable": false,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:limestone": {
+        "game_id": 3211,
+        "examine": "Some limestone.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:iron_ore": {
+        "game_id": 440,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:silver_ore": {
+        "game_id": 442,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:coal": {
+        "game_id": 453,
+        "examine": "Hmm a non-renewable energy source!",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:gold_ore": {
+        "game_id": 444,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:mithril_ore": {
+        "game_id": 447,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 1.814,
+        "equippable": false
+    },
+    "rs:adamantite_ore": {
+        "game_id": 449,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.721,
+        "equippable": false
+    },
+    "rs:soft_clay": {
+        "game_id": 1761,
+        "examine": "Clay soft enough to mould.",
+        "tradable": true,
+        "weight": 0.907,
+        "equippable": false
+    },
+    "rs:runite_ore": {
+        "game_id": 451,
+        "examine": "This needs refining.",
+        "tradable": true,
+        "weight": 2.267,
+        "equippable": false
+    },
+    "rs:pure_essence": {
+        "game_id": 7936,
+        "examine": "An unimbued rune of extra capability.",
+        "tradable": true,
+        "weight": 0.002,
+        "equippable": false
+    },
+    "rs:granite": {
+        "game_id": 6979,
+        "examine": "A tiny chunk of granite.",
+        "tradable": true,
+        "weight": 0.5,
+        "equippable": false,
+        "variations": [
+            {
+                "game_id": 6981,
+                "examine": "A small chunk of granite.",
+                "weight": 2,
+                "suffix": "2kg"
+            },
+            {
+                "game_id": 6983,
+                "examine": "A medium-sized chunk of granite.",
+                "weight": 5,
+                "suffix": "5kg"
+            }
+        ]
+    }
+}
