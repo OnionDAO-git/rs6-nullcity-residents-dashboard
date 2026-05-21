@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DashboardOverview, GatewayStatus, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { DashboardOverview, GatewayStatus, ObservableSubjectSummary, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -16,11 +16,13 @@
   let gatewayStatus: GatewayStatus | undefined;
   let residents: ResidentDashboardRow[] = [];
   let selectedRuntime: RuntimeReadModel | undefined;
+  let subjects: ObservableSubjectSummary[] = [];
   let sessions: SpectatorSession[] = [];
   let souls: SoulSummary[] = [];
   let logs: { actions: unknown[]; inference: unknown[] } = { actions: [], inference: [] };
   let visibleResidents: ResidentDashboardRow[] = [];
   let activeSession: SpectatorSession | undefined;
+  let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
   let liveSelectedRuntime: RuntimeReadModel | undefined;
   let sessionStream: EventSource | undefined;
@@ -84,8 +86,11 @@
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
+  $: observeKind = parts[0] === 'observe' ? parts[1] || '' : '';
+  $: observeId = parts[0] === 'observe' ? parts[2] || '' : '';
   $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
   $: canDeleteResidents = Boolean(gatewayStatus?.allowDelete);
+  $: activeObserveSession = findObserveRouteSession(activeSession, sessions);
   $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
   $: {
     if (
@@ -169,12 +174,19 @@
         openRuntimeStream(residentName);
         syncResidentStream();
       }
+      else if (route === '/observe' || route.startsWith('/observe/')) {
+        const observedResident = observeKind === 'resident' && observeId ? decodeURIComponent(observeId) : '';
+        const observedRuntime = observedResident ? api.runtime(observedResident).catch(() => undefined) : Promise.resolve(undefined);
+        [subjects, sessions, selectedRuntime, gatewayStatus] = await Promise.all([api.subjects(), api.sessions(), observedRuntime, api.gatewayStatus()]);
+        await ensureObserveRouteSession();
+        syncObserveStream();
+      }
       else if (route === '/souls') souls = await api.souls();
       else if (route === '/logs') logs = await api.logs();
       if (!residentName) {
         closeRuntimeStream();
-        closeSessionStream();
       }
+      if (!residentName && !route.startsWith('/observe/')) closeSessionStream();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Request failed';
     } finally {
@@ -354,6 +366,22 @@
     await connectResidentSpectator();
   }
 
+  async function startObserve(subject: ObservableSubjectSummary, mode: SpectatorMode = 'follow') {
+    await observeSubject(subject.subject, mode);
+  }
+
+  async function observeSubject(subject: SpectatorSubject, mode: SpectatorMode = 'follow') {
+    await runAction(async () => openObserveSubject(subject, mode));
+  }
+
+  async function openObserveSubject(subject: SpectatorSubject, mode: SpectatorMode = 'follow') {
+    const session = await api.observe(subject, mode);
+    upsertSession(session);
+    activeSession = session;
+    nav(`/observe/${subjectPath(subject)}`);
+    openSessionStream(session);
+  }
+
   async function connectResidentSpectator() {
     perceptionFeedLoadingResident = residentName;
     let openedSession: SpectatorSession | undefined;
@@ -378,9 +406,54 @@
     return selectedRuntime?.online === true;
   }
 
+  async function ensureObserveRouteSession() {
+    if (!route.startsWith('/observe/') || findObserveRouteSession(activeSession, sessions)) return;
+    const subject = subjectFromObserveRoute();
+    if (!subject) return;
+    if (!subjectIsKnownOnline(subject)) return;
+    const session = await api.observe(subject, 'follow');
+    upsertSession(session);
+    activeSession = session;
+    openSessionStream(session);
+  }
+
+  function subjectFromObserveRoute(): SpectatorSubject | undefined {
+    if (!observeKind || !observeId) return undefined;
+    const id = decodeURIComponent(observeId);
+    if (observeKind === 'resident') return { kind: 'resident', name: id };
+    if (observeKind === 'player') return { kind: 'player', username: id };
+    return undefined;
+  }
+
+  function findObserveRouteSession(active: SpectatorSession | undefined, available: SpectatorSession[]): SpectatorSession | undefined {
+    const subject = subjectFromObserveRoute();
+    if (!subject || !subjectIsKnownOnline(subject)) return undefined;
+    return [active, ...available].find(session => session?.connected && subjectMatches(session.subject, subject.kind, subjectId(subject)));
+  }
+
   function findResidentSession(active: SpectatorSession | undefined, available: SpectatorSession[], name: string): SpectatorSession | undefined {
     if (!name) return undefined;
     return [active, ...available].find(session => session?.subject.kind === 'resident' && session.subject.name.toLowerCase() === name.toLowerCase());
+  }
+
+  function subjectIsKnownOnline(subject: SpectatorSubject): boolean {
+    return subjects.some(candidate => candidate.online && subjectMatches(candidate.subject, subject.kind, subjectId(subject)));
+  }
+
+  function subjectId(subject: SpectatorSubject): string {
+    return subject.kind === 'resident' ? subject.name : subject.username;
+  }
+
+  function subjectMatches(subject: SpectatorSubject, kind: string, id: string): boolean {
+    return subject.kind === kind && (subject.kind === 'resident' ? subject.name.toLowerCase() === id.toLowerCase() : subject.username.toLowerCase() === id.toLowerCase());
+  }
+
+  function subjectLabel(subject: SpectatorSubject): string {
+    return subject.kind === 'resident' ? subject.name : subject.username;
+  }
+
+  function subjectPath(subject: SpectatorSubject): string {
+    return subject.kind === 'resident' ? `resident/${encodeURIComponent(subject.name)}` : `player/${encodeURIComponent(subject.username)}`;
   }
 
   function withLiveResidentBody(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined): RuntimeReadModel | undefined {
@@ -422,6 +495,12 @@
 
   function upsertSession(session: SpectatorSession) {
     sessions = [session, ...sessions.filter(candidate => candidate.id !== session.id)];
+  }
+
+  function syncObserveStream() {
+    const session = findObserveRouteSession(activeSession, sessions);
+    if (session) openSessionStream(session);
+    else closeSessionStream();
   }
 
   function syncResidentStream() {
@@ -1035,6 +1114,7 @@
   <div class="navlinks">
     <button class:active={route === '/'} onclick={() => nav('/')}>Overview</button>
     <button class:active={route.startsWith('/residents')} onclick={() => nav('/residents')}>Residents</button>
+    <button class:active={route.startsWith('/observe')} onclick={() => nav('/observe')}>Observe</button>
     <button class:active={route === '/souls'} onclick={() => nav('/souls')}>Souls</button>
     <button class:active={route === '/logs'} onclick={() => nav('/logs')}>Logs</button>
   </div>
@@ -1159,6 +1239,56 @@
     <section class="modules">
       {@render LogPanel({ title: 'Actions', rows: selectedRuntime?.logs.actions || [] })}
       {@render LogPanel({ title: 'Thinking Inference', rows: selectedRuntime?.logs.inference || [] })}
+    </section>
+  {:else if route === '/observe'}
+    <section class="page-head compact">
+      <p class="kicker">Read Only</p>
+      <h1>Observe</h1>
+    </section>
+    <section class="subject-grid">
+      {#each subjects as subject}
+        <article class="card">
+          <div class="row">
+            <strong>{subjectLabel(subject.subject)}</strong>
+            <span class:ok={subject.online} class="tag">{subject.online ? 'online' : 'offline'}</span>
+          </div>
+          <p>{subject.position ? formatPosition(subject.position) : 'position unknown'}</p>
+          <div class="actions">
+            <button disabled={actionBusy || !subject.online} onclick={() => startObserve(subject, 'follow')}>Follow</button>
+            <button disabled={actionBusy || !subject.online} onclick={() => startObserve(subject, 'free-camera')}>Free Camera</button>
+          </div>
+        </article>
+      {:else}
+        <div class="empty">No observable subjects reported</div>
+      {/each}
+    </section>
+  {:else if route.startsWith('/observe/')}
+    {@const session = activeObserveSession}
+    <section class="toolbar">
+      <div>
+        <p class="kicker">Spectator Session</p>
+        <h1>{session ? subjectLabel(session.subject) : 'Subject unavailable'}</h1>
+      </div>
+      <button onclick={() => nav('/observe')}>Subjects</button>
+    </section>
+    {#if session?.subject.kind === 'resident'}
+      {@render ActivityPanel({ activity: buildActivitySnapshot(withLiveResidentBody(selectedRuntime, session), session) })}
+    {/if}
+    <section class="split wide">
+      <div class="panel observer-pane large">
+        <div class="panel-title">Spectator</div>
+        <div class="observer-surface large">
+          <div class="spectator-frame" use:spectatorFrame={{ session, filters: spectatorFilters }} aria-label="spectator"></div>
+        </div>
+        {@render SpectatorControls()}
+      </div>
+      <div class="panel">
+        <div class="panel-title">Perception</div>
+        <div class="mini-grid observer-summary">
+          <span>{perceptionSummary(session?.latestPerception)}</span>
+        </div>
+        <pre>{compactJson(session?.latestPerception)}</pre>
+      </div>
     </section>
   {:else if route === '/souls'}
     <section class="page-head compact">

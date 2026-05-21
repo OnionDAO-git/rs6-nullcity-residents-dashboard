@@ -2,6 +2,7 @@ import type {
   ControllerStatus,
   DashboardOverview,
   GatewayStatus,
+  ObservableSubjectSummary,
   ResidentDashboardRow,
   RuntimeReadModel,
   SoulSummary,
@@ -81,6 +82,7 @@ export const api = {
     request(`/api/residents/${encodeURIComponent(resident)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
   composeResidentModel: (appearance: unknown) =>
     requestArrayBuffer('/api/rs6/compose', { method: 'POST', body: JSON.stringify({ appearance }) }),
+  subjects: () => request<ObservableSubjectSummary[]>('/api/observe/subjects'),
   sessions: () => request<SpectatorSession[]>('/api/observe/sessions'),
   observe: (subject: SpectatorSubject, mode: SpectatorMode) =>
     request<SpectatorSession>('/api/observe/session', { method: 'POST', body: JSON.stringify({ subject, mode }) }),
