@@ -204,6 +204,7 @@ export interface ResidentDashboardRow {
 export interface GatewayStatus {
   configuredUrl: string;
   connected: boolean;
+  allowDelete?: boolean;
   lastConnectedAt?: string;
   lastDisconnectedAt?: string;
   lastError?: string;
@@ -269,6 +270,7 @@ export interface SpectatorRsPacketFrame {
 export type ClientMessage =
   | AgentFrame<'auth', { token?: string }>
   | AgentFrame<'controller_hello', { controllerId: string; version: string; capabilities?: string[] }>
+  | AgentFrame<'gateway_status', Record<string, never>>
   | AgentFrame<'list_residents', { filter?: ResidentFilter }>
   | AgentFrame<'list_observable_subjects', { includeResidents?: boolean; includePlayers?: boolean }>
   | AgentFrame<'observe_subject', { subject: SpectatorSubject; mode?: SpectatorMode }>
@@ -292,6 +294,7 @@ export type ClientMessage =
   | AgentFrame<'delete_resident', { name: string }>;
 
 export type ServerMessage =
+  | AgentFrame<'gateway_status', { allowDelete: boolean }>
   | AgentFrame<'resident_list', { residents: ResidentSummary[] }>
   | AgentFrame<'observable_subject_list', { subjects: ObservableSubjectSummary[] }>
   | AgentFrame<'resident_created', { resident: ResidentSummary }>

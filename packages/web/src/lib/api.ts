@@ -20,9 +20,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `${response.status} ${response.statusText}`);
+    throw new Error(formatErrorMessage(text) || `${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
+}
+
+function formatErrorMessage(text: string): string {
+  let message = text;
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown };
+    if (typeof parsed.error === 'string') message = parsed.error;
+  } catch {
+    // Plain text errors are already displayable.
+  }
+  if (message === 'EDELETE_DISABLED' || message === 'EDELETE_DISABLED: EDELETE_DISABLED') {
+    return 'Resident delete is disabled by the game server. Set agentGateway.allowDelete to true and restart the server to enable it.';
+  }
+  return message;
 }
 
 export const api = {

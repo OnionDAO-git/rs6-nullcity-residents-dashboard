@@ -43,6 +43,7 @@ export class GatewayClient {
   private lastConnectedAt?: string;
   private lastDisconnectedAt?: string;
   private lastError?: string;
+  private allowDelete?: boolean;
 
   constructor(
     private readonly url: string,
@@ -53,10 +54,21 @@ export class GatewayClient {
     return {
       configuredUrl: this.url,
       connected: this.connected,
+      allowDelete: this.allowDelete,
       lastConnectedAt: this.lastConnectedAt,
       lastDisconnectedAt: this.lastDisconnectedAt,
       lastError: this.lastError,
     };
+  }
+
+  async probeStatus(): Promise<GatewayStatus> {
+    try {
+      const message = await this.request(makeFrame('gateway_status', {}), 1000);
+      if (message.kind === 'gateway_status') this.allowDelete = message.payload.allowDelete;
+    } catch {
+      // Older or unavailable gateways still get represented by the local connection status.
+    }
+    return this.status();
   }
 
   async listResidents(filter: 'online' | 'offline' | 'all' = 'all'): Promise<ResidentSummary[]> {
@@ -268,6 +280,9 @@ export class GatewayClient {
       };
       this.setSession(session.id, session);
       this.applyResidentFeedFromSession(session.subject, session.latestPerception, session.position);
+    }
+    if (message.kind === 'gateway_status') {
+      this.allowDelete = message.payload.allowDelete;
     }
     if (message.kind === 'resident_connected') {
       const key = residentKey(message.payload.resident.name);

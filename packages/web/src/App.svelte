@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DashboardOverview, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { DashboardOverview, GatewayStatus, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -12,6 +12,7 @@
   let error = '';
   let actionError = '';
   let overview: DashboardOverview | undefined;
+  let gatewayStatus: GatewayStatus | undefined;
   let residents: ResidentDashboardRow[] = [];
   let selectedRuntime: RuntimeReadModel | undefined;
   let sessions: SpectatorSession[] = [];
@@ -29,6 +30,7 @@
   let showSpectatorItems = true;
   let spectatorZoom = 1;
   let spectatorModalOpen = false;
+  let perceptionFeedLoadingResident = '';
 
   const defaultSpawnX = '3225';
   const defaultSpawnY = '3217';
@@ -61,7 +63,24 @@
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
   $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
+  $: canDeleteResidents = Boolean(gatewayStatus?.allowDelete);
   $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
+  $: {
+    if (
+      perceptionFeedLoadingResident &&
+      (!residentName ||
+        perceptionFeedLoadingResident.toLowerCase() !== residentName.toLowerCase() ||
+        activeResidentSession?.latestPerception)
+    ) {
+      perceptionFeedLoadingResident = '';
+    }
+  }
+  $: perceptionFeedLoading = Boolean(
+    perceptionFeedLoadingResident &&
+      residentName &&
+      perceptionFeedLoadingResident.toLowerCase() === residentName.toLowerCase() &&
+      !activeResidentSession?.latestPerception,
+  );
   $: liveSelectedRuntime = withLiveResidentBody(selectedRuntime, activeResidentSession);
   $: spectatorFilters = {
     players: showSpectatorPlayers,
@@ -105,14 +124,19 @@
     if (showSpinner) loading = true;
     error = '';
     try {
-      if (route === '/') overview = await api.overview();
-      else if (route === '/residents') residents = await api.residents(filter);
+      if (route === '/') {
+        overview = await api.overview();
+        gatewayStatus = overview.gateway;
+      }
+      else if (route === '/residents') {
+        [residents, gatewayStatus] = await Promise.all([api.residents(filter), api.gatewayStatus()]);
+      }
       else if (route === '/residents/new') {
         seedSpawnDefaults();
         souls = await api.souls();
       }
       else if (residentName) {
-        [selectedRuntime, sessions] = await Promise.all([api.runtime(residentName), api.sessions()]);
+        [selectedRuntime, sessions, gatewayStatus] = await Promise.all([api.runtime(residentName), api.sessions(), api.gatewayStatus()]);
         syncResidentStream();
       }
       else if (route === '/souls') souls = await api.souls();
@@ -241,6 +265,11 @@
   }
 
   async function deleteResidentByName(name: string) {
+    if (!canDeleteResidents) {
+      actionError = 'Resident delete is disabled by the game server. Set agentGateway.allowDelete to true and restart the server to enable it.';
+      return;
+    }
+    if (!confirmDeleteResident(name)) return;
     await runAction(async () => {
       const deletingCurrentResident = residentName.toLowerCase() === name.toLowerCase();
       await api.deleteResident(name);
@@ -251,12 +280,14 @@
     });
   }
 
+  function confirmDeleteResident(name: string): boolean {
+    const typed = window.prompt(`Delete ${residentDisplayName(name)}? Type the resident name to confirm.`);
+    return typed?.trim().toLowerCase() === name.toLowerCase();
+  }
+
   async function loginResident() {
     if (!residentName) return;
-    await runAction(async () => {
-      await api.residentCommand(residentName, 'connect', { observe: false, control: false, onDisconnect: disconnectPolicy });
-      await openResidentSpectator();
-    });
+    await connectResidentSpectator();
   }
 
   async function sendJsonAction() {
@@ -269,19 +300,27 @@
 
   async function observeResident() {
     if (!residentName) return;
-    await runAction(async () => {
-      await api.residentCommand(residentName, 'connect', { observe: false, control: false, onDisconnect: disconnectPolicy });
-      await openResidentSpectator();
-    });
+    await connectResidentSpectator();
   }
 
-  async function openResidentSpectator() {
-    if (!residentName) return;
+  async function connectResidentSpectator() {
+    perceptionFeedLoadingResident = residentName;
+    let openedSession: SpectatorSession | undefined;
+    await runAction(async () => {
+      await api.residentCommand(residentName, 'connect', { observe: false, control: false, onDisconnect: disconnectPolicy });
+      openedSession = await openResidentSpectator();
+    });
+    if (actionError || !openedSession) perceptionFeedLoadingResident = '';
+  }
+
+  async function openResidentSpectator(): Promise<SpectatorSession | undefined> {
+    if (!residentName) return undefined;
     const subject: SpectatorSubject = { kind: 'resident', name: residentName };
     const session = await api.observe(subject, 'follow');
     upsertSession(session);
     activeSession = session;
     openSessionStream(session);
+    return session;
   }
 
   function residentIsOnline(): boolean {
@@ -579,7 +618,7 @@
       <div class="metric"><span>Online</span><strong>{overview?.residents.filter(r => r.online).length || 0}</strong></div>
       <div class="metric"><span>Runtime</span><strong>{overview?.controller.residentsWithRuntime || 0}</strong></div>
     </section>
-    {@render ResidentTable({ rows: visibleResidents, onselect: nav, ondelete: deleteResidentByName })}
+    {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
     <section class="panel">
       <div class="panel-title">Recent Events</div>
       {@render EventList({ events: overview?.recentEvents || [] })}
@@ -599,7 +638,7 @@
         <button class="primary" onclick={() => nav('/residents/new')}>Spawn Resident</button>
       </div>
     </section>
-    {@render ResidentTable({ rows: visibleResidents, onselect: nav, ondelete: deleteResidentByName })}
+    {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
   {:else if route === '/residents/new'}
     <section class="page-head compact">
       <p class="kicker">Lifecycle</p>
@@ -646,7 +685,9 @@
           <button disabled={actionBusy} class="danger" onclick={logoutResident}>Logout</button>
         {:else}
           <button disabled={actionBusy} class="primary" onclick={loginResident}>Login</button>
-          <button disabled={actionBusy} class="danger" onclick={deleteResident}>Delete</button>
+          {#if canDeleteResidents}
+            <button disabled={actionBusy} class="danger" onclick={deleteResident}>Delete</button>
+          {/if}
         {/if}
       </div>
     </section>
@@ -725,7 +766,11 @@
       <button class="icon-button" aria-label="Zoom in spectator" title="Zoom in" disabled={spectatorZoom >= spectatorZoomMax} onclick={() => (spectatorZoom = clampSpectatorZoom(spectatorZoom + spectatorZoomStep))}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
       </button>
-      {#if !residentIsOnline()}
+      {#if perceptionFeedLoading}
+        <span class="feed-loading" aria-label="Loading perception feed">
+          <span></span><span></span><span></span>
+        </span>
+      {:else if !residentIsOnline()}
         <button disabled={actionBusy} class="tool-action" onclick={loginResident}>Login Resident</button>
       {:else if !activeResidentSession}
         <button disabled={actionBusy} class="tool-action" onclick={observeResident}>Start Spectator</button>
@@ -743,7 +788,7 @@
   </div>
 {/snippet}
 
-{#snippet ResidentTable({ rows, onselect, ondelete }: { rows: ResidentDashboardRow[]; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
+{#snippet ResidentTable({ rows, canDelete, onselect, ondelete }: { rows: ResidentDashboardRow[]; canDelete: boolean; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
   <section class="table-wrap">
     <table>
       <thead><tr><th>Resident</th><th>Status</th><th>Thinking</th><th>Attention</th><th>Body</th><th>Last Action</th><th>Actions</th></tr></thead>
@@ -757,16 +802,18 @@
             <td>{row.body?.controlHeld ? 'control held' : 'free'}</td>
             <td>{row.body?.lastAction?.kind || row.lastEvent?.kind || '-'}</td>
             <td>
-              <button
-                class="danger table-action"
-                disabled={actionBusy}
-                onclick={(event) => {
-                  event.stopPropagation();
-                  void ondelete(row.name);
-                }}
-              >
-                Delete
-              </button>
+              {#if canDelete}
+                <button
+                  class="danger table-action"
+                  disabled={actionBusy}
+                  onclick={(event) => {
+                    event.stopPropagation();
+                    void ondelete(row.name);
+                  }}
+                >
+                  Delete
+                </button>
+              {/if}
             </td>
           </tr>
         {:else}

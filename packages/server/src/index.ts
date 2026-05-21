@@ -140,7 +140,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   const method = request.method;
   const pathname = url.pathname;
 
-  if (method === 'GET' && pathname === '/api/gateway/status') return jsonResponse(gateway.status());
+  if (method === 'GET' && pathname === '/api/gateway/status') return jsonResponse(await gateway.probeStatus());
   if (method === 'GET' && pathname === '/api/controller/status') return jsonResponse(await runtime.status());
   if (method === 'GET' && pathname === '/api/controller/config') {
     return jsonResponse({
@@ -160,7 +160,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
     const rows = await runtime.enrichResidents(residents);
     const logs = await runtime.readAllLogs(60);
     return jsonResponse({
-      gateway: gateway.status(),
+      gateway: await gateway.probeStatus(),
       controller: await runtime.status(),
       residents: rows,
       recentEvents: logs.actions.slice(-20).map(entry => ({
@@ -194,6 +194,15 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   const residentDelete = pathname.match(/^\/api\/residents\/([^/]+)$/);
   if (residentDelete && method === 'DELETE') {
     const name = decodeURIComponent(residentDelete[1] || '');
+    const status = await gateway.probeStatus();
+    if (status.allowDelete === false) {
+      return jsonResponse(
+        {
+          error: 'Resident delete is disabled by the game server. Set agentGateway.allowDelete to true and restart the server to enable it.',
+        },
+        { status: 403 },
+      );
+    }
     const gatewayResult = await gateway.command('delete_resident', { name });
     const files = await runtime.deleteResidentFiles(name);
     return jsonResponse({ gateway: gatewayResult, files });
