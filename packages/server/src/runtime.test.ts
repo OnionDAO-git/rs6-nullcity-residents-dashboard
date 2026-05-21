@@ -66,6 +66,7 @@ describe('RuntimeRepository resident feeds', () => {
     expect(model.available).toBe(true);
     expect(model.body.position).toEqual({ x: 3225, y: 3217, level: 0 });
     expect(model.body.perceptionTick).toBe(42);
+    expect(model.body.lastAction?.result).toBe('ok');
     expect(model.logs.actions).toHaveLength(2);
     expect(model.logs.actions.at(-1)?.result).toEqual({ ok: true });
   });

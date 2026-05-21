@@ -2,6 +2,7 @@ import type {
   ControllerStatus,
   DashboardOverview,
   GatewayStatus,
+  ObservableSubjectSummary,
   ResidentDashboardRow,
   RuntimeReadModel,
   SoulSummary,
@@ -51,6 +52,7 @@ export const api = {
   deleteResident: (resident: string) => request(`/api/residents/${encodeURIComponent(resident)}`, { method: 'DELETE' }),
   submitAction: (resident: string, action: unknown) =>
     request(`/api/residents/${encodeURIComponent(resident)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
+  subjects: () => request<ObservableSubjectSummary[]>('/api/observe/subjects'),
   sessions: () => request<SpectatorSession[]>('/api/observe/sessions'),
   observe: (subject: SpectatorSubject, mode: SpectatorMode) =>
     request<SpectatorSession>('/api/observe/session', { method: 'POST', body: JSON.stringify({ subject, mode }) }),

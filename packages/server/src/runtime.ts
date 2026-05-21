@@ -372,6 +372,7 @@ function orderedFacets(facets: string[]): string[] {
 
 function resultStatus(result: unknown): string | undefined {
   const record = asRecord(result);
+  if (typeof record.ok === 'boolean') return record.ok ? 'ok' : 'failed';
   return typeof record.status === 'string' ? record.status : typeof record.kind === 'string' ? record.kind : undefined;
 }
 
