@@ -33,8 +33,9 @@ export const api = {
   residents: (filter = 'all') => request<ResidentDashboardRow[]>(`/api/residents?filter=${encodeURIComponent(filter)}`),
   runtime: (resident: string) => request<RuntimeReadModel>(`/api/runtime/${encodeURIComponent(resident)}`),
   createResident: (body: unknown) => request('/api/residents', { method: 'POST', body: JSON.stringify(body) }),
-  residentCommand: (resident: string, command: 'connect' | 'attach' | 'detach' | 'disconnect', body: unknown = {}) =>
+  residentCommand: (resident: string, command: 'connect' | 'attach' | 'detach' | 'disconnect' | 'pause', body: unknown = {}) =>
     request(`/api/residents/${encodeURIComponent(resident)}/${command}`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteResident: (resident: string) => request(`/api/residents/${encodeURIComponent(resident)}`, { method: 'DELETE' }),
   submitAction: (resident: string, action: unknown) =>
     request(`/api/residents/${encodeURIComponent(resident)}/actions`, { method: 'POST', body: JSON.stringify({ action }) }),
   subjects: () => request<ObservableSubjectSummary[]>('/api/observe/subjects'),

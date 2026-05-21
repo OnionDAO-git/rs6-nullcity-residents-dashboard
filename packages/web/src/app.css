@@ -313,6 +313,12 @@ h1 {
   gap: 8px;
 }
 
+.table-action {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
 .table-wrap {
   overflow: auto;
   margin-bottom: 24px;
@@ -377,6 +383,123 @@ pre {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.spawn-form {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(300px, 1.5fr) 38px repeat(3, minmax(58px, 0.45fr)) minmax(150px, 0.8fr) minmax(76px, auto);
+  align-items: end;
+  gap: 10px;
+}
+
+.spawn-form button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.spawn-name-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: end;
+  gap: 8px;
+}
+
+.spawn-name-field label {
+  min-width: 0;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+  place-items: center;
+}
+
+.icon-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.spawn-model-card {
+  display: flex;
+  min-width: 0;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--ground-1);
+  border: 1px solid var(--ground-3);
+  border-left: 3px solid var(--s-teal);
+}
+
+.spawn-model-card > span {
+  font-family: var(--mono);
+  color: var(--text-3);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.model-code-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(48px, 1fr));
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.model-code-fields label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  color: var(--text-0);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.model-code-fields input {
+  width: 100%;
+  min-height: 24px;
+  padding: 0 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.appearance-token-row {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.appearance-token-row span {
+  padding: 3px 5px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .spawn-form {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .spawn-model-card {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
 }
 
 input,

@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' dev",
+    "dev": "DASHBOARD_WEB_DEV_ORIGIN=http://127.0.0.1:5174 bun run --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' dev",
     "dev:server": "bun run --filter '@nullcity-dashboard/server' dev",
     "dev:web": "bun run --filter '@nullcity-dashboard/web' dev",
     "build": "bun run --filter '@nullcity-dashboard/shared' --filter '@nullcity-dashboard/observer' --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' build",

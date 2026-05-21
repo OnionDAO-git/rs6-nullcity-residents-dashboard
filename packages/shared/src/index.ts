@@ -23,6 +23,22 @@ export interface ResidentSummary {
   controlHeld?: boolean;
 }
 
+export interface ResidentAppearance {
+  gender: number;
+  head: number;
+  torso: number;
+  arms: number;
+  legs: number;
+  hands: number;
+  feet: number;
+  facialHair: number;
+  hairColor: number;
+  torsoColor: number;
+  legColor: number;
+  feetColor: number;
+  skinColor: number;
+}
+
 export interface Position {
   x: number;
   y: number;
@@ -257,6 +273,7 @@ export type ClientMessage =
       {
         name: string;
         spawnPosition?: { x: number; y: number; level?: number };
+        appearance?: ResidentAppearance;
         initialInventory?: unknown[];
         initialEquipment?: unknown[];
       }
@@ -266,6 +283,7 @@ export type ClientMessage =
   | AgentFrame<'submit_action', { name: string; action: unknown }>
   | AgentFrame<'detach', { name: string }>
   | AgentFrame<'disconnect_resident', { name: string; cause?: string }>
+  | AgentFrame<'pause_resident', { name: string; cause?: string }>
   | AgentFrame<'delete_resident', { name: string }>;
 
 export type ServerMessage =
@@ -274,6 +292,7 @@ export type ServerMessage =
   | AgentFrame<'resident_created', { resident: ResidentSummary }>
   | AgentFrame<'resident_connected', { resident: ResidentSummary; perception: unknown | null }>
   | AgentFrame<'resident_disconnected', { name: string; cause?: string }>
+  | AgentFrame<'resident_paused', { name: string; cause?: string }>
   | AgentFrame<'spectator_connected', { sessionId: string; subject: SpectatorSubject; initialState: unknown }>
   | AgentFrame<'spectator_rebuild', { sessionId: string; payload: unknown }>
   | AgentFrame<'spectator_packet', { sessionId: string; opcode: number; payload: SpectatorRsPacketFrame }>

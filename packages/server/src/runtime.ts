@@ -137,6 +137,22 @@ export class RuntimeRepository {
     return readTextFile(safeJoin(memoryDir, relativePath));
   }
 
+  async deleteResidentFiles(resident: string): Promise<{ removed: string[] }> {
+    const candidates = [
+      path.join(this.memoryRoot, residentSlug(resident)),
+      path.join(this.logsRoot, resident),
+      path.join(this.logsRoot, residentSlug(resident)),
+    ];
+    const removed: string[] = [];
+    for (const candidate of [...new Set(candidates)]) {
+      if (await pathExists(candidate)) {
+        await fs.rm(candidate, { recursive: true, force: true });
+        removed.push(candidate);
+      }
+    }
+    return { removed };
+  }
+
   async readAllLogs(limit = 200): Promise<{ actions: ActionLogEntry[]; inference: InferenceLogEntry[] }> {
     const files = await listFiles(this.logsRoot, ['.jsonl']);
     const actionFiles = files.filter(file => file.includes(`${path.sep}actions${path.sep}`) || file.includes('/actions/'));

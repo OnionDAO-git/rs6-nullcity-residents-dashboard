@@ -59,7 +59,7 @@ export class GatewayClient {
     return this.request(makeFrame('create_resident', payload));
   }
 
-  async command(kind: 'connect_resident' | 'attach' | 'detach' | 'disconnect_resident' | 'delete_resident', payload: Record<string, unknown>): Promise<ServerMessage> {
+  async command(kind: 'connect_resident' | 'attach' | 'detach' | 'disconnect_resident' | 'pause_resident' | 'delete_resident', payload: Record<string, unknown>): Promise<ServerMessage> {
     return this.request(makeFrame(kind, payload as never));
   }
 

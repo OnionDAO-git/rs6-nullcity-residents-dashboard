@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ResidentAppearance } from '@nullcity-dashboard/shared';
 import { config } from './config';
 import { GatewayClient } from './gateway';
 import { RuntimeRepository } from './runtime';
@@ -33,7 +34,7 @@ const server = Bun.serve<RsProxyWebSocketData>({
       if (url.pathname.startsWith('/api/')) {
         return await routeApi(request, url);
       }
-      return await serveWeb(url.pathname);
+      return await serveWeb(url);
     } catch (error) {
       return jsonResponse(
         {
@@ -177,20 +178,24 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   }
   if (method === 'POST' && pathname === '/api/residents') return jsonResponse(await gateway.createResident(normalizeCreateResident(await request.json())));
 
-  const residentAction = pathname.match(/^\/api\/residents\/([^/]+)\/(connect|attach|detach|disconnect|actions)$/);
+  const residentAction = pathname.match(/^\/api\/residents\/([^/]+)\/(connect|attach|detach|disconnect|pause|actions)$/);
   if (residentAction && method === 'POST') {
     const name = decodeURIComponent(residentAction[1] || '');
     const action = residentAction[2] || '';
     const body = await readBody(request);
     if (action === 'actions') return jsonResponse(await gateway.submitAction(name, body.action ?? body));
     if (action === 'disconnect') return jsonResponse(await gateway.command('disconnect_resident', { name, ...body }));
+    if (action === 'pause') return jsonResponse(await gateway.command('pause_resident', { name, ...body }));
     if (action === 'connect') return jsonResponse(await gateway.command('connect_resident', { name, ...body }));
     if (action === 'attach' || action === 'detach') return jsonResponse(await gateway.command(action, { name, ...body }));
   }
 
   const residentDelete = pathname.match(/^\/api\/residents\/([^/]+)$/);
   if (residentDelete && method === 'DELETE') {
-    return jsonResponse(await gateway.command('delete_resident', { name: decodeURIComponent(residentDelete[1] || '') }));
+    const name = decodeURIComponent(residentDelete[1] || '');
+    const gatewayResult = await gateway.command('delete_resident', { name });
+    const files = await runtime.deleteResidentFiles(name);
+    return jsonResponse({ gateway: gatewayResult, files });
   }
 
   const runtimeMatch = pathname.match(/^\/api\/runtime\/([^/]+)(?:\/(thinking|nervous-system|body|history|inference|memory\/index|memory\/files|memory\/file))?$/);
@@ -271,11 +276,24 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   return (await request.json()) as Record<string, unknown>;
 }
 
-function normalizeCreateResident(raw: unknown): { name: string; spawnPosition?: { x: number; y: number; level?: number } } {
+function normalizeCreateResident(raw: unknown): {
+  name: string;
+  spawnPosition?: { x: number; y: number; level?: number };
+  appearance?: ResidentAppearance;
+  initialInventory?: unknown[];
+  initialEquipment?: unknown[];
+} {
   const body = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
   const name = String(body.name || '').trim().toLowerCase();
   const spawnPosition = normalizePosition(body.spawnPosition);
-  return spawnPosition ? { name, spawnPosition } : { name };
+  const appearance = normalizeAppearance(body.appearance);
+  return {
+    name,
+    ...(spawnPosition ? { spawnPosition } : {}),
+    ...(appearance ? { appearance } : {}),
+    ...(Array.isArray(body.initialInventory) ? { initialInventory: body.initialInventory } : {}),
+    ...(Array.isArray(body.initialEquipment) ? { initialEquipment: body.initialEquipment } : {}),
+  };
 }
 
 function normalizePosition(value: unknown): { x: number; y: number; level?: number } | undefined {
@@ -286,6 +304,27 @@ function normalizePosition(value: unknown): { x: number; y: number; level?: numb
   const level = Number(record.level ?? 0);
   if (!Number.isInteger(x) || !Number.isInteger(y)) return undefined;
   return Number.isInteger(level) ? { x, y, level } : { x, y };
+}
+
+function normalizeAppearance(value: unknown): ResidentAppearance | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<keyof ResidentAppearance, unknown>;
+  const appearance = {
+    gender: Number(record.gender),
+    head: Number(record.head),
+    torso: Number(record.torso),
+    arms: Number(record.arms),
+    legs: Number(record.legs),
+    hands: Number(record.hands),
+    feet: Number(record.feet),
+    facialHair: Number(record.facialHair),
+    hairColor: Number(record.hairColor),
+    torsoColor: Number(record.torsoColor),
+    legColor: Number(record.legColor),
+    feetColor: Number(record.feetColor),
+    skinColor: Number(record.skinColor),
+  };
+  return Object.values(appearance).every(Number.isInteger) ? appearance : undefined;
 }
 
 function streamSession(sessionId: string): Response {
@@ -314,8 +353,13 @@ function streamSession(sessionId: string): Response {
   });
 }
 
-async function serveWeb(pathname: string): Promise<Response> {
-  const requested = pathname === '/' ? 'index.html' : pathname.slice(1);
+async function serveWeb(url: URL): Promise<Response> {
+  if (config.webDevOrigin) {
+    const target = new URL(`${url.pathname}${url.search}`, config.webDevOrigin);
+    return Response.redirect(target, 307);
+  }
+
+  const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
   const filePath = path.join(config.webDist, requested);
   if (await pathExists(filePath)) return fileResponse(filePath);
   if (path.extname(requested)) {
