@@ -564,6 +564,10 @@ h1 {
   color: var(--s-green) !important;
 }
 
+.warn {
+  color: var(--s-amber) !important;
+}
+
 .notice {
   margin-bottom: 16px;
   padding: 12px 14px;
@@ -1138,6 +1142,92 @@ pre {
 .log-list {
   display: grid;
   gap: 8px;
+}
+
+.benchmark-metrics .metric:nth-child(1) {
+  border-left-color: var(--s-green);
+}
+
+.benchmark-detail {
+  margin-bottom: 24px;
+}
+
+.leaderboard-panel {
+  margin-bottom: 24px;
+  border-left: 3px solid var(--s-blue);
+}
+
+.leaderboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.leaderboard-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+}
+
+.leaderboard-card strong {
+  color: var(--text-0);
+}
+
+.leaderboard-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ground-4);
+}
+
+.leaderboard-score span {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.leaderboard-score strong {
+  font-family: var(--mono);
+  font-size: 28px;
+}
+
+.leaderboard-stats,
+.benchmark-metric-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: stretch;
+}
+
+.leaderboard-stats span,
+.benchmark-metric-list span {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.leaderboard-stats strong,
+.benchmark-metric-list strong {
+  color: var(--text-3);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.leaderboard-tasks {
+  display: grid;
+  gap: 4px;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
 }
 
 .event-row {

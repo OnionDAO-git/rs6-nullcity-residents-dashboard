@@ -106,6 +106,167 @@ describe('RuntimeRepository resident deletion', () => {
   });
 });
 
+describe('RuntimeRepository benchmarks', () => {
+  test('lists benchmark artifacts newest first and skips malformed files', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-benchmarks-'));
+    const benchmarkRoot = path.join(root, 'benchmarks');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      path.join(root, 'residents'),
+      benchmarkRoot,
+    );
+    await fs.mkdir(benchmarkRoot, { recursive: true });
+    await fs.writeFile(path.join(benchmarkRoot, 'broken.json'), '{', 'utf8');
+    await fs.writeFile(
+      path.join(benchmarkRoot, 'bench_old.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        runId: 'bench_old',
+        task: { id: 'make-fire-5m', version: '0.1.0' },
+        module: { id: 'onion.runescape.standard', version: '0.1.0' },
+        resident: 'res:bmk_old',
+        modelProfile: 'local',
+        commits: [{ repo: 'rs6-nullcity-server', sha: 'abcdef1' }],
+        startedAt: '2026-05-21T00:00:00.000Z',
+        endedAt: '2026-05-21T00:01:00.000Z',
+        durationMs: 60000,
+        status: 'passed',
+        score: 1,
+        metrics: { selectedModuleActions: 2 },
+        evidence: { summaries: ['made fire'] },
+        generatedAt: '2026-05-21T00:01:00.000Z',
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(benchmarkRoot, 'bench_new.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        runId: 'bench_new',
+        task: { id: 'follow-and-chat-5m', version: '0.1.0' },
+        module: { id: 'onion.runescape.standard', version: '0.1.0' },
+        mode: 'autonomous',
+        resident: 'res:bmk_new',
+        modelProfile: 'local',
+        commits: [{ repo: 'rs6-nullcity-server', sha: 'abcdef2' }],
+        startedAt: '2026-05-21T00:03:00.000Z',
+        endedAt: '2026-05-21T00:04:00.000Z',
+        durationMs: 60000,
+        status: 'failed',
+        score: 0.25,
+        metrics: { selectedModuleActions: 1, statusResponses: 0 },
+        evidence: { summaries: ['heard command'] },
+        failureReason: 'No status response',
+        generatedAt: '2026-05-21T00:04:00.000Z',
+      }),
+      'utf8',
+    );
+
+    const runs = await repository.listBenchmarkArtifacts();
+    const detail = await repository.readBenchmarkArtifact('bench_new');
+
+    expect(runs.map(run => run.runId)).toEqual(['bench_new', 'bench_old']);
+    expect(runs[0]).toMatchObject({
+      file: 'bench_new.json',
+      task: { id: 'follow-and-chat-5m' },
+      mode: 'autonomous',
+      status: 'failed',
+      score: 0.25,
+      metrics: { selectedModuleActions: 1, statusResponses: 0 },
+      failureReason: 'No status response',
+    });
+    expect(detail?.evidence.summaries).toEqual(['heard command']);
+    expect(await repository.readBenchmarkArtifact('../bench_new')).toBeUndefined();
+  });
+
+  test('ranks module leaderboard by pass rate, progress, run count, and recency', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-leaderboard-'));
+    const benchmarkRoot = path.join(root, 'benchmarks');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      path.join(root, 'residents'),
+      benchmarkRoot,
+    );
+    await fs.mkdir(benchmarkRoot, { recursive: true });
+    const writeRun = (run: Record<string, unknown>) =>
+      fs.writeFile(
+        path.join(benchmarkRoot, `${run.runId}.json`),
+        JSON.stringify({
+          schemaVersion: 1,
+          task: { id: 'make-fire-5m', version: '0.1.0' },
+          resident: 'res:bmk',
+          modelProfile: 'local',
+          commits: [{ repo: 'rs6-nullcity-server', sha: 'abcdef1' }],
+          startedAt: '2026-05-21T00:00:00.000Z',
+          endedAt: '2026-05-21T00:01:00.000Z',
+          durationMs: 60000,
+          metrics: {},
+          evidence: {},
+          generatedAt: '2026-05-21T00:01:00.000Z',
+          ...run,
+        }),
+        'utf8',
+      );
+    await Promise.all([
+      writeRun({
+        runId: 'standard_pass',
+        module: { id: 'onion.runescape.standard', version: '0.1.0' },
+        mode: 'autonomous',
+        status: 'passed',
+        score: 1,
+        metrics: { selectedModuleInferences: 2, cleanupFailures: 1 },
+      }),
+      writeRun({
+        runId: 'standard_fail',
+        task: { id: 'combat-prayer-10m', version: '0.1.0' },
+        module: { id: 'onion.runescape.standard', version: '0.1.0' },
+        status: 'failed',
+        score: 0.5,
+        metrics: { unsafeLoops: 1 },
+        failureReason: 'unsafe loop',
+      }),
+      writeRun({
+        runId: 'experimental_pass',
+        module: { id: 'onion.runescape.experimental', version: '0.1.0' },
+        status: 'passed',
+        score: 0.75,
+        endedAt: '2026-05-21T00:02:00.000Z',
+      }),
+    ]);
+
+    const leaderboard = await repository.benchmarkLeaderboard();
+
+    expect(leaderboard.map(row => row.module.id)).toEqual(['onion.runescape.experimental', 'onion.runescape.standard']);
+    expect(leaderboard[0]).toMatchObject({
+      runs: 1,
+      passed: 1,
+      passRate: 1,
+      averageScore: 0.75,
+    });
+    expect(leaderboard[1]).toMatchObject({
+      runs: 2,
+      taskCount: 2,
+      passed: 1,
+      nonPassed: 1,
+      passRate: 0.5,
+      averageScore: 0.75,
+      autonomousRuns: 1,
+      safetyIncidents: 1,
+      cleanupFailures: 1,
+      inferenceRequests: 2,
+    });
+    expect(leaderboard[1]?.tasks.map(task => task.taskId).sort()).toEqual(['combat-prayer-10m', 'make-fire-5m']);
+  });
+});
+
 describe('RuntimeRepository souls', () => {
   test('writes a controller-discoverable autonomous soul for a spawned resident', async () => {
     const { RuntimeRepository } = await import('./runtime');

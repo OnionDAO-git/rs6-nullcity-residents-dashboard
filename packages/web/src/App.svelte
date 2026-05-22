@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DashboardOverview, GatewayStatus, ObservableSubjectSummary, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, GatewayStatus, ObservableSubjectSummary, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -20,6 +20,9 @@
   let sessions: SpectatorSession[] = [];
   let souls: SoulSummary[] = [];
   let logs: { actions: unknown[]; inference: unknown[] } = { actions: [], inference: [] };
+  let benchmarkRuns: BenchmarkArtifactSummary[] = [];
+  let selectedBenchmark: BenchmarkArtifact | undefined;
+  let benchmarkLeaderboard: BenchmarkLeaderboardRow[] = [];
   let visibleResidents: ResidentDashboardRow[] = [];
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
@@ -86,6 +89,7 @@
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
+  $: benchmarkRunId = parts[0] === 'benchmarks' && parts[1] ? decodeURIComponent(parts[1]) : '';
   $: observeKind = parts[0] === 'observe' ? parts[1] || '' : '';
   $: observeId = parts[0] === 'observe' ? parts[2] || '' : '';
   $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
@@ -183,6 +187,8 @@
       }
       else if (route === '/souls') souls = await api.souls();
       else if (route === '/logs') logs = await api.logs();
+      else if (route === '/benchmarks') [benchmarkRuns, benchmarkLeaderboard] = await Promise.all([api.benchmarks(), api.benchmarkLeaderboard()]);
+      else if (benchmarkRunId) [selectedBenchmark, benchmarkRuns, benchmarkLeaderboard] = await Promise.all([api.benchmark(benchmarkRunId), api.benchmarks(), api.benchmarkLeaderboard()]);
       if (!residentName) {
         closeRuntimeStream();
       }
@@ -1045,11 +1051,13 @@
     return typeof field === 'boolean' ? field : undefined;
   }
 
-  function formatDuration(value: number): string {
+  function formatDuration(value: number | undefined): string {
     if (!Number.isFinite(value)) return '-';
-    const seconds = Math.max(0, Math.round(value / 1000));
+    const seconds = Math.max(0, Math.round((value || 0) / 1000));
     if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.round(seconds / 60);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (remainingSeconds) return `${minutes}m ${remainingSeconds}s`;
     if (minutes < 60) return `${minutes}m`;
     return `${Math.round(minutes / 60)}h`;
   }
@@ -1100,6 +1108,36 @@
     return Number.isFinite(number) ? number : undefined;
   }
 
+  function formatScore(score: number | undefined): string {
+    return Number.isFinite(score) ? `${Math.round((score || 0) * 100)}%` : '-';
+  }
+
+  function formatRate(rate: number | undefined): string {
+    return Number.isFinite(rate) ? `${Math.round((rate || 0) * 100)}%` : '-';
+  }
+
+  function benchmarkStatusLabel(status: string | undefined): string {
+    return status || 'unknown';
+  }
+
+  function metricRows(metrics: Record<string, number> | undefined): Array<{ key: string; value: number }> {
+    return Object.entries(metrics || {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => ({ key, value }));
+  }
+
+  function compactMetricValue(value: number): string {
+    return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  function benchmarkStartedLabel(run: BenchmarkArtifactSummary | BenchmarkArtifact | undefined): string {
+    return run?.startedAt ? timeAgo(run.startedAt) : '-';
+  }
+
+  function benchmarkLatestLabel(run: BenchmarkLeaderboardRow | undefined): string {
+    return run?.latestRunAt ? timeAgo(run.latestRunAt) : '-';
+  }
+
   function soulTitle(soul: SoulSummary): string {
     return soul.title || soul.id;
   }
@@ -1115,6 +1153,7 @@
     <button class:active={route === '/'} onclick={() => nav('/')}>Overview</button>
     <button class:active={route.startsWith('/residents')} onclick={() => nav('/residents')}>Residents</button>
     <button class:active={route.startsWith('/observe')} onclick={() => nav('/observe')}>Observe</button>
+    <button class:active={route.startsWith('/benchmarks')} onclick={() => nav('/benchmarks')}>Benchmarks</button>
     <button class:active={route === '/souls'} onclick={() => nav('/souls')}>Souls</button>
     <button class:active={route === '/logs'} onclick={() => nav('/logs')}>Logs</button>
   </div>
@@ -1272,7 +1311,7 @@
       <button onclick={() => nav('/observe')}>Subjects</button>
     </section>
     {#if session?.subject.kind === 'resident'}
-      {@render ActivityPanel({ activity: buildActivitySnapshot(withLiveResidentBody(selectedRuntime, session), session) })}
+      {@render ActivityPanel({ activity: buildActivitySnapshot(withLiveResidentBody(selectedRuntime, session), session), runtime: selectedRuntime })}
     {/if}
     <section class="split wide">
       <div class="panel observer-pane large">
@@ -1290,6 +1329,23 @@
         <pre>{compactJson(session?.latestPerception)}</pre>
       </div>
     </section>
+  {:else if route === '/benchmarks'}
+    <section class="page-head compact">
+      <p class="kicker">Module Proof</p>
+      <h1>Benchmarks</h1>
+    </section>
+    {@render BenchmarkLeaderboard({ rows: benchmarkLeaderboard })}
+    {@render BenchmarkTable({ runs: benchmarkRuns })}
+  {:else if benchmarkRunId}
+    <section class="toolbar">
+      <div>
+        <p class="kicker">Benchmark Detail</p>
+        <h1>{selectedBenchmark?.task.id || benchmarkRunId}</h1>
+      </div>
+      <button onclick={() => nav('/benchmarks')}>Runs</button>
+    </section>
+    {@render BenchmarkLeaderboard({ rows: benchmarkLeaderboard })}
+    {@render BenchmarkDetail({ artifact: selectedBenchmark })}
   {:else if route === '/souls'}
     <section class="page-head compact">
       <p class="kicker">Read Only</p>
@@ -1446,6 +1502,126 @@
       <div class="empty">No recent events</div>
     {/each}
   </div>
+{/snippet}
+
+{#snippet BenchmarkTable({ runs }: { runs: BenchmarkArtifactSummary[] })}
+  <section class="table-wrap">
+    <table>
+      <thead><tr><th>Task</th><th>Status</th><th>Score</th><th>Mode</th><th>Module</th><th>Resident</th><th>Duration</th><th>Started</th></tr></thead>
+      <tbody>
+        {#each runs as run}
+          <tr onclick={() => nav(`/benchmarks/${encodeURIComponent(run.runId)}`)}>
+            <td><strong>{run.task.id}</strong><small>{run.runId}</small></td>
+            <td><span class:ok={run.status === 'passed'} class:warn={run.status !== 'passed'} class="tag">{benchmarkStatusLabel(run.status)}</span></td>
+            <td class="num">{formatScore(run.score)}</td>
+            <td>{run.mode}</td>
+            <td><strong>{run.module.id}</strong><small>{run.module.version || 'version unknown'}</small></td>
+            <td>{residentDisplayName(run.resident)}</td>
+            <td>{formatDuration(run.durationMs)}</td>
+            <td>{benchmarkStartedLabel(run)}</td>
+          </tr>
+        {:else}
+          <tr><td colspan="8" class="empty">No benchmark artifacts found</td></tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
+{/snippet}
+
+{#snippet BenchmarkLeaderboard({ rows }: { rows: BenchmarkLeaderboardRow[] })}
+  <section class="panel leaderboard-panel">
+    <div class="panel-title">Module Leaderboard</div>
+    <div class="leaderboard-grid">
+      {#each rows as row, index}
+        <article class="leaderboard-card">
+          <div class="row">
+            <strong>{index + 1}. {row.module.id}</strong>
+            <span class="tag">{row.module.version || 'version unknown'}</span>
+          </div>
+          <div class="leaderboard-score">
+            <span>Pass Rate</span>
+            <strong class:ok={row.passRate >= 0.8}>{formatRate(row.passRate)}</strong>
+          </div>
+          <div class="mini-grid leaderboard-stats">
+            <span><strong>Progress</strong>{formatScore(row.averageScore)}</span>
+            <span><strong>Runs</strong>{row.runs}</span>
+            <span><strong>Tasks</strong>{row.taskCount}</span>
+            <span><strong>Auto</strong>{row.autonomousRuns}</span>
+            <span><strong>Avg Time</strong>{formatDuration(row.averageDurationMs)}</span>
+            <span><strong>Safety</strong>{row.safetyIncidents}</span>
+            <span><strong>Cleanup</strong>{row.cleanupFailures}</span>
+            <span><strong>Inference</strong>{row.inferenceRequests}</span>
+          </div>
+          <div class="leaderboard-tasks">
+            {#each row.tasks.slice(0, 4) as task}
+              <span>{task.taskId}: {task.passed}/{task.runs} · {formatScore(task.averageScore)}</span>
+            {/each}
+          </div>
+          <small>latest {benchmarkLatestLabel(row)}</small>
+        </article>
+      {:else}
+        <div class="empty">No benchmark leaderboard data yet</div>
+      {/each}
+    </div>
+  </section>
+{/snippet}
+
+{#snippet BenchmarkDetail({ artifact }: { artifact: BenchmarkArtifact | undefined })}
+  {#if artifact}
+    <section class="metrics benchmark-metrics">
+      <div class="metric"><span>Status</span><strong class:ok={artifact.status === 'passed'}>{artifact.status}</strong></div>
+      <div class="metric"><span>Score</span><strong>{formatScore(artifact.score)}</strong></div>
+      <div class="metric"><span>Mode</span><strong>{artifact.mode}</strong></div>
+      <div class="metric"><span>Duration</span><strong>{formatDuration(artifact.durationMs)}</strong></div>
+    </section>
+    <section class="split benchmark-detail">
+      <div class="panel">
+        <div class="panel-title">Run</div>
+        <table class="dense-table body-table">
+          <tbody>
+            <tr><th>Run</th><td>{artifact.runId}</td></tr>
+            <tr><th>Task</th><td>{artifact.task.id} {artifact.task.version || ''}</td></tr>
+            <tr><th>Module</th><td>{artifact.module.id} {artifact.module.version || ''}</td></tr>
+            <tr><th>Resident</th><td>{residentDisplayName(artifact.resident)}</td></tr>
+            <tr><th>Model</th><td>{artifact.modelProfile || '-'}</td></tr>
+            <tr><th>Started</th><td>{artifact.startedAt || '-'}</td></tr>
+            <tr><th>Ended</th><td>{artifact.endedAt || '-'}</td></tr>
+            {#if artifact.failureReason}
+              <tr><th>Failure</th><td>{artifact.failureReason}</td></tr>
+            {/if}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Metrics</div>
+        <div class="mini-grid benchmark-metric-list">
+          {#each metricRows(artifact.metrics) as metric}
+            <span><strong>{metric.key}</strong>{compactMetricValue(metric.value)}</span>
+          {:else}
+            <div class="empty">No metrics reported</div>
+          {/each}
+        </div>
+      </div>
+    </section>
+    <section class="modules">
+      <div class="panel">
+        <div class="panel-title">Evidence</div>
+        <div class="event-list">
+          {#each artifact.evidence.summaries || [] as summary}
+            <div class="event-row"><span class="tag">proof</span><span>{summary}</span></div>
+          {:else}
+            <div class="empty">No evidence summaries</div>
+          {/each}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Raw Artifact</div>
+        <pre>{compactJson(artifact)}</pre>
+      </div>
+    </section>
+  {:else}
+    <section class="panel"><div class="empty">Benchmark artifact unavailable</div></section>
+  {/if}
 {/snippet}
 
 {#snippet SoulGrid({ souls }: { souls: SoulSummary[] })}

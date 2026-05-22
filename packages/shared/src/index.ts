@@ -263,6 +263,80 @@ export interface DashboardOverview {
   recentEvents: ResidentEventSummary[];
 }
 
+export type BenchmarkRunStatus = 'passed' | 'failed' | 'timeout' | 'error' | 'cancelled';
+export type BenchmarkRunMode = 'scripted' | 'autonomous';
+
+export interface BenchmarkIdentity {
+  id: string;
+  version?: string;
+}
+
+export interface BenchmarkCommit {
+  repo: string;
+  sha: string;
+  branch?: string;
+  dirty?: boolean;
+}
+
+export interface BenchmarkEvidence {
+  actionAttemptIds?: string[];
+  actionAttempts?: unknown[];
+  inferenceRequestIds?: string[];
+  inferenceRequests?: unknown[];
+  perceptionIds?: string[];
+  summaries?: string[];
+  artifactPaths?: string[];
+  [key: string]: unknown;
+}
+
+export interface BenchmarkArtifactSummary {
+  file: string;
+  runId: string;
+  task: BenchmarkIdentity;
+  module: BenchmarkIdentity;
+  mode: BenchmarkRunMode;
+  resident: string;
+  modelProfile?: string;
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  status: BenchmarkRunStatus;
+  score: number;
+  metrics: Record<string, number>;
+  failureReason?: string;
+  generatedAt?: string;
+}
+
+export interface BenchmarkArtifact extends Omit<BenchmarkArtifactSummary, 'file'> {
+  schemaVersion?: number;
+  commits: BenchmarkCommit[];
+  evidence: BenchmarkEvidence;
+}
+
+export interface BenchmarkTaskLeaderboardRow {
+  taskId: string;
+  runs: number;
+  passed: number;
+  averageScore: number;
+}
+
+export interface BenchmarkLeaderboardRow {
+  module: BenchmarkIdentity;
+  runs: number;
+  taskCount: number;
+  passed: number;
+  nonPassed: number;
+  passRate: number;
+  averageScore: number;
+  autonomousRuns: number;
+  averageDurationMs?: number;
+  safetyIncidents: number;
+  cleanupFailures: number;
+  inferenceRequests: number;
+  latestRunAt?: string;
+  tasks: BenchmarkTaskLeaderboardRow[];
+}
+
 export interface SoulSummary {
   id: string;
   file: string;

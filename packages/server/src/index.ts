@@ -7,7 +7,14 @@ import { routeRs6Api } from './rs6/routes';
 import { jsonResponse, notFound, pathExists, textResponse } from './util';
 
 const gateway = new GatewayClient(config.gatewayUrl, config.gatewayToken);
-const runtime = new RuntimeRepository(config.memoryRoot, config.logsRoot, config.agentLogsRoot, config.soulsRoot, config.residentSaveRoot);
+const runtime = new RuntimeRepository(
+  config.memoryRoot,
+  config.logsRoot,
+  config.agentLogsRoot,
+  config.soulsRoot,
+  config.residentSaveRoot,
+  config.benchmarkRoot,
+);
 
 type WsMessage = string | ArrayBuffer | Uint8Array;
 
@@ -156,6 +163,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
       agentLogsRoot: config.agentLogsRoot,
       soulsRoot: config.soulsRoot,
       residentSaveRoot: config.residentSaveRoot,
+      benchmarkRoot: config.benchmarkRoot,
     });
   }
 
@@ -265,6 +273,18 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
 
   if (method === 'GET' && pathname === '/api/souls') return jsonResponse(await runtime.listSouls());
   if (method === 'GET' && pathname === '/api/logs') return jsonResponse(await runtime.readAllLogs());
+  if (method === 'GET' && pathname === '/api/benchmarks') {
+    return jsonResponse(await runtime.listBenchmarkArtifacts(numberParam(url.searchParams.get('limit'), 200)));
+  }
+  if (method === 'GET' && pathname === '/api/benchmarks/leaderboard') {
+    return jsonResponse(await runtime.benchmarkLeaderboard(numberParam(url.searchParams.get('limit'), 50)));
+  }
+
+  const benchmarkDetail = pathname.match(/^\/api\/benchmarks\/([^/]+)$/);
+  if (benchmarkDetail && method === 'GET') {
+    const artifact = await runtime.readBenchmarkArtifact(decodeURIComponent(benchmarkDetail[1] || ''));
+    return artifact ? jsonResponse(artifact) : notFound();
+  }
 
   return notFound();
 }
@@ -316,6 +336,11 @@ function residentKey(value: string): string {
 
 function normalizeFilter(value: string | null): 'online' | 'offline' | 'all' {
   return value === 'online' || value === 'offline' ? value : 'all';
+}
+
+function numberParam(value: string | null, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 500) : fallback;
 }
 
 function isResidentId(value: string): boolean {

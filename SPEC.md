@@ -184,6 +184,9 @@ The dashboard server wraps the gateway and local files into stable UI endpoints.
 - `GET /api/runtime/:resident/memory/index`
 - `GET /api/runtime/:resident/memory/files`
 - `GET /api/runtime/:resident/memory/file?path=...`
+- `GET /api/benchmarks?limit=...`
+- `GET /api/benchmarks/leaderboard?limit=...`
+- `GET /api/benchmarks/:runId`
 
 Runtime data comes from controller-owned files when available:
 
@@ -201,6 +204,8 @@ The module endpoints are read models assembled by the dashboard server:
 - `thinking`: Spark mode, active/previous intent, thinking hooks, plan state when logged, inference requests, budgets, attention, variables, legacy, and `hooks.md`.
 - `nervous-system`: soul `nervousSystem` rules, memory-learned `nervous-rules.md`, retired rule ids, cooldowns from `runtime-state.json`, last reaction from action logs, and whether it suppressed or interrupted thinking.
 - `body`: control holder, latest perception age, recent events, last submitted action/result, action source, and gateway/action-log health.
+- `benchmarks`: artifact list/detail read models from `data/benchmarks` or `NULLCITY_BENCHMARK_ROOT`; malformed artifacts are skipped.
+- `benchmarks/leaderboard`: module comparison by pass rate, progress, efficiency, safety, reliability, and inference-count cost signals.
 
 ### 5.3 Observer endpoints
 

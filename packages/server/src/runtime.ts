@@ -2,6 +2,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ActionLogEntry,
+  BenchmarkArtifact,
+  BenchmarkArtifactSummary,
+  BenchmarkCommit,
+  BenchmarkEvidence,
+  BenchmarkIdentity,
+  BenchmarkLeaderboardRow,
+  BenchmarkRunMode,
+  BenchmarkRunStatus,
+  BenchmarkTaskLeaderboardRow,
   ControllerStatus,
   InferenceLogEntry,
   PerceptionFeedSummary,
@@ -27,6 +36,7 @@ export class RuntimeRepository {
     private readonly agentLogsRoot: string,
     private readonly soulsRoot: string,
     private readonly residentSaveRoot = path.join(path.dirname(memoryRoot), 'residents'),
+    private readonly benchmarkRoot = path.join(path.dirname(memoryRoot), 'benchmarks'),
   ) {}
 
   async status(): Promise<ControllerStatus> {
@@ -241,6 +251,25 @@ export class RuntimeRepository {
     };
   }
 
+  async listBenchmarkArtifacts(limit = 200): Promise<BenchmarkArtifactSummary[]> {
+    const artifacts = await this.readBenchmarkArtifacts();
+    return artifacts
+      .map(({ file, ...artifact }) => ({ ...toBenchmarkSummary(artifact), file }))
+      .sort((a, b) => benchmarkSortTime(b) - benchmarkSortTime(a))
+      .slice(0, limit);
+  }
+
+  async readBenchmarkArtifact(runId: string): Promise<BenchmarkArtifact | undefined> {
+    const safeRunId = normalizeBenchmarkRunId(runId);
+    if (!safeRunId) return undefined;
+    return this.readBenchmarkFile(`${safeRunId}.json`);
+  }
+
+  async benchmarkLeaderboard(limit = 50): Promise<BenchmarkLeaderboardRow[]> {
+    const artifacts = await this.readBenchmarkArtifacts();
+    return buildBenchmarkLeaderboard(artifacts).slice(0, limit);
+  }
+
   private async readSoul(file: string): Promise<SoulSummary> {
     const text = (await readTextFile(path.join(this.soulsRoot, file))) || '';
     const frontmatter = parseYamlishFrontmatter(text);
@@ -313,10 +342,222 @@ export class RuntimeRepository {
       ...(skills ? { skills } : {}),
     };
   }
+
+  private async readBenchmarkFile(file: string): Promise<(BenchmarkArtifact & { file: string }) | undefined> {
+    const raw = await readJsonFile<unknown>(safeJoin(this.benchmarkRoot, file));
+    const artifact = normalizeBenchmarkArtifact(file, raw);
+    return artifact ? { file, ...artifact } : undefined;
+  }
+
+  private async readBenchmarkArtifacts(): Promise<Array<BenchmarkArtifact & { file: string }>> {
+    const files = await listFiles(this.benchmarkRoot, ['.json']);
+    const artifacts = await Promise.all(files.map(file => this.readBenchmarkFile(file)));
+    return artifacts.filter((artifact): artifact is BenchmarkArtifact & { file: string } => Boolean(artifact));
+  }
 }
 
 function feedKey(resident: string): string {
   return resident.trim().toLowerCase().replace(/^res:/, '');
+}
+
+function normalizeBenchmarkRunId(value: string): string | undefined {
+  const trimmed = value.trim().replace(/\.json$/i, '');
+  return /^[A-Za-z0-9_.-]{1,160}$/.test(trimmed) ? trimmed : undefined;
+}
+
+function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifact | undefined {
+  const record = asRecord(raw);
+  const runId = stringField(record, 'runId') || path.basename(file, '.json');
+  const task = benchmarkIdentity(record.task);
+  const module = benchmarkIdentity(record.module);
+  const status = benchmarkStatus(record.status);
+  const score = numberField(record, 'score');
+  if (!runId || !task || !module || !status || score === undefined) return undefined;
+
+  return {
+    schemaVersion: numberField(record, 'schemaVersion'),
+    runId,
+    task,
+    module,
+    mode: benchmarkMode(record.mode),
+    resident: stringField(record, 'resident') || 'unknown',
+    ...(stringField(record, 'modelProfile') ? { modelProfile: stringField(record, 'modelProfile') } : {}),
+    commits: benchmarkCommits(record.commits),
+    ...(stringField(record, 'startedAt') ? { startedAt: stringField(record, 'startedAt') } : {}),
+    ...(stringField(record, 'endedAt') ? { endedAt: stringField(record, 'endedAt') } : {}),
+    ...(numberField(record, 'durationMs') !== undefined ? { durationMs: numberField(record, 'durationMs') } : {}),
+    status,
+    score,
+    metrics: benchmarkMetrics(record.metrics),
+    evidence: benchmarkEvidence(record.evidence),
+    ...(stringField(record, 'failureReason') ? { failureReason: stringField(record, 'failureReason') } : {}),
+    ...(stringField(record, 'generatedAt') ? { generatedAt: stringField(record, 'generatedAt') } : {}),
+  };
+}
+
+function toBenchmarkSummary(artifact: BenchmarkArtifact): BenchmarkArtifactSummary {
+  return {
+    runId: artifact.runId,
+    task: artifact.task,
+    module: artifact.module,
+    mode: artifact.mode,
+    resident: artifact.resident,
+    modelProfile: artifact.modelProfile,
+    startedAt: artifact.startedAt,
+    endedAt: artifact.endedAt,
+    durationMs: artifact.durationMs,
+    status: artifact.status,
+    score: artifact.score,
+    metrics: artifact.metrics,
+    failureReason: artifact.failureReason,
+    generatedAt: artifact.generatedAt,
+    file: '',
+  };
+}
+
+function buildBenchmarkLeaderboard(artifacts: BenchmarkArtifact[]): BenchmarkLeaderboardRow[] {
+  const groups = new Map<string, BenchmarkArtifact[]>();
+  for (const artifact of artifacts) {
+    const key = `${artifact.module.id}@${artifact.module.version || 'unknown'}`;
+    groups.set(key, [...(groups.get(key) || []), artifact]);
+  }
+
+  return [...groups.values()]
+    .map(toBenchmarkLeaderboardRow)
+    .sort(
+      (a, b) =>
+        b.passRate - a.passRate ||
+        b.averageScore - a.averageScore ||
+        b.runs - a.runs ||
+        timestampMs(b.latestRunAt) - timestampMs(a.latestRunAt),
+    );
+}
+
+function toBenchmarkLeaderboardRow(runs: BenchmarkArtifact[]): BenchmarkLeaderboardRow {
+  const first = runs[0]!;
+  const passed = runs.filter(run => run.status === 'passed').length;
+  const durations = runs.map(run => run.durationMs).filter((duration): duration is number => Number.isFinite(duration));
+  return {
+    module: first.module,
+    runs: runs.length,
+    taskCount: new Set(runs.map(run => run.task.id)).size,
+    passed,
+    nonPassed: runs.length - passed,
+    passRate: runs.length ? passed / runs.length : 0,
+    averageScore: average(runs.map(run => run.score)),
+    autonomousRuns: runs.filter(run => run.mode === 'autonomous').length,
+    ...(durations.length ? { averageDurationMs: average(durations) } : {}),
+    safetyIncidents: sumMetrics(runs, ['unsafeLoops', 'deathEvents', 'unsafeTargets', 'dangerousHpDrops']),
+    cleanupFailures: sumMetrics(runs, ['cleanupFailures']),
+    inferenceRequests: sumMetrics(runs, ['selectedModuleInferences', 'inferenceRequests']),
+    latestRunAt: latestBenchmarkTime(runs),
+    tasks: benchmarkTaskRows(runs),
+  };
+}
+
+function benchmarkTaskRows(runs: BenchmarkArtifact[]): BenchmarkTaskLeaderboardRow[] {
+  const groups = new Map<string, BenchmarkArtifact[]>();
+  for (const run of runs) groups.set(run.task.id, [...(groups.get(run.task.id) || []), run]);
+  return [...groups.entries()]
+    .map(([taskId, taskRuns]) => ({
+      taskId,
+      runs: taskRuns.length,
+      passed: taskRuns.filter(run => run.status === 'passed').length,
+      averageScore: average(taskRuns.map(run => run.score)),
+    }))
+    .sort((a, b) => b.averageScore - a.averageScore || b.passed - a.passed || a.taskId.localeCompare(b.taskId));
+}
+
+function latestBenchmarkTime(runs: BenchmarkArtifact[]): string | undefined {
+  return runs
+    .map(run => run.endedAt || run.generatedAt || run.startedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+}
+
+function average(values: number[]): number {
+  const finite = values.filter(Number.isFinite);
+  return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : 0;
+}
+
+function sumMetrics(runs: BenchmarkArtifact[], metricNames: string[]): number {
+  return runs.reduce((sum, run) => sum + metricNames.reduce((inner, name) => inner + (run.metrics[name] || 0), 0), 0);
+}
+
+function benchmarkIdentity(value: unknown): BenchmarkIdentity | undefined {
+  const record = asRecord(value);
+  const id = stringField(record, 'id');
+  if (!id) return undefined;
+  return {
+    id,
+    ...(stringField(record, 'version') ? { version: stringField(record, 'version') } : {}),
+  };
+}
+
+function benchmarkStatus(value: unknown): BenchmarkRunStatus | undefined {
+  return value === 'passed' || value === 'failed' || value === 'timeout' || value === 'error' || value === 'cancelled'
+    ? value
+    : undefined;
+}
+
+function benchmarkMode(value: unknown): BenchmarkRunMode {
+  return value === 'autonomous' ? 'autonomous' : 'scripted';
+}
+
+function benchmarkMetrics(value: unknown): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(asRecord(value)).flatMap(([key, raw]) => {
+      const number = Number(raw);
+      return Number.isFinite(number) ? [[key, number]] : [];
+    }),
+  );
+}
+
+function benchmarkEvidence(value: unknown): BenchmarkEvidence {
+  const record = asRecord(value);
+  return {
+    ...record,
+    ...(stringArray(record.actionAttemptIds) ? { actionAttemptIds: stringArray(record.actionAttemptIds) } : {}),
+    ...(Array.isArray(record.actionAttempts) ? { actionAttempts: record.actionAttempts } : {}),
+    ...(stringArray(record.inferenceRequestIds) ? { inferenceRequestIds: stringArray(record.inferenceRequestIds) } : {}),
+    ...(Array.isArray(record.inferenceRequests) ? { inferenceRequests: record.inferenceRequests } : {}),
+    ...(stringArray(record.perceptionIds) ? { perceptionIds: stringArray(record.perceptionIds) } : {}),
+    ...(stringArray(record.summaries) ? { summaries: stringArray(record.summaries) } : {}),
+    ...(stringArray(record.artifactPaths) ? { artifactPaths: stringArray(record.artifactPaths) } : {}),
+  };
+}
+
+function benchmarkCommits(value: unknown): BenchmarkCommit[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(commit => {
+    const record = asRecord(commit);
+    const repo = stringField(record, 'repo');
+    const sha = stringField(record, 'sha');
+    if (!repo || !sha) return [];
+    return [
+      {
+        repo,
+        sha,
+        ...(stringField(record, 'branch') ? { branch: stringField(record, 'branch') } : {}),
+        ...(booleanField(record, 'dirty') !== undefined ? { dirty: booleanField(record, 'dirty') } : {}),
+      },
+    ];
+  });
+}
+
+function benchmarkSortTime(artifact: Pick<BenchmarkArtifactSummary, 'endedAt' | 'generatedAt' | 'startedAt'>): number {
+  const time = Date.parse(artifact.endedAt || artifact.generatedAt || artifact.startedAt || '');
+  return Number.isFinite(time) ? time : 0;
+}
+
+function timestampMs(value: string | undefined): number {
+  const time = Date.parse(value || '');
+  return Number.isFinite(time) ? time : 0;
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : undefined;
 }
 
 function feedToSummary(feed: ResidentFeedSnapshot | undefined): PerceptionFeedSummary | undefined {

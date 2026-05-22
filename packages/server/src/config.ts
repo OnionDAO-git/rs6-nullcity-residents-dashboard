@@ -18,6 +18,7 @@ export interface DashboardConfig {
   agentLogsRoot: string;
   soulsRoot: string;
   residentSaveRoot: string;
+  benchmarkRoot: string;
   webDist: string;
   webDevOrigin?: string;
 }
@@ -35,6 +36,7 @@ export const config: DashboardConfig = {
   agentLogsRoot: process.env.NULLCITY_AGENT_LOGS_ROOT || path.join(serverRoot, 'data/agent-logs'),
   soulsRoot: process.env.NULLCITY_SOULS_ROOT || path.join(serverRoot, 'data/souls'),
   residentSaveRoot: process.env.NULLCITY_RESIDENT_SAVE_ROOT || path.join(serverRoot, 'data/residents'),
+  benchmarkRoot: process.env.NULLCITY_BENCHMARK_ROOT || path.join(serverRoot, 'data/benchmarks'),
   webDist: process.env.DASHBOARD_WEB_DIST || path.resolve(import.meta.dir, '../../web/dist'),
   webDevOrigin: process.env.DASHBOARD_WEB_DEV_ORIGIN,
 };

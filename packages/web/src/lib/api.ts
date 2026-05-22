@@ -1,5 +1,8 @@
 import type {
   ControllerStatus,
+  BenchmarkArtifact,
+  BenchmarkArtifactSummary,
+  BenchmarkLeaderboardRow,
   DashboardOverview,
   GatewayStatus,
   ObservableSubjectSummary,
@@ -91,6 +94,9 @@ export const api = {
   streamSession: (sessionId: string) => new EventSource(`/api/observe/session/${encodeURIComponent(sessionId)}/stream`),
   souls: () => request<SoulSummary[]>('/api/souls'),
   logs: () => request<{ actions: unknown[]; inference: unknown[] }>('/api/logs'),
+  benchmarks: (limit = 200) => request<BenchmarkArtifactSummary[]>(`/api/benchmarks?limit=${encodeURIComponent(limit)}`),
+  benchmark: (runId: string) => request<BenchmarkArtifact>(`/api/benchmarks/${encodeURIComponent(runId)}`),
+  benchmarkLeaderboard: (limit = 50) => request<BenchmarkLeaderboardRow[]>(`/api/benchmarks/leaderboard?limit=${encodeURIComponent(limit)}`),
 };
 
 export function routeTo(path: string): void {
