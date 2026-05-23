@@ -4,6 +4,7 @@
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
+  import { benchmarkActionRows } from './lib/benchmarks';
   import { compactJson, timeAgo } from './lib/format';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
 
@@ -1607,11 +1608,21 @@
       <div class="panel">
         <div class="panel-title">Evidence</div>
         <div class="event-list">
+          {#each benchmarkActionRows(artifact.evidence) as action}
+            <div class="event-row">
+              <span class:ok={action.ok === true} class:warn={action.ok === false} class="tag">{action.statusLabel}</span>
+              <span>
+                <strong>{action.actionLabel}</strong>
+                <small>{action.effectLabel} | {action.detail}</small>
+              </span>
+            </div>
+          {/each}
           {#each artifact.evidence.summaries || [] as summary}
             <div class="event-row"><span class="tag">proof</span><span>{summary}</span></div>
-          {:else}
-            <div class="empty">No evidence summaries</div>
           {/each}
+          {#if !benchmarkActionRows(artifact.evidence).length && !(artifact.evidence.summaries || []).length}
+            <div class="empty">No evidence summaries</div>
+          {/if}
         </div>
       </div>
       <div class="panel">

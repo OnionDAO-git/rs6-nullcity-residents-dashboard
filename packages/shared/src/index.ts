@@ -278,9 +278,23 @@ export interface BenchmarkCommit {
   dirty?: boolean;
 }
 
+export interface BenchmarkActionAttemptEvidence {
+  requestId?: string;
+  actionKind: string;
+  source?: string;
+  cause?: string;
+  ok?: boolean;
+  finalStatus?: string;
+  finalReason?: string;
+  evidenceCount?: number;
+  effectEvidenceCount?: number;
+  sparkModule?: BenchmarkIdentity;
+  [key: string]: unknown;
+}
+
 export interface BenchmarkEvidence {
   actionAttemptIds?: string[];
-  actionAttempts?: unknown[];
+  actionAttempts?: BenchmarkActionAttemptEvidence[];
   inferenceRequestIds?: string[];
   inferenceRequests?: unknown[];
   perceptionIds?: string[];
