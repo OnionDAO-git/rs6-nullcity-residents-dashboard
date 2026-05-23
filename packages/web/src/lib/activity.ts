@@ -97,7 +97,38 @@ function formatAction(entry: ActionLogEntry | undefined): string {
     const npcId = numberOrString(target.npcId || target.id);
     return npcId !== undefined ? `attack npc ${npcId}` : 'attack';
   }
+  if (kind === 'trade_request') {
+    const target = tradeTargetLabel(asRecord(action.target));
+    return target ? `request trade with ${target}` : 'request trade';
+  }
+  if (kind === 'trade_offer_item') {
+    const quantity = numberOrString(action.quantity) ?? numberOrString(action.amount);
+    const slot = numberOrString(action.slot) ?? numberOrString(action.inventorySlot);
+    const itemId = numberOrString(action.itemId);
+    if (quantity !== undefined && itemId !== undefined) return `offer ${quantity} of item ${itemId}`;
+    if (quantity !== undefined && slot !== undefined) return `offer ${quantity} from slot ${slot}`;
+    if (itemId !== undefined) return `offer item ${itemId}`;
+    return 'offer item';
+  }
+  if (kind === 'trade_accept' || kind === 'trade_accept_stage_1') {
+    return 'accept trade stage 1';
+  }
+  if (kind === 'trade_accept_stage_2') {
+    return 'accept trade stage 2';
+  }
+  if (kind === 'trade_decline') {
+    return 'decline trade';
+  }
   return kind.replaceAll('_', ' ');
+}
+
+function tradeTargetLabel(target: Record<string, unknown>): string | undefined {
+  return (
+    stringField(target, 'playerHandle') ||
+    stringField(target, 'name') ||
+    stringField(target, 'residentId') ||
+    stringField(target, 'id')
+  );
 }
 
 function formatActionDetail(entry: ActionLogEntry | undefined): string {

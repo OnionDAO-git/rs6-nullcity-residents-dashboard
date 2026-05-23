@@ -108,6 +108,61 @@ describe('buildActivitySnapshot', () => {
     expect(snapshot.actionDetail).toContain('routine_loop_break');
   });
 
+  test('shows trade actions as readable player activity', () => {
+    const target = { residentId: 'res:codex', playerHandle: 'Codex' };
+    const cases = [
+      {
+        action: { kind: 'trade_request', target },
+        label: 'request trade with Codex',
+        cause: 'direct_chat_trade',
+        detail: 'direct_chat_trade | ok | source body | tick 12',
+      },
+      {
+        action: { kind: 'trade_offer_item', inventorySlot: 2, amount: 3 },
+        label: 'offer 3 from slot 2',
+        cause: 'trade_offer_safe_item',
+        detail: 'trade_offer_safe_item | ok | source body | tick 12',
+      },
+      {
+        action: { kind: 'trade_accept_stage_1' },
+        label: 'accept trade stage 1',
+        cause: 'trade_accept_stage_1',
+        detail: 'trade_accept_stage_1 | ok | source body | tick 12',
+      },
+      {
+        action: { kind: 'trade_decline', reason: 'untrusted_partner' },
+        label: 'decline trade',
+        cause: 'trade_decline_untrusted_partner',
+        detail: 'trade_decline_untrusted_partner | ok | source body | tick 12',
+      },
+    ];
+
+    for (const { action, label, cause, detail } of cases) {
+      const snapshot = buildActivitySnapshot(
+        runtime({
+          logs: {
+            actions: [
+              {
+                t: '2026-05-20T17:43:50.000Z',
+                tick: 12,
+                source: 'body',
+                cause,
+                action,
+                result: { ok: true },
+              },
+            ],
+            inference: [],
+          },
+        }),
+        session(),
+        now,
+      );
+
+      expect(snapshot.actionLabel).toBe(label);
+      expect(snapshot.actionDetail).toBe(detail);
+    }
+  });
+
   test('summarizes the active move intent when the controller is pursuing a target', () => {
     const movingRuntime = runtime({
       state: {

@@ -23,6 +23,22 @@ export interface DashboardConfig {
   webDevOrigin?: string;
 }
 
+export function dashboardDataRoots(root: string): Pick<
+  DashboardConfig,
+  'memoryRoot' | 'logsRoot' | 'agentLogsRoot' | 'soulsRoot' | 'residentSaveRoot' | 'benchmarkRoot'
+> {
+  return {
+    memoryRoot: path.join(root, 'data/controller/memory'),
+    logsRoot: path.join(root, 'data/controller/logs'),
+    agentLogsRoot: path.join(root, 'data/agent-logs'),
+    soulsRoot: path.join(root, 'src/controller/soul/starter-souls'),
+    residentSaveRoot: path.join(root, 'data/residents'),
+    benchmarkRoot: path.join(root, 'data/benchmarks'),
+  };
+}
+
+const dataRoots = dashboardDataRoots(serverRoot);
+
 export const config: DashboardConfig = {
   host: process.env.DASHBOARD_HOST || '127.0.0.1',
   port: Number(process.env.DASHBOARD_PORT || 8787),
@@ -31,12 +47,12 @@ export const config: DashboardConfig = {
   rsClientHost: process.env.NULLCITY_RS_HOST || '127.0.0.1:43594',
   rsClientSecure: process.env.NULLCITY_RS_SECURE === 'true',
   serverRoot,
-  memoryRoot: process.env.NULLCITY_MEMORY_ROOT || path.join(serverRoot, 'data/memory'),
-  logsRoot: process.env.NULLCITY_LOGS_ROOT || path.join(serverRoot, 'data/logs'),
-  agentLogsRoot: process.env.NULLCITY_AGENT_LOGS_ROOT || path.join(serverRoot, 'data/agent-logs'),
-  soulsRoot: process.env.NULLCITY_SOULS_ROOT || path.join(serverRoot, 'data/souls'),
-  residentSaveRoot: process.env.NULLCITY_RESIDENT_SAVE_ROOT || path.join(serverRoot, 'data/residents'),
-  benchmarkRoot: process.env.NULLCITY_BENCHMARK_ROOT || path.join(serverRoot, 'data/benchmarks'),
+  memoryRoot: process.env.NULLCITY_MEMORY_ROOT || dataRoots.memoryRoot,
+  logsRoot: process.env.NULLCITY_LOGS_ROOT || dataRoots.logsRoot,
+  agentLogsRoot: process.env.NULLCITY_AGENT_LOGS_ROOT || dataRoots.agentLogsRoot,
+  soulsRoot: process.env.NULLCITY_SOULS_ROOT || dataRoots.soulsRoot,
+  residentSaveRoot: process.env.NULLCITY_RESIDENT_SAVE_ROOT || dataRoots.residentSaveRoot,
+  benchmarkRoot: process.env.NULLCITY_BENCHMARK_ROOT || dataRoots.benchmarkRoot,
   webDist: process.env.DASHBOARD_WEB_DIST || path.resolve(import.meta.dir, '../../web/dist'),
   webDevOrigin: process.env.DASHBOARD_WEB_DEV_ORIGIN,
 };
