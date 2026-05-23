@@ -768,6 +768,7 @@
       { label: 'Position', value: activity.positionLabel, detail: residentBusyLabel(runtime) },
       { label: 'Vitals', value: vitalsFromRuntime(runtime), detail: activeTrade.partner ? 'trade active' : undefined },
       { label: 'Last Action', value: activity.actionLabel, detail: activity.actionDetail },
+      { label: 'Progress', value: activity.progressLabel, detail: activity.progressDetail },
       { label: 'Nearby', value: activity.surroundingsLabel, detail: actionCountLabel(runtime) },
       { label: 'Inventory', value: inventoryLabel(runtime), detail: equipmentLabel(runtime) },
       { label: 'Event', value: activity.eventLabel, detail: runtime?.body.lastFeedAt ? `feed ${timeAgo(runtime.body.lastFeedAt)} ago` : undefined },

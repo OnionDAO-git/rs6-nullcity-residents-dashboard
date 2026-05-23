@@ -36,6 +36,57 @@ describe('buildSparkRuntimeSummary', () => {
 });
 
 describe('RuntimeRepository resident feeds', () => {
+  test('summarizes latest resident progress evidence from controller memory', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-progress-'));
+    const memoryRoot = path.join(root, 'memory');
+    const evidenceDir = path.join(memoryRoot, 'res-agent', 'evidence');
+    const progressPath = path.join(evidenceDir, 'progress', 'session-a.jsonl');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    await fs.mkdir(path.dirname(progressPath), { recursive: true });
+    await fs.writeFile(
+      path.join(evidenceDir, 'index.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        resident: 'res:agent',
+        currentSessionId: 'session-a',
+        sessions: [
+          {
+            sessionId: 'session-a',
+            status: 'active',
+            progressPath: 'progress/session-a.jsonl',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      progressPath,
+      [
+        JSON.stringify({ kind: 'progress', ts: '2026-05-23T05:00:00.000Z', tick: 98, meaningful: true, reasons: ['xp_gain:firemaking:40'], stuckSince: null }),
+        JSON.stringify({ kind: 'progress', ts: '2026-05-23T05:00:06.000Z', tick: 104, meaningful: false, reasons: [], stuckSince: 100 }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const model = await repository.residentRuntime('res:agent', { name: 'res:agent', online: true });
+    const progress = (model as { progress?: Record<string, unknown> }).progress;
+
+    expect(model.available).toBe(true);
+    expect(progress).toMatchObject({
+      sessionId: 'session-a',
+      progressPath: 'progress/session-a.jsonl',
+      stuckTicks: 4,
+      latest: { tick: 104, meaningful: false, stuckSince: 100 },
+      latestMeaningful: { tick: 98, meaningful: true, reasons: ['xp_gain:firemaking:40'] },
+    });
+  });
+
   test('merges live feed perception and action results into the runtime model', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-runtime-'));

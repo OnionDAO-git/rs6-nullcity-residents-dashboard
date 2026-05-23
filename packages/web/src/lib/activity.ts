@@ -9,6 +9,8 @@ export interface ActivitySnapshot {
   actionDetail: string;
   inferenceLabel: string;
   inferenceAgeLabel: string;
+  progressLabel: string;
+  progressDetail: string;
   moveLabel: string;
   moveDetail: string;
   goalLabel: string;
@@ -46,6 +48,7 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     actionDetail: formatActionDetail(latestAction),
     inferenceLabel: formatInference(latestInference),
     inferenceAgeLabel: formatAge(inferenceAgeMs),
+    ...formatProgress(runtime),
     ...formatActiveMove(runtime),
     goalLabel: formatGoal(runtime),
     ...formatSparkModule(runtime),
@@ -63,6 +66,39 @@ function statusText(online: boolean, stale: boolean, actionAgeMs: number | undef
   if (feedLive) return 'Resident feed live.';
   if (stale) return `No visible action for ${formatDuration(actionAgeMs)}.`;
   return 'Recent action visible.';
+}
+
+function formatProgress(runtime: RuntimeReadModel | undefined): { progressLabel: string; progressDetail: string } {
+  const progress = runtime?.progress;
+  const latest = progress?.latest;
+  if (!latest) {
+    return { progressLabel: 'no progress evidence', progressDetail: '-' };
+  }
+
+  const latestMeaningful = progress.latestMeaningful;
+  const meaningfulDetail = latestMeaningful
+    ? `last progress tick ${latestMeaningful.tick ?? '?'}: ${formatProgressReasons(latestMeaningful.reasons)}`
+    : 'no meaningful progress yet';
+  if (typeof progress.stuckTicks === 'number') {
+    return {
+      progressLabel: `stuck ${progress.stuckTicks} tick${progress.stuckTicks === 1 ? '' : 's'}`,
+      progressDetail: meaningfulDetail,
+    };
+  }
+  if (latest.meaningful) {
+    return {
+      progressLabel: `progress tick ${latest.tick ?? '?'}`,
+      progressDetail: formatProgressReasons(latest.reasons),
+    };
+  }
+  return {
+    progressLabel: `no progress at tick ${latest.tick ?? '?'}`,
+    progressDetail: meaningfulDetail,
+  };
+}
+
+function formatProgressReasons(reasons: string[]): string {
+  return reasons.length ? reasons.map(reason => reason.replaceAll('_', ' ').replaceAll(':', ' ')).join(', ') : 'reason not logged';
 }
 
 function formatAction(entry: ActionLogEntry | undefined): string {

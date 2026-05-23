@@ -154,6 +154,23 @@ export interface ResidentEventSummary {
   at?: string;
 }
 
+export interface ResidentProgressSample {
+  ts?: string;
+  tick?: number;
+  meaningful: boolean;
+  reasons: string[];
+  stuckSince?: number | null;
+}
+
+export interface ResidentProgressSummary {
+  sessionId?: string;
+  progressPath?: string;
+  samples: number;
+  latest?: ResidentProgressSample;
+  latestMeaningful?: ResidentProgressSample;
+  stuckTicks?: number;
+}
+
 export interface ResidentSavedSkill {
   level: number;
   xp: number;
@@ -205,6 +222,7 @@ export interface RuntimeReadModel {
     saved?: ResidentSavedState;
   };
   spark?: SparkRuntimeSummary;
+  progress?: ResidentProgressSummary;
   memory: {
     indexMarkdown?: string;
     files: string[];
@@ -233,6 +251,7 @@ export interface ResidentDashboardRow {
   body?: RuntimeReadModel['body'];
   feed?: PerceptionFeedSummary;
   spark?: SparkRuntimeSummary;
+  progress?: ResidentProgressSummary;
   lastEvent?: ResidentEventSummary;
   activeTrade?: unknown;
   errors?: string[];

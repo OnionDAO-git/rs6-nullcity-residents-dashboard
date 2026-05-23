@@ -15,6 +15,8 @@ import type {
   InferenceLogEntry,
   PerceptionFeedSummary,
   ResidentDashboardRow,
+  ResidentProgressSample,
+  ResidentProgressSummary,
   ResidentSummary,
   CreateResidentSoulOptions,
   InferenceProfileSummary,
@@ -59,7 +61,7 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference, saved] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference, saved, progress] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
@@ -68,6 +70,7 @@ export class RuntimeRepository {
       this.readResidentActions(resident),
       this.readResidentInference(resident),
       this.readResidentSave(resident),
+      this.readResidentProgress(memoryDir),
     ]);
 
     const liveActions = feedToActionEntries(feed);
@@ -81,7 +84,7 @@ export class RuntimeRepository {
     const feedSummary = feedToSummary(feed);
 
     return {
-      available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || mergedActions.length || inference.length || feed?.latestPerception),
+      available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || mergedActions.length || inference.length || feed?.latestPerception || progress),
       online: Boolean(summary?.online),
       state,
       thinking: {
@@ -125,6 +128,7 @@ export class RuntimeRepository {
         saved,
       },
       spark,
+      progress,
       memory: {
         indexMarkdown,
         files: memoryFiles,
@@ -158,6 +162,7 @@ export class RuntimeRepository {
           body: runtime.body,
           feed: runtime.body.feed,
           spark: runtime.spark,
+          progress: runtime.progress,
           lastEvent: latestEvent(runtime.logs.actions),
           errors: runtime.errors,
         };
@@ -349,6 +354,42 @@ export class RuntimeRepository {
       ...(Array.isArray(save.inventory) ? { inventory: save.inventory } : {}),
       ...(Array.isArray(save.equipment) ? { equipment: save.equipment } : {}),
       ...(skills ? { skills } : {}),
+    };
+  }
+
+  private async readResidentProgress(memoryDir: string): Promise<ResidentProgressSummary | undefined> {
+    const evidenceDir = path.join(memoryDir, 'evidence');
+    const index = asRecord(await readJsonFile<unknown>(path.join(evidenceDir, 'index.json')));
+    const sessions = Array.isArray(index.sessions) ? index.sessions.map(asRecord) : [];
+    const currentSessionId = stringField(index, 'currentSessionId');
+    const session =
+      sessions.find(item => stringField(item, 'sessionId') === currentSessionId && stringField(item, 'progressPath')) ||
+      [...sessions].reverse().find(item => stringField(item, 'status') === 'active' && stringField(item, 'progressPath')) ||
+      [...sessions].reverse().find(item => stringField(item, 'progressPath'));
+    const relativeProgressPath = stringField(session, 'progressPath');
+    if (!relativeProgressPath) return undefined;
+
+    let progressFile: string;
+    try {
+      progressFile = safeJoin(evidenceDir, relativeProgressPath);
+    } catch {
+      return undefined;
+    }
+
+    const samples = (await readJsonl<unknown>(progressFile, 200)).flatMap(normalizeProgressSample);
+    const latest = samples.at(-1);
+    if (!latest) return undefined;
+
+    const latestMeaningful = [...samples].reverse().find(sample => sample.meaningful);
+    const stuckSince = typeof latest.stuckSince === 'number' ? latest.stuckSince : undefined;
+    const stuckTicks = latest.tick !== undefined && stuckSince !== undefined ? Math.max(0, latest.tick - stuckSince) : undefined;
+    return {
+      ...(stringField(session, 'sessionId') ? { sessionId: stringField(session, 'sessionId') } : {}),
+      progressPath: relativeProgressPath,
+      samples: samples.length,
+      latest,
+      ...(latestMeaningful ? { latestMeaningful } : {}),
+      ...(stuckTicks !== undefined ? { stuckTicks } : {}),
     };
   }
 
@@ -676,6 +717,24 @@ function normalizeSavedSkills(value: unknown): ResidentSavedState['skills'] | un
     ]);
   });
   return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeProgressSample(value: unknown): ResidentProgressSample[] {
+  const record = asRecord(value);
+  const tick = numberField(record, 'tick');
+  const meaningful = booleanField(record, 'meaningful');
+  if (tick === undefined || meaningful === undefined) return [];
+  const rawStuckSince = record.stuckSince;
+  const stuckSince = rawStuckSince === null || typeof rawStuckSince === 'number' ? rawStuckSince : undefined;
+  return [
+    {
+      ...(stringField(record, 'ts') ? { ts: stringField(record, 'ts') } : {}),
+      tick,
+      meaningful,
+      reasons: Array.isArray(record.reasons) ? record.reasons.filter((reason): reason is string => typeof reason === 'string') : [],
+      ...(stuckSince !== undefined ? { stuckSince } : {}),
+    },
+  ];
 }
 
 export function buildSparkRuntimeSummary(actions: ActionLogEntry[], inference: InferenceLogEntry[]): SparkRuntimeSummary {
