@@ -183,6 +183,52 @@ describe('RuntimeRepository benchmarks', () => {
     expect(await repository.readBenchmarkArtifact('../bench_new')).toBeUndefined();
   });
 
+  test('opens benchmark detail artifacts from nested output directories', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-benchmark-detail-'));
+    const benchmarkRoot = path.join(root, 'benchmarks');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      path.join(root, 'residents'),
+      benchmarkRoot,
+    );
+    await fs.mkdir(path.join(benchmarkRoot, 'combat-smoke'), { recursive: true });
+    await fs.writeFile(
+      path.join(benchmarkRoot, 'combat-smoke', 'bench_nested_combat.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        runId: 'bench_nested_combat',
+        task: { id: 'combat-prayer-10m', version: '0.1.0' },
+        module: { id: 'onion.runescape.standard', version: '0.1.0' },
+        mode: 'autonomous',
+        resident: 'res:bmk_combat',
+        modelProfile: 'local',
+        commits: [{ repo: 'rs6-nullcity-server', sha: 'abcdef1' }],
+        startedAt: '2026-05-23T03:00:00.000Z',
+        endedAt: '2026-05-23T03:01:36.000Z',
+        durationMs: 96305,
+        status: 'passed',
+        score: 1,
+        metrics: { prayerSuccess: 1 },
+        evidence: { summaries: ['combat-prayer-10m observed safe combat'] },
+        generatedAt: '2026-05-23T03:01:36.000Z',
+      }),
+      'utf8',
+    );
+
+    const detail = await repository.readBenchmarkArtifact('bench_nested_combat');
+
+    expect(detail).toMatchObject({
+      runId: 'bench_nested_combat',
+      task: { id: 'combat-prayer-10m' },
+      status: 'passed',
+      evidence: { summaries: ['combat-prayer-10m observed safe combat'] },
+    });
+  });
+
   test('ranks module leaderboard by pass rate, progress, run count, and recency', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-leaderboard-'));

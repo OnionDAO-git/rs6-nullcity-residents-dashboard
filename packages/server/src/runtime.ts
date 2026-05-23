@@ -262,7 +262,16 @@ export class RuntimeRepository {
   async readBenchmarkArtifact(runId: string): Promise<BenchmarkArtifact | undefined> {
     const safeRunId = normalizeBenchmarkRunId(runId);
     if (!safeRunId) return undefined;
-    return this.readBenchmarkFile(`${safeRunId}.json`);
+    const direct = await this.readBenchmarkFile(`${safeRunId}.json`);
+    if (direct) return direct;
+
+    const files = await listFiles(this.benchmarkRoot, ['.json']);
+    for (const file of files) {
+      if (path.basename(file) !== `${safeRunId}.json`) continue;
+      const artifact = await this.readBenchmarkFile(file);
+      if (artifact?.runId === safeRunId) return artifact;
+    }
+    return undefined;
   }
 
   async benchmarkLeaderboard(limit = 50): Promise<BenchmarkLeaderboardRow[]> {
