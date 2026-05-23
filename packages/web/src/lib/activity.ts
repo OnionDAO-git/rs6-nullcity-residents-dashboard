@@ -48,7 +48,7 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     actionDetail: formatActionDetail(latestAction),
     inferenceLabel: formatInference(latestInference),
     inferenceAgeLabel: formatAge(inferenceAgeMs),
-    ...formatProgress(runtime),
+    ...formatProgress(runtime, now),
     ...formatActiveMove(runtime),
     goalLabel: formatGoal(runtime),
     ...formatSparkModule(runtime),
@@ -68,32 +68,36 @@ function statusText(online: boolean, stale: boolean, actionAgeMs: number | undef
   return 'Recent action visible.';
 }
 
-function formatProgress(runtime: RuntimeReadModel | undefined): { progressLabel: string; progressDetail: string } {
+function formatProgress(runtime: RuntimeReadModel | undefined, now: number): { progressLabel: string; progressDetail: string } {
   const progress = runtime?.progress;
   const latest = progress?.latest;
   if (!latest) {
     return { progressLabel: 'no progress evidence', progressDetail: '-' };
   }
 
+  const sampleAgeMs = ageMs(latest.ts, now);
+  const stale = sampleAgeMs !== undefined && sampleAgeMs > STALE_ACTION_MS;
+  const labelPrefix = runtime?.online === false ? 'offline; last ' : stale ? 'stale; last ' : '';
+  const detailPrefix = labelPrefix && sampleAgeMs !== undefined ? `${formatAge(sampleAgeMs)} | ` : '';
   const latestMeaningful = progress.latestMeaningful;
   const meaningfulDetail = latestMeaningful
     ? `last progress tick ${latestMeaningful.tick ?? '?'}: ${formatProgressReasons(latestMeaningful.reasons)}`
     : 'no meaningful progress yet';
   if (typeof progress.stuckTicks === 'number') {
     return {
-      progressLabel: `stuck ${progress.stuckTicks} tick${progress.stuckTicks === 1 ? '' : 's'}`,
-      progressDetail: meaningfulDetail,
+      progressLabel: `${labelPrefix}stuck ${progress.stuckTicks} tick${progress.stuckTicks === 1 ? '' : 's'}`,
+      progressDetail: `${detailPrefix}${meaningfulDetail}`,
     };
   }
   if (latest.meaningful) {
     return {
-      progressLabel: `progress tick ${latest.tick ?? '?'}`,
-      progressDetail: formatProgressReasons(latest.reasons),
+      progressLabel: `${labelPrefix}progress tick ${latest.tick ?? '?'}`,
+      progressDetail: `${detailPrefix}${formatProgressReasons(latest.reasons)}`,
     };
   }
   return {
-    progressLabel: `no progress at tick ${latest.tick ?? '?'}`,
-    progressDetail: meaningfulDetail,
+    progressLabel: `${labelPrefix}no progress at tick ${latest.tick ?? '?'}`,
+    progressDetail: `${detailPrefix}${meaningfulDetail}`,
   };
 }
 

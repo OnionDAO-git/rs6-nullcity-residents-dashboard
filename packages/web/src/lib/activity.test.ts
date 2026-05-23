@@ -195,6 +195,39 @@ describe('buildActivitySnapshot', () => {
     expect(snapshot.progressDetail).toBe('last progress tick 98: xp gain firemaking 40');
   });
 
+  test('labels old progress evidence as offline instead of current activity', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        online: false,
+        progress: {
+          sessionId: 'session-a',
+          progressPath: 'progress/session-a.jsonl',
+          samples: 2,
+          latest: {
+            ts: '2026-05-20T17:34:00.000Z',
+            tick: 104,
+            meaningful: false,
+            reasons: [],
+            stuckSince: 100,
+          },
+          latestMeaningful: {
+            ts: '2026-05-20T17:30:00.000Z',
+            tick: 98,
+            meaningful: true,
+            reasons: ['xp_gain:firemaking:40'],
+            stuckSince: null,
+          },
+          stuckTicks: 4,
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(snapshot.progressLabel).toBe('offline; last stuck 4 ticks');
+    expect(snapshot.progressDetail).toBe('10m ago | last progress tick 98: xp gain firemaking 40');
+  });
+
   test('summarizes the active move intent when the controller is pursuing a target', () => {
     const movingRuntime = runtime({
       state: {
