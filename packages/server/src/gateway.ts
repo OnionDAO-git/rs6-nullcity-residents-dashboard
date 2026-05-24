@@ -221,6 +221,7 @@ export class GatewayClient {
         this.lastError = error.message;
         this.connected = false;
         this.lastDisconnectedAt = new Date().toISOString();
+        this.markResidentFeedsDetached(error.message);
         this.rejectAll(error);
         reject(error);
       };
@@ -246,6 +247,7 @@ export class GatewayClient {
         this.connected = false;
         this.lastDisconnectedAt = new Date().toISOString();
         this.lastError = this.lastError || 'Gateway websocket closed';
+        this.markResidentFeedsDetached(this.lastError);
         this.rejectAll(new Error('Gateway websocket closed'));
       });
     }).finally(() => {
@@ -438,6 +440,15 @@ export class GatewayClient {
     }
   }
 
+  private markResidentFeedsDetached(error?: string): void {
+    for (const [key, feed] of this.residentFeeds.entries()) {
+      if (!feed.attached && feed.lastError === error) continue;
+      feed.attached = false;
+      feed.lastError = error;
+      this.notifyResidentFeed(key, feed);
+    }
+  }
+
   private rejectAll(error: Error): void {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
@@ -448,7 +459,7 @@ export class GatewayClient {
 }
 
 function residentKey(value: string): string {
-  return value.trim().toLowerCase().replace(/^res:/, '');
+  return value.trim().toLowerCase().replace(/^resident:/, '').replace(/^res:/, '');
 }
 
 function assertAgentGatewayUrl(value: string): void {
