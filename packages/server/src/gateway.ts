@@ -20,6 +20,7 @@ type Pending = {
 
 type SessionListener = (session: SpectatorSession) => void;
 type ResidentFeedListener = (feed: ResidentFeedSnapshot) => void;
+const STALE_RESIDENT_FEED_REATTACH_MS = 15_000;
 
 export interface ResidentFeedSnapshot {
   resident: string;
@@ -98,7 +99,7 @@ export class GatewayClient {
   async subscribeResidentFeed(name: string): Promise<ResidentFeedSnapshot> {
     const key = residentKey(name);
     const existing = this.ensureResidentFeed(key, name);
-    if (existing.attached) return existing;
+    if (!residentFeedNeedsAttach(existing)) return existing;
     if (!this.attachingResidents.has(key)) {
       this.attachingResidents.set(
         key,
@@ -460,6 +461,13 @@ export class GatewayClient {
 
 function residentKey(value: string): string {
   return value.trim().toLowerCase().replace(/^resident:/, '').replace(/^res:/, '');
+}
+
+function residentFeedNeedsAttach(feed: ResidentFeedSnapshot): boolean {
+  if (!feed.attached) return true;
+  if (!feed.lastFeedAt) return true;
+  const lastFeedAt = Date.parse(feed.lastFeedAt);
+  return !Number.isFinite(lastFeedAt) || Date.now() - lastFeedAt > STALE_RESIDENT_FEED_REATTACH_MS;
 }
 
 function assertAgentGatewayUrl(value: string): void {

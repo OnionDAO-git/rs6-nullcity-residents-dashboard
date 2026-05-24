@@ -65,6 +65,47 @@ describe('GatewayClient resident feeds', () => {
     expect(attachCount).toBe(2);
     expect((second.latestPerception as { tick?: number } | undefined)?.tick).toBe(2);
   });
+
+  test('reattaches an already-attached resident feed when it has gone stale', async () => {
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    servers.push(server);
+    await onceListening(server);
+    let attachCount = 0;
+
+    server.on('connection', socket => {
+      socket.on('message', raw => {
+        const message = JSON.parse(raw.toString()) as { id?: string; kind?: string };
+        if (message.kind === 'controller_hello') {
+          socket.send(JSON.stringify({ v: 1, id: message.id, kind: 'ok', payload: { ok: true } }));
+          return;
+        }
+        if (message.kind === 'attach') {
+          attachCount += 1;
+          socket.send(
+            JSON.stringify({
+              v: 1,
+              kind: 'perception',
+              payload: {
+                resident_id: 'resident:res:agent',
+                perception: perceptionForTick(attachCount),
+              },
+            }),
+          );
+          socket.send(JSON.stringify({ v: 1, id: message.id, kind: 'ok', payload: { ok: true } }));
+        }
+      });
+    });
+
+    const port = (server.address() as AddressInfo).port;
+    const client = new GatewayClient(`ws://127.0.0.1:${port}`);
+    const first = await client.subscribeResidentFeed('res:agent');
+    first.lastFeedAt = new Date(Date.now() - 60_000).toISOString();
+
+    const second = await client.subscribeResidentFeed('res:agent');
+
+    expect(attachCount).toBe(2);
+    expect((second.latestPerception as { tick?: number } | undefined)?.tick).toBe(2);
+  });
 });
 
 function perceptionForTick(tick: number): Record<string, unknown> {
