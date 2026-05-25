@@ -127,6 +127,49 @@ describe('RuntimeRepository resident feeds', () => {
     expect(model.logs.actions).toHaveLength(2);
     expect(model.logs.actions.at(-1)?.result).toEqual({ ok: true });
   });
+
+  test('filters dashboard resident rows to controller-discoverable SOUL residents when SOULs are present', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-known-residents-'));
+    const soulsRoot = path.join(root, 'souls');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      soulsRoot,
+    );
+    await fs.mkdir(soulsRoot, { recursive: true });
+    await fs.writeFile(
+      path.join(soulsRoot, 'res-agent.md'),
+      ['---', 'name: res:agent', 'display: Agent', 'archetype: endurer', '---', '# Agent'].join('\n'),
+      'utf8',
+    );
+
+    const rows = await repository.enrichResidents([
+      { name: 'res:agent', online: true },
+      { name: 'res:bmk_fire_5m_002e9qp0', online: false },
+    ]);
+
+    expect(rows.map(row => row.name)).toEqual(['res:agent']);
+  });
+
+  test('keeps gateway resident rows unfiltered when no SOUL catalog is available', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-no-souls-'));
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'missing-souls'),
+    );
+
+    const rows = await repository.enrichResidents([
+      { name: 'res:agent', online: true },
+      { name: 'res:legacy', online: false },
+    ]);
+
+    expect(rows.map(row => row.name)).toEqual(['res:agent', 'res:legacy']);
+  });
 });
 
 describe('RuntimeRepository resident deletion', () => {

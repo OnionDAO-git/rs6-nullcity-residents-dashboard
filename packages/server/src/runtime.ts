@@ -142,8 +142,9 @@ export class RuntimeRepository {
   }
 
   async enrichResidents(residents: ResidentSummary[], feeds = new Map<string, ResidentFeedSnapshot | undefined>()): Promise<ResidentDashboardRow[]> {
+    const visibleResidents = await this.filterResidentsWithKnownSouls(residents);
     return Promise.all(
-      residents.map(async resident => {
+      visibleResidents.map(async resident => {
         const runtime = await this.residentRuntime(resident.name, resident, feeds.get(feedKey(resident.name)));
         return {
           name: resident.name,
@@ -168,6 +169,13 @@ export class RuntimeRepository {
         };
       }),
     );
+  }
+
+  private async filterResidentsWithKnownSouls(residents: ResidentSummary[]): Promise<ResidentSummary[]> {
+    const souls = await this.listSouls().catch(() => []);
+    if (souls.length === 0) return residents;
+    const known = new Set(souls.map(soul => feedKey(soul.id)));
+    return residents.filter(resident => known.has(feedKey(resident.name)));
   }
 
   async listSouls(): Promise<SoulSummary[]> {
