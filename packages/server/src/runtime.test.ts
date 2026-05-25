@@ -170,6 +170,48 @@ describe('RuntimeRepository resident feeds', () => {
 
     expect(rows.map(row => row.name)).toEqual(['res:agent', 'res:legacy']);
   });
+
+  test('keeps dashboard resident list rows slim by default', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-slim-residents-'));
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'missing-souls'),
+    );
+    const largePerception = {
+      tick: 123,
+      resident: { position: { x: 3225, y: 3218, level: 0 } },
+      nearby: { players: [{ id: 'player:codex' }], npcs: [{ id: 1 }], objects: [{ id: 2 }], worldItems: [{ id: 3 }] },
+      events: [{ kind: 'message', text: 'hello' }],
+      availableActions: Array.from({ length: 40 }, (_, index) => ({ kind: 'move_to', x: 3200 + index, y: 3200 })),
+    };
+
+    const rows = await repository.enrichResidents(
+      [{ name: 'res:agent', online: true }],
+      new Map([
+        [
+          'agent',
+          {
+            resident: 'res:agent',
+            attached: true,
+            latestPerception: largePerception,
+            latestEvent: { kind: 'message', text: 'hello' },
+            lastFeedAt: '2026-05-25T08:30:00.000Z',
+            actionResults: [],
+            events: [],
+          },
+        ],
+      ]),
+    );
+
+    expect(rows[0]?.position).toEqual({ x: 3225, y: 3218, level: 0 });
+    expect(rows[0]?.feed).toMatchObject({ tick: 123, nearby: { players: 1, npcs: 1, objects: 1, worldItems: 1 }, availableActions: 40 });
+    expect(rows[0]?.body?.latestPerception).toBeUndefined();
+    expect(rows[0]?.body?.latestEvent).toBeUndefined();
+    expect(rows[0]?.body?.saved).toBeUndefined();
+  });
 });
 
 describe('RuntimeRepository resident deletion', () => {

@@ -158,9 +158,9 @@ export class RuntimeRepository {
           legacy: runtime.state?.legacy,
           budgets: runtime.state?.budgets,
           variables: runtime.state?.variables,
-          thinking: runtime.thinking,
-          nervous: runtime.nervous,
-          body: runtime.body,
+          thinking: slimThinking(runtime.thinking),
+          nervous: slimNervous(runtime.nervous),
+          body: slimBody(runtime.body),
           feed: runtime.body.feed,
           spark: runtime.spark,
           progress: runtime.progress,
@@ -946,6 +946,42 @@ function cleanScalar(value: unknown): string | undefined {
 function normalizedTemperature(value: unknown): number {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(2, Math.round(number * 100) / 100)) : 0.6;
+}
+
+function slimThinking(thinking: RuntimeReadModel['thinking']): RuntimeReadModel['thinking'] {
+  return {
+    mode: thinking.mode,
+    activePlan: thinking.activePlan,
+    previousIntent: thinking.previousIntent,
+    inFlightRequest: thinking.inFlightRequest,
+    lastInferenceCause: thinking.lastInferenceCause,
+  };
+}
+
+function slimNervous(nervous: RuntimeReadModel['nervous']): RuntimeReadModel['nervous'] {
+  return {
+    activeRules: nervous.activeRules,
+    lastReaction: nervous.lastReaction,
+    lastRuleId: nervous.lastRuleId,
+    lastSuppressedThinking: nervous.lastSuppressedThinking,
+    lastInterruptedThinking: nervous.lastInterruptedThinking,
+    cooldowns: nervous.cooldowns,
+  };
+}
+
+function slimBody(body: RuntimeReadModel['body']): RuntimeReadModel['body'] {
+  return {
+    controlHeld: body.controlHeld,
+    controllerId: body.controllerId,
+    feed: body.feed,
+    perceptionAgeMs: body.perceptionAgeMs,
+    position: body.position,
+    perceptionTick: body.perceptionTick,
+    lastFeedAt: body.lastFeedAt,
+    lastAction: body.lastAction,
+    lastActionSource: body.lastActionSource,
+    gatewayHealthy: body.gatewayHealthy,
+  };
 }
 
 function normalizePosition(value: unknown): { x: number; y: number; level?: number } | undefined {
