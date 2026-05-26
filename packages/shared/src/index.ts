@@ -190,6 +190,28 @@ export interface PatronActivitySummary {
   patrons: PatronDashboardSummary[];
 }
 
+export interface ResidentRelationshipSummary {
+  resident: string;
+  patrons: number;
+  patronEvents: number;
+  peerRelationships: number;
+  peerEvents: number;
+  peerInteractions: number;
+  latestEventAt?: string;
+  latestEventKind?: string;
+  latestEventTick?: number;
+}
+
+export interface RelationshipActivitySummary {
+  residentsWithRelationships: number;
+  totalPatrons: number;
+  totalPatronEvents: number;
+  totalPeerRelationships: number;
+  totalPeerEvents: number;
+  totalPeerInteractions: number;
+  residents: ResidentRelationshipSummary[];
+}
+
 export interface ResidentProgressSample {
   ts?: string;
   tick?: number;
@@ -334,6 +356,7 @@ export interface DashboardOverview {
   recentEvents: ResidentEventSummary[];
   recentLetters: RecentLetterSummary[];
   patrons?: PatronActivitySummary;
+  relationships?: RelationshipActivitySummary;
   readiness?: EventReadinessSummary;
 }
 

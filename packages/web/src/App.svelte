@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -1178,6 +1178,31 @@
     return summary?.tierCounts[tier] || 0;
   }
 
+  function relationshipActivityLabel(row: ResidentRelationshipSummary): string {
+    const patronLabel = `${row.patrons.toLocaleString()} patron${row.patrons === 1 ? '' : 's'}`;
+    const patronEventLabel = `${row.patronEvents.toLocaleString()} patron event${row.patronEvents === 1 ? '' : 's'}`;
+    const peerLabel = `${row.peerRelationships.toLocaleString()} peer tie${row.peerRelationships === 1 ? '' : 's'}`;
+    const interactionLabel = `${row.peerInteractions.toLocaleString()} interaction${row.peerInteractions === 1 ? '' : 's'}`;
+    return `${patronLabel} · ${patronEventLabel} · ${peerLabel} · ${interactionLabel} · ${relationshipLatestLabel(row)}`;
+  }
+
+  function relationshipLatestLabel(row: ResidentRelationshipSummary): string {
+    const kind = relationshipKindLabel(row.latestEventKind);
+    if (row.latestEventAt) return `${kind} ${timeAgo(row.latestEventAt)}`;
+    if (row.latestEventTick !== undefined) return `${kind} at tick ${row.latestEventTick}`;
+    return 'no recent relationship moment';
+  }
+
+  function relationshipKindLabel(kind: string | undefined): string {
+    return labelize((kind || 'relationship').replace(/[_-]+/g, ' '));
+  }
+
+  function relationshipTag(row: ResidentRelationshipSummary): string {
+    if (row.patronEvents > 0 && row.peerEvents > 0) return 'mixed';
+    if (row.patronEvents > 0) return 'patron';
+    return 'peer';
+  }
+
   function readinessLabel(level: ReadinessLevel | undefined): string {
     if (level === 'ok') return 'ready';
     if (level === 'fail') return 'blocked';
@@ -1236,6 +1261,7 @@
     </section>
     {@render EventReadinessPanel({ readiness: overview?.readiness })}
     {@render PatronSummaryPanel({ summary: overview?.patrons })}
+    {@render RelationshipSummaryPanel({ summary: overview?.relationships })}
     {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
     <section class="panel">
       <div class="panel-title">Recent Events</div>
@@ -1599,6 +1625,31 @@
         </div>
       {:else}
         <div class="empty">No patron ledger entries</div>
+      {/each}
+    </div>
+  </section>
+{/snippet}
+
+{#snippet RelationshipSummaryPanel({ summary }: { summary: RelationshipActivitySummary | undefined })}
+  <section class="panel">
+    <div class="panel-title">Resident Relationships</div>
+    <div class="mini-grid">
+      <span><strong>Residents</strong>{summary?.residentsWithRelationships || 0}</span>
+      <span><strong>Patron events</strong>{(summary?.totalPatronEvents || 0).toLocaleString()}</span>
+      <span><strong>Peer ties</strong>{(summary?.totalPeerRelationships || 0).toLocaleString()}</span>
+      <span><strong>Interactions</strong>{(summary?.totalPeerInteractions || 0).toLocaleString()}</span>
+    </div>
+    <div class="event-list">
+      {#each summary?.residents || [] as row}
+        <div class="event-row">
+          <span class="tag">{relationshipTag(row)}</span>
+          <span>
+            <strong>{residentDisplayName(row.resident)}</strong>
+            <small>{relationshipActivityLabel(row)}</small>
+          </span>
+        </div>
+      {:else}
+        <div class="empty">No Library relationship moments yet</div>
       {/each}
     </div>
   </section>

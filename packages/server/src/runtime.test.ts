@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { PatronActivitySummary } from '@nullcity-dashboard/shared';
+import type { PatronActivitySummary, RelationshipActivitySummary } from '@nullcity-dashboard/shared';
 import { describe, expect, test } from 'bun:test';
 import { buildSparkRuntimeSummary } from './runtime';
 
@@ -220,6 +220,7 @@ describe('RuntimeRepository resident deletion', () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-delete-'));
     const memoryDir = path.join(root, 'memory', 'resident_001');
+    const libraryDir = path.join(root, 'memory', 'library', 'res-resident_001');
     const controllerLogDir = path.join(root, 'logs', 'res:resident_001');
     const agentLogDir = path.join(root, 'agent-logs', 'res:resident_001');
     const repository = new RuntimeRepository(
@@ -230,14 +231,16 @@ describe('RuntimeRepository resident deletion', () => {
     );
     await Promise.all([
       fs.mkdir(memoryDir, { recursive: true }),
+      fs.mkdir(libraryDir, { recursive: true }),
       fs.mkdir(controllerLogDir, { recursive: true }),
       fs.mkdir(agentLogDir, { recursive: true }),
     ]);
 
     const result = await repository.deleteResidentFiles('res:resident_001');
 
-    expect(result.removed.sort()).toEqual([agentLogDir, controllerLogDir, memoryDir].sort());
+    expect(result.removed.sort()).toEqual([agentLogDir, controllerLogDir, libraryDir, memoryDir].sort());
     await expect(fs.stat(memoryDir)).rejects.toThrow();
+    await expect(fs.stat(libraryDir)).rejects.toThrow();
     await expect(fs.stat(controllerLogDir)).rejects.toThrow();
     await expect(fs.stat(agentLogDir)).rejects.toThrow();
   });
@@ -474,6 +477,131 @@ describe('RuntimeRepository patrons', () => {
     });
     expect(summary.patrons).toHaveLength(1);
     expect(summary.patrons[0]).toMatchObject({ handle: 'v***', balance: 12, standing: [{ points: 30, tier: 'ally' }] });
+  });
+});
+
+describe('RuntimeRepository relationships', () => {
+  test('summarizes library patron and peer relationships without exposing raw handles', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-relationships-'));
+    const memoryRoot = path.join(root, 'memory');
+    const libraryRoot = path.join(memoryRoot, 'library');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    await fs.mkdir(path.join(libraryRoot, 'res-agent'), { recursive: true });
+    await fs.mkdir(path.join(libraryRoot, 'res-hans'), { recursive: true });
+    await fs.writeFile(
+      path.join(libraryRoot, 'res-agent', 'timeline.jsonl'),
+      [
+        JSON.stringify({ kind: 'say', ts: '2026-05-25T19:59:00.000Z', text: 'hello' }),
+        JSON.stringify({ kind: 'patron_gift', ts: '2026-05-25T20:00:00.000Z', patronHandle: 'alice@example.com', amount: 42 }),
+        JSON.stringify({ kind: 'patron_gift', ts: '2026-05-25T20:00:30.000Z', patronHandle: 'ALICE@example.com', amount: 7 }),
+        JSON.stringify({ kind: 'patron_witness', ts: '2026-05-25T20:01:00.000Z', patronHandle: 'bob', note: 'watched' }),
+        JSON.stringify({ kind: 'patron_sponsor', ts: '2026-05-25T20:02:00.000Z', humanId: 'alice@example.com' }),
+        JSON.stringify({ kind: 'first_peer_encounter', ts: '2026-05-25T20:03:00.000Z', tick: 100, peerId: 'res:hans', interactions: 1 }),
+        JSON.stringify({ kind: 'relationship_repeated', ts: '2026-05-25T20:04:00.000Z', tick: 105, peerId: 'res:hans', interactions: 3 }),
+        ...Array.from({ length: 1001 }, (_, index) =>
+          JSON.stringify({ kind: 'say', ts: `2026-05-25T20:10:${String(index % 60).padStart(2, '0')}.000Z`, text: `filler ${index}` }),
+        ),
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(libraryRoot, 'res-hans', 'timeline.jsonl'),
+      [JSON.stringify({ kind: 'stuck_detected', ts: '2026-05-25T20:05:00.000Z' })].join('\n'),
+      'utf8',
+    );
+
+    const summary = await (
+      repository as {
+        relationshipSummary(limit?: number): Promise<RelationshipActivitySummary>;
+      }
+    ).relationshipSummary(5);
+
+    expect(summary).toMatchObject({
+      residentsWithRelationships: 1,
+      totalPatrons: 2,
+      totalPatronEvents: 4,
+      totalPeerRelationships: 1,
+      totalPeerEvents: 2,
+      totalPeerInteractions: 3,
+    });
+    expect(summary.residents).toHaveLength(1);
+    expect(summary.residents[0]).toMatchObject({
+      resident: 'res:agent',
+      patrons: 2,
+      patronEvents: 4,
+      peerRelationships: 1,
+      peerEvents: 2,
+      peerInteractions: 3,
+      latestEventAt: '2026-05-25T20:04:00.000Z',
+      latestEventKind: 'relationship_repeated',
+      latestEventTick: 105,
+    });
+    expect(JSON.stringify(summary)).not.toContain('alice@example.com');
+    expect(JSON.stringify(summary)).not.toContain('ALICE@example.com');
+    expect(JSON.stringify(summary)).not.toContain('bob');
+  });
+
+  test('filters library timelines to the visible resident allowlist', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-relationships-filter-'));
+    const memoryRoot = path.join(root, 'memory');
+    const libraryRoot = path.join(memoryRoot, 'library');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    await fs.mkdir(path.join(libraryRoot, 'res-agent'), { recursive: true });
+    await fs.mkdir(path.join(libraryRoot, 'res-archived'), { recursive: true });
+    await fs.writeFile(
+      path.join(libraryRoot, 'res-agent', 'timeline.jsonl'),
+      JSON.stringify({ kind: 'patron_gift', ts: '2026-05-25T20:00:00.000Z', patronHandle: 'visible' }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(libraryRoot, 'res-archived', 'timeline.jsonl'),
+      JSON.stringify({ kind: 'patron_gift', ts: '2026-05-25T20:01:00.000Z', patronHandle: 'private' }),
+      'utf8',
+    );
+
+    const summary = await (
+      repository as {
+        relationshipSummary(limit?: number, visibleResidents?: Iterable<string>): Promise<RelationshipActivitySummary>;
+      }
+    ).relationshipSummary(5, ['res:agent']);
+
+    expect(summary).toMatchObject({
+      residentsWithRelationships: 1,
+      totalPatrons: 1,
+      totalPatronEvents: 1,
+    });
+    expect(summary.residents.map(row => row.resident)).toEqual(['res:agent']);
+  });
+
+  test('returns an empty relationship summary when library timelines are missing', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-relationships-empty-'));
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+
+    await expect((repository as { relationshipSummary(limit?: number): Promise<unknown> }).relationshipSummary()).resolves.toMatchObject({
+      residentsWithRelationships: 0,
+      totalPatrons: 0,
+      totalPatronEvents: 0,
+      totalPeerRelationships: 0,
+      residents: [],
+    });
   });
 });
 

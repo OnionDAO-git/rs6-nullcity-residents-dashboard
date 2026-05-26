@@ -20,6 +20,8 @@ import type {
   PatronStandingSummary,
   PatronStandingTier,
   RecentLetterSummary,
+  RelationshipActivitySummary,
+  ResidentRelationshipSummary,
   ResidentDashboardRow,
   ResidentProgressSample,
   ResidentProgressSummary,
@@ -239,6 +241,8 @@ export class RuntimeRepository {
     const candidates = [
       path.join(this.memoryRoot, safeSlug),
       path.join(this.memoryRoot, displaySlug),
+      path.join(this.memoryRoot, 'library', safeSlug),
+      path.join(this.memoryRoot, 'library', displaySlug),
       path.join(this.logsRoot, resident),
       path.join(this.logsRoot, safeSlug),
       path.join(this.logsRoot, displaySlug),
@@ -291,6 +295,26 @@ export class RuntimeRepository {
       readJsonFile<unknown>(path.join(this.memoryRoot, 'patron-standing.json')),
     ]);
     return buildPatronSummary(currency, standing, limit);
+  }
+
+  async relationshipSummary(limit = 20, visibleResidents?: Iterable<string>): Promise<RelationshipActivitySummary> {
+    const libraryRoot = path.join(this.memoryRoot, 'library');
+    const visible = visibleResidents ? normalizedResidentSet(visibleResidents) : undefined;
+    if (visible && visible.size === 0) return buildRelationshipSummary([], limit);
+    const files = await listFiles(libraryRoot, ['timeline.jsonl']);
+    const summaries = await Promise.all(
+      files.map(async file => {
+        const resident = residentFromLibraryTimeline(file);
+        if (!resident) return undefined;
+        if (visible && !visible.has(feedKey(resident))) return undefined;
+        const timeline = await readJsonl<unknown>(path.join(libraryRoot, file), Number.MAX_SAFE_INTEGER);
+        return summarizeRelationshipTimeline(resident, timeline);
+      }),
+    );
+    return buildRelationshipSummary(
+      summaries.filter((summary): summary is ResidentRelationshipSummary => Boolean(summary)),
+      limit,
+    );
   }
 
   async listBenchmarkArtifacts(limit = 200): Promise<BenchmarkArtifactSummary[]> {
@@ -452,6 +476,10 @@ function feedKey(resident: string): string {
   return resident.trim().toLowerCase().replace(/^res:/, '');
 }
 
+function normalizedResidentSet(residents: Iterable<string>): Set<string> {
+  return new Set([...residents].map(feedKey).filter(Boolean));
+}
+
 function normalizeBenchmarkRunId(value: string): string | undefined {
   const trimmed = value.trim().replace(/\.json$/i, '');
   return /^[A-Za-z0-9_.-]{1,160}$/.test(trimmed) ? trimmed : undefined;
@@ -535,6 +563,123 @@ function buildPatronSummary(currencyRaw: unknown, standingRaw: unknown, limit: n
     tierCounts,
     patrons,
   };
+}
+
+const PATRON_RELATIONSHIP_KINDS = new Set(['patron_gift', 'patron_witness', 'patron_sponsor', 'patron_ask']);
+const PEER_RELATIONSHIP_KINDS = new Set(['first_peer_encounter', 'relationship_repeated', 'relationship_parting']);
+
+function residentFromLibraryTimeline(file: string): string | undefined {
+  const slug = path.basename(path.dirname(file));
+  if (!slug.startsWith('res-')) return undefined;
+  const name = slug.slice('res-'.length).trim();
+  return name ? `res:${name}` : undefined;
+}
+
+function summarizeRelationshipTimeline(resident: string, timeline: unknown[]): ResidentRelationshipSummary | undefined {
+  const patrons = new Set<string>();
+  const peers = new Set<string>();
+  const peerInteractions = new Map<string, number>();
+  let patronEvents = 0;
+  let peerEvents = 0;
+  let latestEventAt: string | undefined;
+  let latestEventKind: string | undefined;
+  let latestEventTick: number | undefined;
+  let latestSortValue = -1;
+
+  for (const entry of timeline) {
+    const record = asRecord(entry);
+    const kind = stringField(record, 'kind');
+    if (!kind) continue;
+
+    const isPatronEvent = PATRON_RELATIONSHIP_KINDS.has(kind);
+    const isPeerEvent = PEER_RELATIONSHIP_KINDS.has(kind);
+    if (!isPatronEvent && !isPeerEvent) continue;
+
+    if (isPatronEvent) {
+      patronEvents += 1;
+      const patronHandle = relationshipPatronHandle(record);
+      if (patronHandle) patrons.add(patronHandle.toLowerCase());
+    }
+
+    if (isPeerEvent) {
+      peerEvents += 1;
+      const peer = relationshipPeer(record);
+      if (peer) {
+        const peerKey = peer.toLowerCase();
+        peers.add(peerKey);
+        const interactions = finiteNumber(record.interactions);
+        if (interactions !== undefined) {
+          peerInteractions.set(peerKey, Math.max(peerInteractions.get(peerKey) || 0, interactions));
+        }
+      }
+    }
+
+    const timestamp = eventTimestamp(record);
+    const tick = numberField(record, 'tick');
+    const sortValue = timestampMs(timestamp) || tick || 0;
+    if (sortValue >= latestSortValue) {
+      latestSortValue = sortValue;
+      latestEventAt = timestamp;
+      latestEventKind = kind;
+      latestEventTick = tick;
+    }
+  }
+
+  if (patronEvents === 0 && peerEvents === 0) return undefined;
+  return {
+    resident,
+    patrons: patrons.size,
+    patronEvents,
+    peerRelationships: peers.size,
+    peerEvents,
+    peerInteractions: sumNumbers([...peerInteractions.values()]),
+    ...(latestEventAt ? { latestEventAt } : {}),
+    ...(latestEventKind ? { latestEventKind } : {}),
+    ...(latestEventTick !== undefined ? { latestEventTick } : {}),
+  };
+}
+
+function relationshipPatronHandle(record: Record<string, unknown>): string | undefined {
+  return (
+    stringField(record, 'patronHandle') ||
+    stringField(record, 'humanId') ||
+    stringField(record, 'handle') ||
+    stringField(record, 'human') ||
+    stringField(record, 'recipient')
+  )?.trim();
+}
+
+function relationshipPeer(record: Record<string, unknown>): string | undefined {
+  return (
+    stringField(record, 'peerId') ||
+    stringField(record, 'peer') ||
+    stringField(record, 'otherResident') ||
+    stringField(record, 'targetResident')
+  )?.trim();
+}
+
+function buildRelationshipSummary(rows: ResidentRelationshipSummary[], limit: number): RelationshipActivitySummary {
+  const sortedRows = rows
+    .filter(row => row.patronEvents > 0 || row.peerEvents > 0)
+    .sort(compareRelationshipRows);
+  return {
+    residentsWithRelationships: sortedRows.length,
+    totalPatrons: sumNumbers(sortedRows.map(row => row.patrons)),
+    totalPatronEvents: sumNumbers(sortedRows.map(row => row.patronEvents)),
+    totalPeerRelationships: sumNumbers(sortedRows.map(row => row.peerRelationships)),
+    totalPeerEvents: sumNumbers(sortedRows.map(row => row.peerEvents)),
+    totalPeerInteractions: sumNumbers(sortedRows.map(row => row.peerInteractions)),
+    residents: sortedRows.slice(0, normalizedLimit(limit)),
+  };
+}
+
+function compareRelationshipRows(a: ResidentRelationshipSummary, b: ResidentRelationshipSummary): number {
+  return (
+    timestampMs(b.latestEventAt) - timestampMs(a.latestEventAt) ||
+    (b.latestEventTick || 0) - (a.latestEventTick || 0) ||
+    b.patronEvents + b.peerEvents - (a.patronEvents + a.peerEvents) ||
+    a.resident.localeCompare(b.resident)
+  );
 }
 
 function normalizePatronBalances(value: unknown): Map<string, number> {
