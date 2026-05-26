@@ -34,6 +34,7 @@ import type {
   RuntimeReadModel,
   RuntimeState,
   SoulSummary,
+  StoryArcDashboardSummary,
   Position,
 } from '@nullcity-dashboard/shared';
 import type { ResidentFeedSnapshot } from './gateway';
@@ -69,7 +70,7 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference, saved, progress] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference, saved, progress, storyArc] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
@@ -79,6 +80,7 @@ export class RuntimeRepository {
       this.readResidentInference(resident),
       this.readResidentSave(resident),
       this.readResidentProgress(memoryDir),
+      this.readResidentStoryArc(resident),
     ]);
 
     const liveActions = feedToActionEntries(feed);
@@ -137,6 +139,7 @@ export class RuntimeRepository {
       },
       spark,
       progress,
+      storyArc,
       memory: {
         indexMarkdown,
         files: memoryFiles,
@@ -172,6 +175,7 @@ export class RuntimeRepository {
           feed: runtime.body.feed,
           spark: runtime.spark,
           progress: runtime.progress,
+          storyArc: runtime.storyArc,
           lastEvent: latestEvent(runtime.logs.actions),
           errors: runtime.errors,
         };
@@ -454,6 +458,14 @@ export class RuntimeRepository {
     };
   }
 
+  private async readResidentStoryArc(resident: string): Promise<StoryArcDashboardSummary | undefined> {
+    const portrait = await readJsonFile<unknown>(path.join(this.memoryRoot, 'library', residentSlug(resident), 'portrait.json'));
+    const portraitArc = normalizeStoryArc(asRecord(portrait).storyArc);
+    if (portraitArc) return portraitArc;
+    const timeline = await readJsonl<unknown>(path.join(this.memoryRoot, 'library', residentSlug(resident), 'timeline.jsonl'), Number.MAX_SAFE_INTEGER);
+    return inferStoryArcFromTimeline(timeline);
+  }
+
   private async readBenchmarkFile(file: string): Promise<(BenchmarkArtifact & { file: string }) | undefined> {
     const raw = await readJsonFile<unknown>(safeJoin(this.benchmarkRoot, file));
     const artifact = normalizeBenchmarkArtifact(file, raw);
@@ -503,6 +515,132 @@ function normalizeRecentLetter(value: unknown, file: string, index: number): Rec
       deliveryChannels: stringArray(record.deliveryChannels) || [],
     },
   ];
+}
+
+function normalizeStoryArc(value: unknown): StoryArcDashboardSummary | undefined {
+  const record = asRecord(value);
+  const phase = storyArcPhase(record.phase);
+  if (!phase) return undefined;
+  const evidence = normalizeStoryArcEvidence(record.evidence);
+  return {
+    phase,
+    ...(stringField(record, 'summary') ? { summary: stringField(record, 'summary') } : {}),
+    ...(numberField(record, 'startedAtTick') !== undefined ? { startedAtTick: numberField(record, 'startedAtTick') } : {}),
+    ...(numberField(record, 'latestEventTick') !== undefined ? { latestEventTick: numberField(record, 'latestEventTick') } : {}),
+    ...(stringField(record, 'latestEventKind') ? { latestEventKind: stringField(record, 'latestEventKind') } : {}),
+    ...(evidence ? { evidence } : {}),
+  };
+}
+
+type StoryArcCategory = keyof NonNullable<StoryArcDashboardSummary['evidence']>;
+type ClassifiedStoryArcEvent = { phase: StoryArcDashboardSummary['phase']; category: StoryArcCategory; tick: number; kind: string };
+
+const storyArcFundingKinds = new Set(['patron_gift', 'patron_witness', 'patron_sponsor']);
+const storyArcProgressKinds = new Set([
+  'first_xp',
+  'first_object_interaction',
+  'first_place_entry',
+  'first_peer_encounter',
+  'faction_change',
+  'near_death_survival',
+  'relationship_repeated',
+  'stuck_recovered',
+]);
+const storyArcResolutionKinds = new Set(['legacy_event', 'prepared_epitaph', 'wants_unfulfilled']);
+const storyArcLetterKinds = new Set(['civic_milestone', 'epitaph', 'epitaph_letter', 'letter', 'letter_dispatched', 'patron_letter', 'standing_tier_crossed']);
+const storyArcPhaseRank: Record<StoryArcDashboardSummary['phase'], number> = {
+  pitch: 1,
+  fund: 2,
+  progress: 3,
+  resolve: 4,
+  letter: 5,
+};
+const storyArcPitchText = /\b(fund|funding|goal|hope|need|please|request|sponsor|support me|want|wish|would like)\b/i;
+
+function inferStoryArcFromTimeline(timeline: unknown[]): StoryArcDashboardSummary | undefined {
+  const events = timeline
+    .map(asRecord)
+    .sort((a, b) => (numberField(a, 'tick') ?? 0) - (numberField(b, 'tick') ?? 0))
+    .map(classifyStoryArcEvent)
+    .filter((event): event is ClassifiedStoryArcEvent => Boolean(event));
+  if (events.length === 0) return undefined;
+  const evidence = {
+    pitches: events.filter(event => event.category === 'pitches').length,
+    fundingEvents: events.filter(event => event.category === 'fundingEvents').length,
+    progressEvents: events.filter(event => event.category === 'progressEvents').length,
+    resolutionEvents: events.filter(event => event.category === 'resolutionEvents').length,
+    letterEvents: events.filter(event => event.category === 'letterEvents').length,
+  };
+  const latest = events.reduce<ClassifiedStoryArcEvent | undefined>((best, event) => {
+    if (!best || storyArcPhaseRank[event.phase] > storyArcPhaseRank[best.phase]) return event;
+    if (storyArcPhaseRank[event.phase] === storyArcPhaseRank[best.phase] && event.tick > best.tick) return event;
+    return best;
+  }, undefined);
+  if (!latest) return undefined;
+  return {
+    phase: latest.phase,
+    summary: storyArcSummary(latest.phase, evidence),
+    startedAtTick: events[0]?.tick,
+    latestEventTick: latest.tick,
+    latestEventKind: latest.kind,
+    evidence,
+  };
+}
+
+function classifyStoryArcEvent(record: Record<string, unknown>): ClassifiedStoryArcEvent | undefined {
+  const kind = stringField(record, 'kind') || 'event';
+  const tick = numberField(record, 'tick') ?? 0;
+  if (storyArcLetterKinds.has(kind)) return { phase: 'letter', category: 'letterEvents', tick, kind };
+  if (storyArcResolutionKinds.has(kind)) return { phase: 'resolve', category: 'resolutionEvents', tick, kind };
+  if (storyArcProgressKinds.has(kind)) return { phase: 'progress', category: 'progressEvents', tick, kind };
+  if (storyArcFundingKinds.has(kind)) return { phase: 'fund', category: 'fundingEvents', tick, kind };
+  if (kind === 'request_attention' || (kind === 'say' && storyArcPitchText.test(stringField(record, 'text') || ''))) {
+    return { phase: 'pitch', category: 'pitches', tick, kind };
+  }
+  return undefined;
+}
+
+function storyArcSummary(phase: StoryArcDashboardSummary['phase'], evidence: NonNullable<StoryArcDashboardSummary['evidence']>): string {
+  if (phase === 'letter') return 'Letter aftermath is visible to patrons and the Library.';
+  if (phase === 'resolve') return 'The resident is resolving or closing the current arc.';
+  if (phase === 'progress') {
+    return evidence.fundingEvents > 0
+      ? 'Patron support has turned into visible in-game progress.'
+      : 'The resident is making visible in-game progress.';
+  }
+  if (phase === 'fund') return 'Patron support is recorded and waiting to become action.';
+  return evidence.pitches > 0 ? 'The resident has made a visible request or ambition.' : 'No active pitch recorded yet.';
+}
+
+function normalizeStoryArcEvidence(value: unknown): StoryArcDashboardSummary['evidence'] | undefined {
+  const record = asRecord(value);
+  const pitches = numberField(record, 'pitches');
+  const fundingEvents = numberField(record, 'fundingEvents');
+  const progressEvents = numberField(record, 'progressEvents');
+  const resolutionEvents = numberField(record, 'resolutionEvents');
+  const letterEvents = numberField(record, 'letterEvents');
+  if (
+    pitches === undefined &&
+    fundingEvents === undefined &&
+    progressEvents === undefined &&
+    resolutionEvents === undefined &&
+    letterEvents === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    pitches: pitches ?? 0,
+    fundingEvents: fundingEvents ?? 0,
+    progressEvents: progressEvents ?? 0,
+    resolutionEvents: resolutionEvents ?? 0,
+    letterEvents: letterEvents ?? 0,
+  };
+}
+
+function storyArcPhase(value: unknown): StoryArcDashboardSummary['phase'] | undefined {
+  return value === 'pitch' || value === 'fund' || value === 'progress' || value === 'resolve' || value === 'letter'
+    ? value
+    : undefined;
 }
 
 function opaqueLetterId(fields: { file: string; index: number; rawRecipient: string; kind: string; subject: string; dispatchedAt?: string }): string {

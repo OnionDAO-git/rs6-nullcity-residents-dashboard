@@ -213,6 +213,79 @@ describe('RuntimeRepository resident feeds', () => {
     expect(rows[0]?.body?.latestEvent).toBeUndefined();
     expect(rows[0]?.body?.saved).toBeUndefined();
   });
+
+  test('surfaces Library story arc summaries on resident rows', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-story-arc-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'missing-souls'),
+    );
+    await fs.mkdir(path.join(memoryRoot, 'library', 'res-agent'), { recursive: true });
+    await fs.writeFile(
+      path.join(memoryRoot, 'library', 'res-agent', 'portrait.json'),
+      JSON.stringify({
+        residentName: 'res:agent',
+        storyArc: {
+          phase: 'progress',
+          summary: 'Patron support has turned into visible in-game progress.',
+          latestEventTick: 42,
+          latestEventKind: 'stuck_recovered',
+          evidence: {
+            pitches: 1,
+            fundingEvents: 1,
+            progressEvents: 2,
+            resolutionEvents: 0,
+            letterEvents: 0,
+          },
+        },
+      }),
+      'utf8',
+    );
+
+    const rows = await repository.enrichResidents([{ name: 'res:agent', online: true }]);
+
+    expect(rows[0]?.storyArc).toMatchObject({
+      phase: 'progress',
+      latestEventTick: 42,
+      latestEventKind: 'stuck_recovered',
+      evidence: { fundingEvents: 1, progressEvents: 2 },
+    });
+  });
+
+  test('infers story arc summaries from Library timelines before portrait regeneration', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-story-arc-timeline-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'missing-souls'),
+    );
+    await fs.mkdir(path.join(memoryRoot, 'library', 'res-agent'), { recursive: true });
+    await fs.writeFile(
+      path.join(memoryRoot, 'library', 'res-agent', 'timeline.jsonl'),
+      [
+        JSON.stringify({ kind: 'say', tick: 1, text: 'I need support for the witness fire.' }),
+        JSON.stringify({ kind: 'patron_gift', tick: 2, patronHandle: 'p***', amount: 8 }),
+        JSON.stringify({ kind: 'first_xp', tick: 3, skill: 'Firemaking' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const rows = await repository.enrichResidents([{ name: 'res:agent', online: true }]);
+
+    expect(rows[0]?.storyArc).toMatchObject({
+      phase: 'progress',
+      latestEventTick: 3,
+      latestEventKind: 'first_xp',
+      evidence: { pitches: 1, fundingEvents: 1, progressEvents: 1 },
+    });
+  });
 });
 
 describe('RuntimeRepository resident deletion', () => {

@@ -718,6 +718,29 @@
     return parts.join(' | ') || '-';
   }
 
+  function residentStoryArcLabel(row: ResidentDashboardRow): string {
+    return row.storyArc ? `arc: ${row.storyArc.phase}` : '-';
+  }
+
+  function residentStoryArcDetail(row: ResidentDashboardRow): string {
+    const arc = row.storyArc;
+    if (!arc) return '';
+    const evidence = arc.evidence;
+    const latest =
+      arc.latestEventKind && arc.latestEventTick !== undefined
+        ? `${arc.latestEventKind} @ ${arc.latestEventTick}`
+        : arc.latestEventKind || '';
+    const counts = evidence
+      ? [
+          evidence.fundingEvents > 0 ? `${evidence.fundingEvents} funded` : '',
+          evidence.progressEvents > 0 ? `${evidence.progressEvents} progress` : '',
+          evidence.resolutionEvents > 0 ? `${evidence.resolutionEvents} resolved` : '',
+          evidence.letterEvents > 0 ? `${evidence.letterEvents} letters` : '',
+        ].filter(Boolean).join(' | ')
+      : '';
+    return [latest, counts].filter(Boolean).join(' | ') || arc.summary || '';
+  }
+
   function residentSurroundingsLabel(row: ResidentDashboardRow): string {
     const nearby = row.feed?.nearby;
     if (!nearby) return '-';
@@ -1504,12 +1527,18 @@
 {#snippet ResidentTable({ rows, canDelete, onselect, ondelete }: { rows: ResidentDashboardRow[]; canDelete: boolean; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
   <section class="table-wrap">
     <table>
-      <thead><tr><th>Resident</th><th>Status</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Resident</th><th>Status</th><th>Story</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
       <tbody>
         {#each rows as row}
           <tr onclick={() => onselect(`/residents/${encodeURIComponent(row.name)}`)}>
             <td><strong>{residentDisplayName(row.name)}</strong><small>{row.controllerId || 'uncontrolled'}</small></td>
             <td><span class:ok={row.online} class="dot"></span>{row.online ? 'online' : 'offline'}</td>
+            <td>
+              <strong>{residentStoryArcLabel(row)}</strong>
+              {#if residentStoryArcDetail(row)}
+                <small>{residentStoryArcDetail(row)}</small>
+              {/if}
+            </td>
             <td>{row.thinking?.mode || 'unknown'}</td>
             <td class="num">{row.attention ?? '-'}</td>
             <td>{residentFeedLabel(row)}</td>
@@ -1532,7 +1561,7 @@
             </td>
           </tr>
         {:else}
-          <tr><td colspan="9" class="empty">No residents reported</td></tr>
+          <tr><td colspan="10" class="empty">No residents reported</td></tr>
         {/each}
       </tbody>
     </table>

@@ -229,6 +229,25 @@ export interface ResidentProgressSummary {
   stuckTicks?: number;
 }
 
+export type StoryArcPhase = 'pitch' | 'fund' | 'progress' | 'resolve' | 'letter';
+
+export interface StoryArcEvidenceSummary {
+  pitches: number;
+  fundingEvents: number;
+  progressEvents: number;
+  resolutionEvents: number;
+  letterEvents: number;
+}
+
+export interface StoryArcDashboardSummary {
+  phase: StoryArcPhase;
+  summary?: string;
+  startedAtTick?: number;
+  latestEventTick?: number;
+  latestEventKind?: string;
+  evidence?: StoryArcEvidenceSummary;
+}
+
 export interface ResidentSavedSkill {
   level: number;
   xp: number;
@@ -281,6 +300,7 @@ export interface RuntimeReadModel {
   };
   spark?: SparkRuntimeSummary;
   progress?: ResidentProgressSummary;
+  storyArc?: StoryArcDashboardSummary;
   memory: {
     indexMarkdown?: string;
     files: string[];
@@ -310,6 +330,7 @@ export interface ResidentDashboardRow {
   feed?: PerceptionFeedSummary;
   spark?: SparkRuntimeSummary;
   progress?: ResidentProgressSummary;
+  storyArc?: StoryArcDashboardSummary;
   lastEvent?: ResidentEventSummary;
   activeTrade?: unknown;
   errors?: string[];
