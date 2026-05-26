@@ -568,6 +568,10 @@ h1 {
   color: var(--s-amber) !important;
 }
 
+.fail {
+  color: var(--s-rose) !important;
+}
+
 .notice {
   margin-bottom: 16px;
   padding: 12px 14px;
@@ -1136,6 +1140,15 @@ pre {
   padding: 3px 6px;
   background: var(--ground-2);
   border: 1px solid var(--ground-4);
+}
+
+.readiness-panel {
+  margin-bottom: 24px;
+  border-left: 3px solid var(--s-blue);
+}
+
+.readiness-list {
+  margin-top: 14px;
 }
 
 .event-list,

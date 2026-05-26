@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
 import { config } from './config';
 import { GatewayClient } from './gateway';
+import { buildEventReadinessSummary } from './readiness';
 import { RuntimeRepository } from './runtime';
 import { routeRs6Api } from './rs6/routes';
 import { jsonResponse, notFound, pathExists, textResponse } from './util';
@@ -170,14 +171,25 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   if (method === 'GET' && pathname === '/api/overview') {
     const residents = await safeResidents(url.searchParams.get('filter') || 'all');
     const rows = await enrichResidentRows(residents);
-    const [logs, recentLetters, patrons] = await Promise.all([
+    const [logs, recentLetters, patrons, gatewayStatus, controllerStatus, souls] = await Promise.all([
       runtime.readAllLogs(60),
       runtime.recentLetters(12),
       runtime.patronSummary(12),
+      gateway.probeStatus(),
+      runtime.status(),
+      runtime.listSouls(),
     ]);
+    const readiness = buildEventReadinessSummary({
+      gateway: gatewayStatus,
+      controller: controllerStatus,
+      residents: rows,
+      souls,
+      recentLetters,
+      patrons,
+    });
     return jsonResponse({
-      gateway: await gateway.probeStatus(),
-      controller: await runtime.status(),
+      gateway: gatewayStatus,
+      controller: controllerStatus,
       residents: rows,
       recentEvents: logs.actions.slice(-20).map(entry => ({
         kind: typeof entry.source === 'string' ? entry.source : 'action',
@@ -187,6 +199,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
       })),
       recentLetters,
       patrons,
+      readiness,
     });
   }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, RecentLetterSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -1178,6 +1178,18 @@
     return summary?.tierCounts[tier] || 0;
   }
 
+  function readinessLabel(level: ReadinessLevel | undefined): string {
+    if (level === 'ok') return 'ready';
+    if (level === 'fail') return 'blocked';
+    return 'needs attention';
+  }
+
+  function readinessClass(level: ReadinessLevel | undefined): string {
+    if (level === 'ok') return 'ok';
+    if (level === 'fail') return 'fail';
+    return 'warn';
+  }
+
   function soulTitle(soul: SoulSummary): string {
     return soul.title || soul.id;
   }
@@ -1222,6 +1234,7 @@
       <div class="metric"><span>Online</span><strong>{overview?.residents.filter(r => r.online).length || 0}</strong></div>
       <div class="metric"><span>Runtime</span><strong>{overview?.controller.residentsWithRuntime || 0}</strong></div>
     </section>
+    {@render EventReadinessPanel({ readiness: overview?.readiness })}
     {@render PatronSummaryPanel({ summary: overview?.patrons })}
     {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
     <section class="panel">
@@ -1537,6 +1550,32 @@
       {/each}
     </div>
   </section>
+{/snippet}
+
+{#snippet EventReadinessPanel({ readiness }: { readiness: EventReadinessSummary | undefined })}
+  <section class="panel readiness-panel">
+    <div class="row">
+      <div class="panel-title">Event Readiness</div>
+      <span class={`tag ${readinessClass(readiness?.level)}`}>{readinessLabel(readiness?.level)}</span>
+    </div>
+    <div class="event-list readiness-list">
+      {#each readiness?.checks || [] as check}
+        {@render ReadinessCheckRow({ check })}
+      {:else}
+        <div class="empty">No readiness checks reported</div>
+      {/each}
+    </div>
+  </section>
+{/snippet}
+
+{#snippet ReadinessCheckRow({ check }: { check: ReadinessCheckSummary })}
+  <div class="event-row">
+    <span class={`tag ${readinessClass(check.level)}`}>{check.level}</span>
+    <span>
+      <strong>{check.label}</strong>
+      <small>{check.detail}</small>
+    </span>
+  </div>
 {/snippet}
 
 {#snippet PatronSummaryPanel({ summary }: { summary: PatronActivitySummary | undefined })}

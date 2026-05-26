@@ -311,6 +311,22 @@ export interface ControllerStatus {
   lastError?: string;
 }
 
+export type ReadinessLevel = 'ok' | 'warn' | 'fail';
+
+export interface ReadinessCheckSummary {
+  id: string;
+  label: string;
+  level: ReadinessLevel;
+  detail: string;
+  count?: number;
+}
+
+export interface EventReadinessSummary {
+  level: ReadinessLevel;
+  updatedAt: string;
+  checks: ReadinessCheckSummary[];
+}
+
 export interface DashboardOverview {
   gateway: GatewayStatus;
   controller: ControllerStatus;
@@ -318,6 +334,7 @@ export interface DashboardOverview {
   recentEvents: ResidentEventSummary[];
   recentLetters: RecentLetterSummary[];
   patrons?: PatronActivitySummary;
+  readiness?: EventReadinessSummary;
 }
 
 export type BenchmarkRunStatus = 'passed' | 'failed' | 'timeout' | 'error' | 'cancelled';
