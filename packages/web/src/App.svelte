@@ -6,6 +6,7 @@
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
   import { compactJson, timeAgo } from './lib/format';
+  import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
 
   let route = window.location.pathname;
@@ -410,7 +411,7 @@
   }
 
   function residentIsOnline(): boolean {
-    return selectedRuntime?.online === true;
+    return isResidentOnline(selectedRuntime, activeResidentSession);
   }
 
   async function ensureObserveRouteSession() {
