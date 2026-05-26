@@ -7,6 +7,9 @@ export interface ActivitySnapshot {
   actionLabel: string;
   actionAgeLabel: string;
   actionDetail: string;
+  actionResultLabel: string;
+  actionResultAgeLabel: string;
+  actionResultDetail: string;
   inferenceLabel: string;
   inferenceAgeLabel: string;
   progressLabel: string;
@@ -26,12 +29,13 @@ export interface ActivitySnapshot {
 const STALE_ACTION_MS = 120_000;
 
 export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined, now = Date.now()): ActivitySnapshot {
-  const latestAction = [...(runtime?.logs.actions || [])].reverse().find(entry => {
-    const action = asRecord(entry.action);
-    return action.kind || action.type || entry.result;
-  });
+  const actionLog = runtime?.logs.actions || [];
+  const { entry: latestAction, index: latestActionIndex } = findLatestAction(actionLog);
+  const { entry: latestActionResult, index: latestActionResultIndex } = findLatestResult(actionLog);
   const latestInference = runtime?.thinking.latestInference || runtime?.logs.inference.at(-1);
   const actionAgeMs = ageMs(latestAction?.t, now);
+  const actionResultAgeMs = ageMs(latestActionResult?.t, now);
+  const actionResultPending = latestActionIndex >= 0 && latestActionIndex > latestActionResultIndex;
   const inferenceAgeMs = ageMs(latestInference?.t, now);
   const feedAgeMs = ageMs(runtime?.body.lastFeedAt, now);
   const livePerception = session?.latestPerception || runtime?.body.latestPerception;
@@ -46,6 +50,9 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     actionLabel: formatAction(latestAction),
     actionAgeLabel: formatAge(actionAgeMs),
     actionDetail: formatActionDetail(latestAction),
+    actionResultLabel: formatActionResult(latestActionResult, actionResultPending),
+    actionResultAgeLabel: formatAge(actionResultAgeMs),
+    actionResultDetail: formatActionResultDetail(latestActionResult, actionResultAgeMs, actionResultPending, actionAgeMs),
     inferenceLabel: formatInference(latestInference),
     inferenceAgeLabel: formatAge(inferenceAgeMs),
     ...formatProgress(runtime, now),
@@ -58,6 +65,21 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     eventLabel: formatEvents(runtime, livePerception),
     stale,
   };
+}
+
+function findLatestAction(entries: ActionLogEntry[]): { entry: ActionLogEntry | undefined; index: number } {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const action = asRecord(entries[index]?.action);
+    if (action.kind || action.type) return { entry: entries[index], index };
+  }
+  return { entry: undefined, index: -1 };
+}
+
+function findLatestResult(entries: ActionLogEntry[]): { entry: ActionLogEntry | undefined; index: number } {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (entries[index]?.result) return { entry: entries[index], index };
+  }
+  return { entry: undefined, index: -1 };
 }
 
 function statusText(online: boolean, stale: boolean, actionAgeMs: number | undefined, feedLive: boolean, tick: number | undefined): string {
@@ -179,6 +201,32 @@ function formatActionDetail(entry: ActionLogEntry | undefined): string {
     resultLabel(entry.result),
     entry.source ? `source ${entry.source}` : '',
     typeof entry.tick === 'number' ? `tick ${entry.tick}` : '',
+  ].filter(Boolean);
+  return parts.join(' | ') || '-';
+}
+
+function formatActionResult(entry: ActionLogEntry | undefined, pending: boolean): string {
+  if (pending) return 'pending';
+  if (!entry) return 'no result logged';
+  return resultStatusLabel(entry.result) || 'result logged';
+}
+
+function formatActionResultDetail(entry: ActionLogEntry | undefined, resultAgeMs: number | undefined, pending: boolean, actionAgeMs: number | undefined): string {
+  if (pending) {
+    const actionAge = actionAgeMs !== undefined ? `action ${formatAge(actionAgeMs)}` : '';
+    return ['awaiting result for latest action', actionAge].filter(Boolean).join(' | ');
+  }
+  if (!entry) return '-';
+  const result = asRecord(entry.result);
+  const reason = resultReason(result);
+  const requestId = stringField(result, 'requestId') || stringField(entry, 'requestId');
+  const parts = [
+    stringField(entry, 'cause') || stringField(asRecord(entry.action), 'cause'),
+    reason ? `reason ${normalizeReason(reason)}` : '',
+    entry.source ? `source ${entry.source}` : '',
+    typeof entry.tick === 'number' ? `tick ${entry.tick}` : '',
+    requestId ? `request ${truncate(requestId, 18)}` : '',
+    resultAgeMs !== undefined ? formatAge(resultAgeMs) : '',
   ].filter(Boolean);
   return parts.join(' | ') || '-';
 }
@@ -309,9 +357,50 @@ function ageMs(value: string | undefined, now: number): number | undefined {
 }
 
 function resultLabel(value: unknown): string {
+  const status = resultStatusLabel(value);
+  if (status === 'success') return 'ok';
+  if (status) return status;
+  return '';
+}
+
+function resultStatusLabel(value: unknown): string | undefined {
+  if (typeof value === 'string') return normalizedResultStatus(value);
   const record = asRecord(value);
-  if (typeof record.ok === 'boolean') return record.ok ? 'ok' : 'failed';
-  return stringField(record, 'status') || stringField(record, 'kind') || '';
+  const explicitStatus = normalizedResultStatus(stringField(record, 'finalStatus') || stringField(record, 'status') || stringField(record, 'kind'));
+  if (explicitStatus) return explicitStatus;
+  const safeReason = resultReason(record);
+  const reasonStatus = normalizedResultStatus(safeReason);
+  if (reasonStatus === 'timeout') return 'timeout';
+  if (typeof record.ok === 'boolean') return record.ok ? 'success' : 'failed';
+  if (safeReason) return 'failed';
+  if (stringField(record, 'error')) return 'failed';
+  return reasonStatus;
+}
+
+function normalizedResultStatus(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase().replaceAll('-', '_');
+  if (normalized === 'ok' || normalized === 'accepted' || normalized === 'success' || normalized === 'succeeded') return 'success';
+  if (normalized.includes('timeout')) return 'timeout';
+  if (normalized === 'failed' || normalized === 'failure' || normalized === 'blocked' || normalized.includes('error')) return 'failed';
+  return undefined;
+}
+
+function resultReason(record: Record<string, unknown>): string | undefined {
+  return (
+    enumLikeReason(stringField(record, 'finalReason')) ||
+    enumLikeReason(stringField(record, 'reason')) ||
+    (stringField(record, 'error') ? 'error' : undefined)
+  );
+}
+
+function normalizeReason(reason: string): string {
+  const normalized = reason.toLowerCase().replaceAll('-', '_');
+  return (normalized.includes('timeout') ? 'timeout' : normalized).replaceAll('_', ' ');
+}
+
+function enumLikeReason(reason: string | undefined): string | undefined {
+  return reason && /^[A-Za-z0-9_:-]{1,64}$/.test(reason) ? reason : undefined;
 }
 
 function stringField(value: unknown, key: string): string | undefined {

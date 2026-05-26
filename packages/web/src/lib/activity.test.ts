@@ -108,6 +108,163 @@ describe('buildActivitySnapshot', () => {
     expect(snapshot.actionDetail).toContain('routine_loop_break');
   });
 
+  test('keeps attempted action separate from later result-only rows', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:40.000Z',
+              source: 'thinking',
+              action: { kind: 'move_to', target: { x: 3233, y: 3244, level: 0 }, range: 1 },
+            },
+            {
+              t: '2026-05-20T17:43:42.000Z',
+              source: 'body',
+              result: { ok: true, requestId: 'controller-1234567890-abcdef' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(snapshot.actionLabel).toBe('move to 3233, 3244, 0');
+    expect(snapshot.actionResultLabel).toBe('success');
+    expect(snapshot.actionResultAgeLabel).toBe('18s ago');
+    expect(snapshot.actionResultDetail).toBe('source body | request controller-123456... | 18s ago');
+  });
+
+  test('classifies timeout and failed action results for operator QA', () => {
+    const timeoutSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'body',
+              result: { ok: false, reason: 'action_result_timeout' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+    const failedSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'body',
+              result: { ok: false, reason: 'target_not_found' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+    const statusTimeoutSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'body',
+              result: { status: 'timeout' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(timeoutSnapshot.actionResultLabel).toBe('timeout');
+    expect(timeoutSnapshot.actionResultDetail).toBe('reason timeout | source body | 10s ago');
+    expect(failedSnapshot.actionResultLabel).toBe('failed');
+    expect(failedSnapshot.actionResultDetail).toBe('reason target not found | source body | 10s ago');
+    expect(statusTimeoutSnapshot.actionResultLabel).toBe('timeout');
+  });
+
+  test('shows pending when the latest action is newer than the latest result', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:20.000Z',
+              source: 'thinking',
+              action: { kind: 'say', text: 'Checking the road.' },
+              result: { ok: true },
+            },
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'thinking',
+              action: { kind: 'move_to', target: { x: 3233, y: 3244, level: 0 }, range: 1 },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(snapshot.actionLabel).toBe('move to 3233, 3244, 0');
+    expect(snapshot.actionResultLabel).toBe('pending');
+    expect(snapshot.actionResultDetail).toBe('awaiting result for latest action | action 10s ago');
+  });
+
+  test('sanitizes raw action-result errors and treats enum-like reasons as failures', () => {
+    const errorSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'body',
+              result: { status: 'error', error: 'Error: token sk-secret and player@example.com should not render' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+    const rejectedSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'body',
+              result: { finalReason: 'inventory_full' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(errorSnapshot.actionResultLabel).toBe('failed');
+    expect(errorSnapshot.actionResultDetail).toBe('reason error | source body | 10s ago');
+    expect(errorSnapshot.actionResultDetail).not.toContain('sk-secret');
+    expect(errorSnapshot.actionResultDetail).not.toContain('player@example.com');
+    expect(rejectedSnapshot.actionResultLabel).toBe('failed');
+    expect(rejectedSnapshot.actionResultDetail).toBe('reason inventory full | source body | 10s ago');
+  });
+
   test('shows trade actions as readable player activity', () => {
     const target = { residentId: 'res:codex', playerHandle: 'Codex' };
     const cases = [
