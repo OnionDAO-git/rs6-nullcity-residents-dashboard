@@ -121,7 +121,7 @@ describe('buildActivitySnapshot', () => {
             {
               t: '2026-05-20T17:43:42.000Z',
               source: 'body',
-              result: { ok: true, requestId: 'controller-1234567890-abcdef' },
+              result: { status: 'success', requestId: 'controller-1234567890-abcdef' },
             },
           ],
           inference: [],
@@ -219,6 +219,104 @@ describe('buildActivitySnapshot', () => {
     );
 
     expect(snapshot.actionLabel).toBe('move to 3233, 3244, 0');
+    expect(snapshot.actionResultLabel).toBe('pending');
+    expect(snapshot.actionResultDetail).toBe('awaiting result for latest action | action 10s ago');
+  });
+
+  test('treats controller acknowledgements as pending until a final action result arrives', () => {
+    const pendingSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:49.000Z',
+              type: 'action_result',
+              source: 'body',
+              requestId: 'controller-1234567890-abcdef',
+              result: { ok: true },
+            },
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'thinking',
+              action: { kind: 'move_to', target: { x: 3233, y: 3244, level: 0 }, range: 1 },
+              result: { ok: true, requestId: 'controller-1234567890-abcdef' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+    const timeoutSnapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:49.000Z',
+              type: 'action_result',
+              source: 'body',
+              requestId: 'controller-1234567890-abcdef',
+              result: { ok: true },
+            },
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'thinking',
+              action: { kind: 'move_to', target: { x: 3233, y: 3244, level: 0 }, range: 1 },
+              result: { ok: true, requestId: 'controller-1234567890-abcdef' },
+            },
+            {
+              t: '2026-05-20T17:43:58.000Z',
+              tick: 67424,
+              requestId: 'controller-1234567890-abcdef',
+              result: { status: 'timeout', reason: 'timeout', requestId: 'controller-1234567890-abcdef' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(pendingSnapshot.actionResultLabel).toBe('pending');
+    expect(pendingSnapshot.actionResultDetail).toBe('awaiting result for latest action | action 10s ago');
+    expect(timeoutSnapshot.actionResultLabel).toBe('timeout');
+    expect(timeoutSnapshot.actionResultDetail).toBe('reason timeout | tick 67424 | request controller-123456... | 2s ago');
+  });
+
+  test('matches final action results to the latest action request id', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        logs: {
+          actions: [
+            {
+              t: '2026-05-20T17:43:40.000Z',
+              source: 'thinking',
+              action: { kind: 'move_to', target: { x: 3233, y: 3244, level: 0 }, range: 1 },
+              result: { ok: true, requestId: 'controller-action-a' },
+            },
+            {
+              t: '2026-05-20T17:43:50.000Z',
+              source: 'thinking',
+              action: { kind: 'move_to', target: { x: 3234, y: 3244, level: 0 }, range: 1 },
+              result: { ok: true, requestId: 'controller-action-b' },
+            },
+            {
+              t: '2026-05-20T17:43:58.000Z',
+              tick: 67424,
+              requestId: 'controller-action-a',
+              result: { status: 'timeout', reason: 'timeout', requestId: 'controller-action-a' },
+            },
+          ],
+          inference: [],
+        },
+      }),
+      session(),
+      now,
+    );
+
+    expect(snapshot.actionLabel).toBe('move to 3234, 3244, 0');
     expect(snapshot.actionResultLabel).toBe('pending');
     expect(snapshot.actionResultDetail).toBe('awaiting result for latest action | action 10s ago');
   });

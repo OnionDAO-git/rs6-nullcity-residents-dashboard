@@ -129,6 +129,78 @@ describe('RuntimeRepository resident feeds', () => {
     expect(model.logs.actions.at(-1)?.result).toEqual({ ok: true });
   });
 
+  test('merges trajectory action_result evidence so final timeouts beat gateway acknowledgements', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-trajectory-results-'));
+    const memoryRoot = path.join(root, 'memory');
+    const logsRoot = path.join(root, 'logs');
+    const evidenceDir = path.join(memoryRoot, 'res-agent', 'evidence');
+    const trajectoryPath = path.join(evidenceDir, 'trajectory', 'session-a.jsonl');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      logsRoot,
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+
+    await fs.mkdir(path.dirname(trajectoryPath), { recursive: true });
+    await fs.mkdir(path.join(logsRoot, 'res:agent', 'actions'), { recursive: true });
+    await fs.writeFile(
+      path.join(evidenceDir, 'index.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        resident: 'res:agent',
+        currentSessionId: 'session-a',
+        sessions: [
+          {
+            sessionId: 'session-a',
+            status: 'active',
+            trajectoryPath: 'trajectory/session-a.jsonl',
+            progressPath: 'progress/session-a.jsonl',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(logsRoot, 'res:agent', 'actions', '2026-05-26.jsonl'),
+      JSON.stringify({
+        t: '2026-05-26T08:16:51.000Z',
+        tick: 67406,
+        source: 'thinking',
+        action: { kind: 'move_to', target: { x: 3150, y: 3143, level: 0 } },
+        result: { ok: true, requestId: 'controller-1' },
+      }) + '\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      trajectoryPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        ts: '2026-05-26T08:17:02.000Z',
+        tick: 67424,
+        sessionId: 'session-a',
+        kind: 'action_result',
+        requestId: 'controller-1',
+        status: 'timeout',
+        reason: 'timeout',
+        evidence: [{ source: 'perception', detail: { kind: 'movement_timeout', target: { x: 3150, y: 3143, level: 0 } } }],
+      }) + '\n',
+      'utf8',
+    );
+
+    const model = await repository.residentRuntime('res:agent', { name: 'res:agent', online: true });
+
+    expect(model.body.lastAction?.result).toBe('timeout');
+    expect(model.logs.actions.at(-1)).toMatchObject({
+      t: '2026-05-26T08:17:02.000Z',
+      tick: 67424,
+      requestId: 'controller-1',
+      result: { status: 'timeout', reason: 'timeout', requestId: 'controller-1' },
+    });
+    expect(JSON.stringify(model.logs.actions.at(-1))).not.toContain('movement_timeout');
+  });
+
   test('filters dashboard resident rows to controller-discoverable SOUL residents when SOULs are present', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-known-residents-'));

@@ -31,7 +31,8 @@ const STALE_ACTION_MS = 120_000;
 export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, session: SpectatorSession | undefined, now = Date.now()): ActivitySnapshot {
   const actionLog = runtime?.logs.actions || [];
   const { entry: latestAction, index: latestActionIndex } = findLatestAction(actionLog);
-  const { entry: latestActionResult, index: latestActionResultIndex } = findLatestResult(actionLog);
+  const latestActionRequestId = entryRequestId(latestAction);
+  const { entry: latestActionResult, index: latestActionResultIndex } = findLatestResult(actionLog, latestActionRequestId);
   const latestInference = runtime?.thinking.latestInference || runtime?.logs.inference.at(-1);
   const actionAgeMs = ageMs(latestAction?.t, now);
   const actionResultAgeMs = ageMs(latestActionResult?.t, now);
@@ -75,11 +76,28 @@ function findLatestAction(entries: ActionLogEntry[]): { entry: ActionLogEntry | 
   return { entry: undefined, index: -1 };
 }
 
-function findLatestResult(entries: ActionLogEntry[]): { entry: ActionLogEntry | undefined; index: number } {
+function findLatestResult(entries: ActionLogEntry[], requestId?: string): { entry: ActionLogEntry | undefined; index: number } {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (entries[index]?.result) return { entry: entries[index], index };
+    const entry = entries[index];
+    if (!entry?.result || isDispatchAckResult(entry)) continue;
+    if (requestId && entryRequestId(entry) !== requestId) continue;
+    return { entry, index };
   }
   return { entry: undefined, index: -1 };
+}
+
+function isDispatchAckResult(entry: ActionLogEntry): boolean {
+  const result = asRecord(entry.result);
+  if (result.ok !== true) return false;
+  if (stringField(result, 'finalStatus') || stringField(result, 'status') || stringField(result, 'finalReason') || stringField(result, 'reason')) return false;
+  return numberOrString(result.requestId) !== undefined || numberOrString(entry.requestId) !== undefined;
+}
+
+function entryRequestId(entry: ActionLogEntry | undefined): string | undefined {
+  if (!entry) return undefined;
+  const result = asRecord(entry.result);
+  const requestId = numberOrString(result.requestId) ?? numberOrString(entry.requestId);
+  return requestId === undefined ? undefined : String(requestId);
 }
 
 function statusText(online: boolean, stale: boolean, actionAgeMs: number | undefined, feedLive: boolean, tick: number | undefined): string {

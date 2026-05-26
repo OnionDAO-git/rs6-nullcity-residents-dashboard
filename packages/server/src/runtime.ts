@@ -70,13 +70,14 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, inference, saved, progress, storyArc] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, trajectoryActions, inference, saved, progress, storyArc] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
       readTextFile(path.join(memoryDir, 'nervous-rules.md')),
       listFiles(memoryDir, ['.md', '.json']).catch(() => []),
       this.readResidentActions(resident),
+      this.readResidentTrajectoryActions(memoryDir),
       this.readResidentInference(resident),
       this.readResidentSave(resident),
       this.readResidentProgress(memoryDir),
@@ -84,7 +85,7 @@ export class RuntimeRepository {
     ]);
 
     const liveActions = feedToActionEntries(feed);
-    const mergedActions = [...actions, ...liveActions].sort(byTime);
+    const mergedActions = [...actions, ...trajectoryActions, ...liveActions].sort(byTime);
     const latestAction = [...mergedActions].reverse().find(entry => entry.action || entry.result);
     const latestInference = inference.at(-1);
     const reaction = latestAction?.source === 'nervous-system' ? latestAction : [...mergedActions].reverse().find(entry => entry.source === 'nervous-system');
@@ -456,6 +457,28 @@ export class RuntimeRepository {
       ...(latestMeaningful ? { latestMeaningful } : {}),
       ...(stuckTicks !== undefined ? { stuckTicks } : {}),
     };
+  }
+
+  private async readResidentTrajectoryActions(memoryDir: string): Promise<ActionLogEntry[]> {
+    const evidenceDir = path.join(memoryDir, 'evidence');
+    const index = asRecord(await readJsonFile<unknown>(path.join(evidenceDir, 'index.json')));
+    const sessions = Array.isArray(index.sessions) ? index.sessions.map(asRecord) : [];
+    const currentSessionId = stringField(index, 'currentSessionId');
+    const session =
+      sessions.find(item => stringField(item, 'sessionId') === currentSessionId && stringField(item, 'trajectoryPath')) ||
+      [...sessions].reverse().find(item => stringField(item, 'status') === 'active' && stringField(item, 'trajectoryPath')) ||
+      [...sessions].reverse().find(item => stringField(item, 'trajectoryPath'));
+    const relativeTrajectoryPath = stringField(session, 'trajectoryPath');
+    if (!relativeTrajectoryPath) return [];
+
+    let trajectoryFile: string;
+    try {
+      trajectoryFile = safeJoin(evidenceDir, relativeTrajectoryPath);
+    } catch {
+      return [];
+    }
+
+    return (await readJsonl<unknown>(trajectoryFile, 200)).flatMap(normalizeTrajectoryActionResult).sort(byTime).slice(-100);
   }
 
   private async readResidentStoryArc(resident: string): Promise<StoryArcDashboardSummary | undefined> {
@@ -1276,6 +1299,29 @@ function normalizeProgressSample(value: unknown): ResidentProgressSample[] {
   ];
 }
 
+function normalizeTrajectoryActionResult(value: unknown): ActionLogEntry[] {
+  const record = asRecord(value);
+  if (stringField(record, 'kind') !== 'action_result') return [];
+
+  const status = enumLikeField(record, 'status');
+  const reason = enumLikeField(record, 'reason');
+  const requestId = stringField(record, 'requestId');
+  if (!status && !reason) return [];
+
+  return [
+    {
+      ...(stringField(record, 'ts') ? { t: stringField(record, 'ts') } : {}),
+      ...(numberField(record, 'tick') !== undefined ? { tick: numberField(record, 'tick') } : {}),
+      ...(requestId ? { requestId } : {}),
+      result: {
+        ...(status ? { status } : {}),
+        ...(reason ? { reason } : {}),
+        ...(requestId ? { requestId } : {}),
+      },
+    },
+  ];
+}
+
 export function buildSparkRuntimeSummary(actions: ActionLogEntry[], inference: InferenceLogEntry[]): SparkRuntimeSummary {
   const modules = new Map<string, SparkRuntimeSummary['modules'][number]>();
   for (const entry of actions) {
@@ -1621,6 +1667,11 @@ function resultStatus(result: unknown): string | undefined {
 function stringField(value: unknown, key: string): string | undefined {
   const field = asRecord(value)[key];
   return typeof field === 'string' ? field : undefined;
+}
+
+function enumLikeField(value: unknown, key: string): string | undefined {
+  const field = stringField(value, key);
+  return field && /^[A-Za-z0-9_:-]{1,64}$/.test(field) ? field : undefined;
 }
 
 function numberField(value: unknown, key: string): number | undefined {
