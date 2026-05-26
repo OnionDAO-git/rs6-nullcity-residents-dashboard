@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type {
@@ -14,6 +15,7 @@ import type {
   ControllerStatus,
   InferenceLogEntry,
   PerceptionFeedSummary,
+  RecentLetterSummary,
   ResidentDashboardRow,
   ResidentProgressSample,
   ResidentProgressSummary,
@@ -264,6 +266,21 @@ export class RuntimeRepository {
     };
   }
 
+  async recentLetters(limit = 20): Promise<RecentLetterSummary[]> {
+    const lettersRoot = path.join(this.memoryRoot, 'data', 'letters');
+    const files = (await listFiles(lettersRoot, ['inbox.jsonl'])).filter(isDirectInboxFile);
+    const inboxes = await Promise.all(
+      files.map(async file => {
+        const entries = await readJsonl<unknown>(path.join(lettersRoot, file), 100);
+        return entries.flatMap((entry, index) => normalizeRecentLetter(entry, file, index));
+      }),
+    );
+    return inboxes
+      .flat()
+      .sort((a, b) => timestampMs(b.dispatchedAt) - timestampMs(a.dispatchedAt))
+      .slice(0, Math.max(0, limit));
+  }
+
   async listBenchmarkArtifacts(limit = 200): Promise<BenchmarkArtifactSummary[]> {
     const artifacts = await this.readBenchmarkArtifacts();
     return artifacts
@@ -414,6 +431,11 @@ export class RuntimeRepository {
   }
 }
 
+function isDirectInboxFile(file: string): boolean {
+  const parts = file.split(path.sep);
+  return parts.length === 2 && parts[1] === 'inbox.jsonl' && Boolean(parts[0]?.trim());
+}
+
 function feedKey(resident: string): string {
   return resident.trim().toLowerCase().replace(/^res:/, '');
 }
@@ -421,6 +443,38 @@ function feedKey(resident: string): string {
 function normalizeBenchmarkRunId(value: string): string | undefined {
   const trimmed = value.trim().replace(/\.json$/i, '');
   return /^[A-Za-z0-9_.-]{1,160}$/.test(trimmed) ? trimmed : undefined;
+}
+
+function normalizeRecentLetter(value: unknown, file: string, index: number): RecentLetterSummary[] {
+  const record = asRecord(value);
+  const kind = stringField(record, 'kind');
+  const rawRecipient = stringField(record, 'recipient') || path.basename(path.dirname(file));
+  if (!kind || !rawRecipient) return [];
+  const dispatchedAt = stringField(record, 'dispatchedAt');
+  const subject = stringField(record, 'subject') || `${kind} letter`;
+  return [
+    {
+      id: opaqueLetterId({ file, index, rawRecipient, kind, subject, dispatchedAt }),
+      kind,
+      subject,
+      recipient: redactRecipient(rawRecipient),
+      ...(stringField(record, 'senderResident') ? { senderResident: stringField(record, 'senderResident') } : {}),
+      ...(dispatchedAt ? { dispatchedAt } : {}),
+      deliveryChannels: stringArray(record.deliveryChannels) || [],
+    },
+  ];
+}
+
+function opaqueLetterId(fields: { file: string; index: number; rawRecipient: string; kind: string; subject: string; dispatchedAt?: string }): string {
+  const hash = createHash('sha256').update(JSON.stringify(fields)).digest('hex').slice(0, 16);
+  return `letter-${hash}`;
+}
+
+function redactRecipient(value: string): string {
+  const trimmed = value.trim();
+  const [local = '', domain] = trimmed.split('@', 2);
+  const prefix = local.slice(0, 1) || '*';
+  return domain ? `${prefix}***@${domain}` : `${prefix}***`;
 }
 
 function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifact | undefined {

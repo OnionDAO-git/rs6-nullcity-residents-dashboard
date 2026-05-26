@@ -242,6 +242,94 @@ describe('RuntimeRepository resident deletion', () => {
   });
 });
 
+describe('RuntimeRepository letters', () => {
+  test('lists recent inbox letters newest first with redacted recipients and no bodies', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-letters-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    const lettersRoot = path.join(memoryRoot, 'data', 'letters');
+    await fs.mkdir(path.join(lettersRoot, 'alice@example.com'), { recursive: true });
+    await fs.mkdir(path.join(lettersRoot, 'bob'), { recursive: true });
+    await fs.writeFile(
+      path.join(lettersRoot, 'alice@example.com', 'inbox.jsonl'),
+      [
+        '{',
+        JSON.stringify({
+          kind: 'standing_tier_crossed',
+          recipient: 'alice@example.com',
+          senderResident: 'res:hans',
+          subject: 'You are now Acquaintance of embassy',
+          body: 'private body',
+          dispatchedAt: '2026-05-25T23:00:12.071Z',
+          deliveryChannels: ['web-inbox'],
+        }),
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(lettersRoot, 'alice@example.com', 'old-inbox.jsonl'),
+      JSON.stringify({
+        kind: 'broadcast',
+        recipient: 'alice@example.com',
+        subject: 'This stale file should not appear',
+        dispatchedAt: '2026-05-26T00:06:00.000Z',
+      }),
+      'utf8',
+    );
+    await fs.mkdir(path.join(lettersRoot, 'alice@example.com', 'archive'), { recursive: true });
+    await fs.writeFile(
+      path.join(lettersRoot, 'alice@example.com', 'archive', 'inbox.jsonl'),
+      JSON.stringify({
+        kind: 'broadcast',
+        recipient: 'alice@example.com',
+        subject: 'This nested file should not appear',
+        dispatchedAt: '2026-05-26T00:07:00.000Z',
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(lettersRoot, 'bob', 'inbox.jsonl'),
+      JSON.stringify({
+        kind: 'epitaph',
+        recipient: 'bob',
+        senderResident: 'res:pip',
+        subject: 'Pip rests in the Library',
+        body: 'also private',
+        dispatchedAt: '2026-05-26T00:05:00.000Z',
+        deliveryChannels: ['web-inbox', 'wall'],
+      }),
+      'utf8',
+    );
+
+    const letters = await repository.recentLetters(2);
+
+    expect(letters.map(letter => letter.subject)).toEqual(['Pip rests in the Library', 'You are now Acquaintance of embassy']);
+    expect(letters.every(letter => /^letter-[a-f0-9]{16}$/.test(letter.id))).toBe(true);
+    expect(letters.some(letter => letter.subject.includes('should not appear'))).toBe(false);
+    expect(letters[1]?.id).not.toContain('alice');
+    expect(letters[1]?.id).not.toContain('example.com');
+    expect(letters[1]?.id).not.toContain('Acquaintance');
+    expect(letters[0]).toMatchObject({
+      kind: 'epitaph',
+      recipient: 'b***',
+      senderResident: 'res:pip',
+      dispatchedAt: '2026-05-26T00:05:00.000Z',
+      deliveryChannels: ['web-inbox', 'wall'],
+    });
+    expect(letters[1]).toMatchObject({
+      recipient: 'a***@example.com',
+      senderResident: 'res:hans',
+    });
+    expect(letters[0]).not.toHaveProperty('body');
+  });
+});
+
 describe('RuntimeRepository benchmarks', () => {
   test('lists benchmark artifacts newest first and skips malformed files', async () => {
     const { RuntimeRepository } = await import('./runtime');

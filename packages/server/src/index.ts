@@ -170,7 +170,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   if (method === 'GET' && pathname === '/api/overview') {
     const residents = await safeResidents(url.searchParams.get('filter') || 'all');
     const rows = await enrichResidentRows(residents);
-    const logs = await runtime.readAllLogs(60);
+    const [logs, recentLetters] = await Promise.all([runtime.readAllLogs(60), runtime.recentLetters(12)]);
     return jsonResponse({
       gateway: await gateway.probeStatus(),
       controller: await runtime.status(),
@@ -181,6 +181,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
         at: entry.t,
         text: typeof entry.cause === 'string' ? entry.cause : undefined,
       })),
+      recentLetters,
     });
   }
 
@@ -273,6 +274,9 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
 
   if (method === 'GET' && pathname === '/api/souls') return jsonResponse(await runtime.listSouls());
   if (method === 'GET' && pathname === '/api/logs') return jsonResponse(await runtime.readAllLogs());
+  if (method === 'GET' && pathname === '/api/letters/recent') {
+    return jsonResponse(await runtime.recentLetters(numberParam(url.searchParams.get('limit'), 20)));
+  }
   if (method === 'GET' && pathname === '/api/benchmarks') {
     return jsonResponse(await runtime.listBenchmarkArtifacts(numberParam(url.searchParams.get('limit'), 200)));
   }

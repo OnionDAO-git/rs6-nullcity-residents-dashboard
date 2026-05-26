@@ -154,6 +154,16 @@ export interface ResidentEventSummary {
   at?: string;
 }
 
+export interface RecentLetterSummary {
+  id: string;
+  kind: string;
+  subject: string;
+  recipient: string;
+  senderResident?: string;
+  dispatchedAt?: string;
+  deliveryChannels: string[];
+}
+
 export interface ResidentProgressSample {
   ts?: string;
   tick?: number;
@@ -280,6 +290,7 @@ export interface DashboardOverview {
   controller: ControllerStatus;
   residents: ResidentDashboardRow[];
   recentEvents: ResidentEventSummary[];
+  recentLetters: RecentLetterSummary[];
 }
 
 export type BenchmarkRunStatus = 'passed' | 'failed' | 'timeout' | 'error' | 'cancelled';

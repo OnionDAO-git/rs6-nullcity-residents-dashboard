@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, GatewayStatus, ObservableSubjectSummary, Position, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, GatewayStatus, ObservableSubjectSummary, Position, RecentLetterSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -1140,6 +1140,18 @@
     return run?.latestRunAt ? timeAgo(run.latestRunAt) : '-';
   }
 
+  function letterTimeLabel(letter: RecentLetterSummary): string {
+    return letter.dispatchedAt ? timeAgo(letter.dispatchedAt) : 'undated';
+  }
+
+  function letterResidentLabel(letter: RecentLetterSummary): string {
+    return letter.senderResident ? residentDisplayName(letter.senderResident) : 'city';
+  }
+
+  function letterDeliveryLabel(letter: RecentLetterSummary): string {
+    return letter.deliveryChannels.length ? letter.deliveryChannels.join(', ') : 'delivery unknown';
+  }
+
   function soulTitle(soul: SoulSummary): string {
     return soul.title || soul.id;
   }
@@ -1188,6 +1200,10 @@
     <section class="panel">
       <div class="panel-title">Recent Events</div>
       {@render EventList({ events: overview?.recentEvents || [] })}
+    </section>
+    <section class="panel">
+      <div class="panel-title">Patron Letters</div>
+      {@render LetterList({ letters: overview?.recentLetters || [] })}
     </section>
   {:else if route === '/residents'}
     <section class="toolbar">
@@ -1502,6 +1518,22 @@
       <div class="event-row"><span class="tag">{event.kind || 'event'}</span><span>{event.text || timeAgo(event.at)}</span></div>
     {:else}
       <div class="empty">No recent events</div>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet LetterList({ letters }: { letters: RecentLetterSummary[] })}
+  <div class="event-list">
+    {#each letters as letter}
+      <div class="event-row">
+        <span class="tag">{letter.kind}</span>
+        <span>
+          <strong>{letter.subject}</strong>
+          <small>{letterResidentLabel(letter)} to {letter.recipient} · {letterDeliveryLabel(letter)} · {letter.dispatchedAt || 'undated'} ({letterTimeLabel(letter)})</small>
+        </span>
+      </div>
+    {:else}
+      <div class="empty">No recent patron letters</div>
     {/each}
   </div>
 {/snippet}
