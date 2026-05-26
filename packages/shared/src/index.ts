@@ -164,6 +164,32 @@ export interface RecentLetterSummary {
   deliveryChannels: string[];
 }
 
+export type PatronStandingTier = 'stranger' | 'acquaintance' | 'ally' | 'officer';
+
+export interface PatronStandingSummary {
+  faction: string;
+  points: number;
+  tier: PatronStandingTier;
+  nextTier?: Exclude<PatronStandingTier, 'stranger'>;
+  pointsToNext?: number;
+}
+
+export interface PatronDashboardSummary {
+  id: string;
+  handle: string;
+  balance: number;
+  standing: PatronStandingSummary[];
+  lastActivityAt?: string;
+}
+
+export interface PatronActivitySummary {
+  totalPatrons: number;
+  totalShardBalance: number;
+  totalStandingPoints: number;
+  tierCounts: Record<PatronStandingTier, number>;
+  patrons: PatronDashboardSummary[];
+}
+
 export interface ResidentProgressSample {
   ts?: string;
   tick?: number;
@@ -291,6 +317,7 @@ export interface DashboardOverview {
   residents: ResidentDashboardRow[];
   recentEvents: ResidentEventSummary[];
   recentLetters: RecentLetterSummary[];
+  patrons?: PatronActivitySummary;
 }
 
 export type BenchmarkRunStatus = 'passed' | 'failed' | 'timeout' | 'error' | 'cancelled';

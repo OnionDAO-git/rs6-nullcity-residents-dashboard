@@ -15,6 +15,10 @@ import type {
   ControllerStatus,
   InferenceLogEntry,
   PerceptionFeedSummary,
+  PatronActivitySummary,
+  PatronDashboardSummary,
+  PatronStandingSummary,
+  PatronStandingTier,
   RecentLetterSummary,
   ResidentDashboardRow,
   ResidentProgressSample,
@@ -281,6 +285,14 @@ export class RuntimeRepository {
       .slice(0, Math.max(0, limit));
   }
 
+  async patronSummary(limit = 20): Promise<PatronActivitySummary> {
+    const [currency, standing] = await Promise.all([
+      readJsonFile<unknown>(path.join(this.memoryRoot, 'patron-currency.json')),
+      readJsonFile<unknown>(path.join(this.memoryRoot, 'patron-standing.json')),
+    ]);
+    return buildPatronSummary(currency, standing, limit);
+  }
+
   async listBenchmarkArtifacts(limit = 200): Promise<BenchmarkArtifactSummary[]> {
     const artifacts = await this.readBenchmarkArtifacts();
     return artifacts
@@ -475,6 +487,188 @@ function redactRecipient(value: string): string {
   const [local = '', domain] = trimmed.split('@', 2);
   const prefix = local.slice(0, 1) || '*';
   return domain ? `${prefix}***@${domain}` : `${prefix}***`;
+}
+
+function buildPatronSummary(currencyRaw: unknown, standingRaw: unknown, limit: number): PatronActivitySummary {
+  const balances = normalizePatronBalances(asRecord(currencyRaw).balances);
+  const currencyActivity = collectCurrencyActivity(asRecord(currencyRaw).history);
+  const standingEntries = normalizePatronStanding(asRecord(standingRaw).points);
+  const standingActivity = collectStandingActivity(asRecord(standingRaw).history);
+  const patronIds = new Set<string>([
+    ...balances.keys(),
+    ...currencyActivity.keys(),
+    ...standingEntries.map(entry => entry.humanId),
+    ...standingActivity.keys(),
+  ]);
+  const standingByPatron = new Map<string, PatronStandingSummary[]>();
+  for (const entry of standingEntries) {
+    standingByPatron.set(entry.humanId, [...(standingByPatron.get(entry.humanId) || []), entry.summary]);
+  }
+
+  const sortedPatrons = [...patronIds]
+    .map(rawHandle => {
+      const standing = (standingByPatron.get(rawHandle) || []).sort(compareStanding);
+      const lastActivityAt = latestIso(currencyActivity.get(rawHandle), standingActivity.get(rawHandle));
+      return {
+        id: '',
+        handle: redactRecipient(rawHandle),
+        balance: balances.get(rawHandle) || 0,
+        standing,
+        ...(lastActivityAt ? { lastActivityAt } : {}),
+      };
+    })
+    .sort(comparePatrons);
+  const patrons: PatronDashboardSummary[] = sortedPatrons
+    .slice(0, normalizedLimit(limit))
+    .map((patron, index) => ({ ...patron, id: `patron-${String(index + 1).padStart(3, '0')}` }));
+  const tierCounts: Record<PatronStandingTier, number> = { stranger: 0, acquaintance: 0, ally: 0, officer: 0 };
+  for (const rawHandle of patronIds) {
+    const standing = (standingByPatron.get(rawHandle) || []).sort(compareStanding);
+    const tier = standing[0]?.tier || 'stranger';
+    tierCounts[tier] += 1;
+  }
+
+  return {
+    totalPatrons: patronIds.size,
+    totalShardBalance: sumNumbers([...balances.values()]),
+    totalStandingPoints: sumNumbers(standingEntries.map(entry => entry.summary.points)),
+    tierCounts,
+    patrons,
+  };
+}
+
+function normalizePatronBalances(value: unknown): Map<string, number> {
+  const balances = new Map<string, number>();
+  for (const [handle, rawBalance] of Object.entries(asRecord(value))) {
+    const balance = finiteNumber(rawBalance);
+    if (!handle.trim() || balance === undefined) continue;
+    balances.set(handle, balance);
+  }
+  return balances;
+}
+
+function normalizePatronStanding(value: unknown): Array<{ humanId: string; summary: PatronStandingSummary }> {
+  return Object.entries(asRecord(value)).flatMap(([key, rawPoints]) => {
+    const parsed = splitStandingKey(key);
+    const points = finiteNumber(rawPoints);
+    if (!parsed || points === undefined) return [];
+    return [{ humanId: parsed.humanId, summary: patronStandingSummary(parsed.faction, points) }];
+  });
+}
+
+function collectCurrencyActivity(value: unknown): Map<string, string> {
+  const activity = new Map<string, string>();
+  for (const [handle, rawEvents] of Object.entries(asRecord(value))) {
+    if (!handle.trim()) continue;
+    for (const event of arrayRecords(rawEvents)) noteLatest(activity, handle, eventTimestamp(event));
+  }
+  return activity;
+}
+
+function collectStandingActivity(value: unknown): Map<string, string> {
+  const activity = new Map<string, string>();
+  for (const [key, rawEvents] of Object.entries(asRecord(value))) {
+    const parsed = splitStandingKey(key);
+    for (const event of arrayRecords(rawEvents)) {
+      const handle = stringField(event, 'humanId') || parsed?.humanId;
+      if (handle) noteLatest(activity, handle, eventTimestamp(event));
+    }
+  }
+  return activity;
+}
+
+function patronStandingSummary(faction: string, points: number): PatronStandingSummary {
+  const tier = patronStandingTier(points);
+  const next = nextPatronStandingTier(points);
+  return {
+    faction,
+    points,
+    tier,
+    ...(next ? { nextTier: next.tier, pointsToNext: Math.max(0, next.points - points) } : {}),
+  };
+}
+
+function patronStandingTier(points: number): PatronStandingTier {
+  if (points >= 75) return 'officer';
+  if (points >= 30) return 'ally';
+  if (points >= 10) return 'acquaintance';
+  return 'stranger';
+}
+
+function nextPatronStandingTier(points: number): { tier: Exclude<PatronStandingTier, 'stranger'>; points: number } | undefined {
+  if (points < 10) return { tier: 'acquaintance', points: 10 };
+  if (points < 30) return { tier: 'ally', points: 30 };
+  if (points < 75) return { tier: 'officer', points: 75 };
+  return undefined;
+}
+
+function splitStandingKey(value: string): { humanId: string; faction: string } | undefined {
+  const separator = value.lastIndexOf('|');
+  if (separator <= 0 || separator >= value.length - 1) return undefined;
+  const humanId = value.slice(0, separator).trim();
+  const faction = value.slice(separator + 1).trim();
+  return humanId && faction ? { humanId, faction } : undefined;
+}
+
+function comparePatrons(a: PatronDashboardSummary, b: PatronDashboardSummary): number {
+  return (
+    timestampMs(b.lastActivityAt) - timestampMs(a.lastActivityAt) ||
+    bestStandingPoints(b) - bestStandingPoints(a) ||
+    b.balance - a.balance ||
+    a.handle.localeCompare(b.handle)
+  );
+}
+
+function compareStanding(a: PatronStandingSummary, b: PatronStandingSummary): number {
+  return standingRank(b.tier) - standingRank(a.tier) || b.points - a.points || a.faction.localeCompare(b.faction);
+}
+
+function standingRank(tier: PatronStandingTier): number {
+  return { stranger: 0, acquaintance: 1, ally: 2, officer: 3 }[tier];
+}
+
+function bestStandingPoints(patron: PatronDashboardSummary): number {
+  return patron.standing[0]?.points || 0;
+}
+
+function eventTimestamp(event: Record<string, unknown>): string | undefined {
+  return (
+    stringField(event, 'createdAt') ||
+    stringField(event, 'at') ||
+    stringField(event, 'ts') ||
+    stringField(event, 't') ||
+    stringField(event, 'dispatchedAt')
+  );
+}
+
+function noteLatest(map: Map<string, string>, key: string, value: string | undefined): void {
+  if (!value || timestampMs(value) < 1) return;
+  const current = map.get(key);
+  if (!current || timestampMs(value) > timestampMs(current)) map.set(key, value);
+}
+
+function latestIso(a: string | undefined, b: string | undefined): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return timestampMs(a) >= timestampMs(b) ? a : b;
+}
+
+function arrayRecords(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.map(asRecord).filter(record => Object.keys(record).length) : [];
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' && (typeof value !== 'string' || value.trim() === '')) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function normalizedLimit(value: number): number {
+  return Number.isInteger(value) && value > 0 ? Math.min(value, 500) : 20;
+}
+
+function sumNumbers(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0);
 }
 
 function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifact | undefined {

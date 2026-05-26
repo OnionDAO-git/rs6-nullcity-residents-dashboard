@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import type { PatronActivitySummary } from '@nullcity-dashboard/shared';
 import { describe, expect, test } from 'bun:test';
 import { buildSparkRuntimeSummary } from './runtime';
 
@@ -327,6 +328,152 @@ describe('RuntimeRepository letters', () => {
       senderResident: 'res:hans',
     });
     expect(letters[0]).not.toHaveProperty('body');
+  });
+});
+
+describe('RuntimeRepository patrons', () => {
+  test('summarizes patron Shards and standing without exposing raw handles', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-patrons-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    await fs.mkdir(memoryRoot, { recursive: true });
+    await fs.writeFile(
+      path.join(memoryRoot, 'patron-currency.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        balances: {
+          'alice@example.com': 42,
+          bob: 0,
+        },
+        history: {
+          'alice@example.com': [
+            { kind: 'credit', amount: 50, createdAt: '2026-05-25T20:00:00.000Z' },
+            { kind: 'debit', amount: 8, createdAt: '2026-05-25T20:03:00.000Z' },
+          ],
+          bob: [{ kind: 'credit', amount: 12, createdAt: '2026-05-25T20:02:00.000Z' }],
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(memoryRoot, 'patron-standing.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        points: {
+          'alice@example.com|embassy': 35,
+          'alice@example.com|foundry': 5,
+          'bob|embassy': 80,
+        },
+        history: {
+          'alice@example.com|embassy': [
+            { humanId: 'alice@example.com', faction: 'embassy', amount: 35, createdAt: '2026-05-25T20:01:00.000Z' },
+          ],
+          'bob|embassy': [
+            { humanId: 'bob', faction: 'embassy', amount: 80, createdAt: '2026-05-25T20:04:00.000Z' },
+          ],
+        },
+      }),
+      'utf8',
+    );
+
+    const summary = await (repository as { patronSummary(limit?: number): Promise<PatronActivitySummary> }).patronSummary(5);
+
+    expect(summary).toMatchObject({
+      totalPatrons: 2,
+      totalShardBalance: 42,
+      totalStandingPoints: 120,
+      tierCounts: { stranger: 0, acquaintance: 0, ally: 1, officer: 1 },
+    });
+    expect(summary.patrons.map(patron => patron.handle)).toEqual(['b***', 'a***@example.com']);
+    expect(summary.patrons.map(patron => patron.id)).toEqual(['patron-001', 'patron-002']);
+    expect(JSON.stringify(summary)).not.toContain('alice@example.com');
+    expect(summary.patrons[0]).toMatchObject({
+      balance: 0,
+      lastActivityAt: '2026-05-25T20:04:00.000Z',
+      standing: [{ faction: 'embassy', points: 80, tier: 'officer' }],
+    });
+    expect(summary.patrons[1]).toMatchObject({
+      balance: 42,
+      standing: [
+        { faction: 'embassy', points: 35, tier: 'ally', nextTier: 'officer', pointsToNext: 40 },
+        { faction: 'foundry', points: 5, tier: 'stranger', nextTier: 'acquaintance', pointsToNext: 5 },
+      ],
+    });
+  });
+
+  test('returns an empty patron summary when ledgers are missing', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-patrons-empty-'));
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+
+    await expect((repository as { patronSummary(limit?: number): Promise<PatronActivitySummary> }).patronSummary()).resolves.toMatchObject({
+      totalPatrons: 0,
+      totalShardBalance: 0,
+      totalStandingPoints: 0,
+      patrons: [],
+    });
+  });
+
+  test('ignores malformed patron ledger numbers instead of fabricating zero or one point entries', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-patrons-malformed-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    await fs.mkdir(memoryRoot, { recursive: true });
+    await fs.writeFile(
+      path.join(memoryRoot, 'patron-currency.json'),
+      JSON.stringify({
+        balances: {
+          valid: '12',
+          nullish: null,
+          falsey: false,
+          blank: '',
+          trueish: true,
+          arrayish: [],
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(memoryRoot, 'patron-standing.json'),
+      JSON.stringify({
+        points: {
+          'valid|embassy': '30',
+          'falsey|embassy': false,
+          'blank|embassy': '',
+          'trueish|embassy': true,
+          'arrayish|embassy': [],
+        },
+      }),
+      'utf8',
+    );
+
+    const summary = await (repository as { patronSummary(limit?: number): Promise<PatronActivitySummary> }).patronSummary();
+
+    expect(summary).toMatchObject({
+      totalPatrons: 1,
+      totalShardBalance: 12,
+      totalStandingPoints: 30,
+      tierCounts: { stranger: 0, acquaintance: 0, ally: 1, officer: 0 },
+    });
+    expect(summary.patrons).toHaveLength(1);
+    expect(summary.patrons[0]).toMatchObject({ handle: 'v***', balance: 12, standing: [{ points: 30, tier: 'ally' }] });
   });
 });
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, GatewayStatus, ObservableSubjectSummary, Position, RecentLetterSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, RecentLetterSummary, ResidentAppearance, ResidentDashboardRow, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
@@ -1152,6 +1152,32 @@
     return letter.deliveryChannels.length ? letter.deliveryChannels.join(', ') : 'delivery unknown';
   }
 
+  function patronBestStanding(patron: PatronDashboardSummary): PatronStandingSummary | undefined {
+    return [...patron.standing].sort((a, b) => patronStandingRank(b.tier) - patronStandingRank(a.tier) || b.points - a.points)[0];
+  }
+
+  function patronStandingRank(tier: string | undefined): number {
+    if (tier === 'officer') return 3;
+    if (tier === 'ally') return 2;
+    if (tier === 'acquaintance') return 1;
+    return 0;
+  }
+
+  function patronStandingLabel(patron: PatronDashboardSummary): string {
+    const standing = patronBestStanding(patron);
+    if (!standing) return 'no standing yet';
+    const next = standing.pointsToNext !== undefined && standing.nextTier ? ` · ${standing.pointsToNext} to ${standing.nextTier}` : '';
+    return `${standing.points.toLocaleString()} pts @ ${standing.faction}${next}`;
+  }
+
+  function patronLastActivityLabel(patron: PatronDashboardSummary): string {
+    return patron.lastActivityAt ? timeAgo(patron.lastActivityAt) : 'no activity';
+  }
+
+  function patronTierCount(summary: PatronActivitySummary | undefined, tier: 'ally' | 'officer'): number {
+    return summary?.tierCounts[tier] || 0;
+  }
+
   function soulTitle(soul: SoulSummary): string {
     return soul.title || soul.id;
   }
@@ -1196,6 +1222,7 @@
       <div class="metric"><span>Online</span><strong>{overview?.residents.filter(r => r.online).length || 0}</strong></div>
       <div class="metric"><span>Runtime</span><strong>{overview?.controller.residentsWithRuntime || 0}</strong></div>
     </section>
+    {@render PatronSummaryPanel({ summary: overview?.patrons })}
     {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
     <section class="panel">
       <div class="panel-title">Recent Events</div>
@@ -1507,6 +1534,32 @@
         <pre>{compactJson(row)}</pre>
       {:else}
         <div class="empty">No log entries</div>
+      {/each}
+    </div>
+  </section>
+{/snippet}
+
+{#snippet PatronSummaryPanel({ summary }: { summary: PatronActivitySummary | undefined })}
+  <section class="panel">
+    <div class="panel-title">Patron Standing</div>
+    <div class="mini-grid">
+      <span><strong>Patrons</strong>{summary?.totalPatrons || 0}</span>
+      <span><strong>Shards held</strong>{(summary?.totalShardBalance || 0).toLocaleString()}</span>
+      <span><strong>Standing pts</strong>{(summary?.totalStandingPoints || 0).toLocaleString()}</span>
+      <span><strong>Allies / Officers</strong>{patronTierCount(summary, 'ally')} / {patronTierCount(summary, 'officer')}</span>
+    </div>
+    <div class="event-list">
+      {#each summary?.patrons || [] as patron}
+        {@const standing = patronBestStanding(patron)}
+        <div class="event-row">
+          <span class="tag">{standing?.tier || 'stranger'}</span>
+          <span>
+            <strong>{patron.handle}</strong>
+            <small>{patron.balance.toLocaleString()} Shards · {patronStandingLabel(patron)} · {patronLastActivityLabel(patron)}</small>
+          </span>
+        </div>
+      {:else}
+        <div class="empty">No patron ledger entries</div>
       {/each}
     </div>
   </section>
