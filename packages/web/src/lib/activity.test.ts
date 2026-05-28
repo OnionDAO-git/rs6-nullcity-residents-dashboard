@@ -537,4 +537,45 @@ describe('buildActivitySnapshot', () => {
     expect(snapshot.moduleLabel).toBe('onion.runescape.standard@0.1.0');
     expect(snapshot.moduleDetail).toBe('thinking | inference-log');
   });
+
+  test('shows configured model and falls back to configured SPARK module before logs exist', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        stack: {
+          soulTitle: 'QA Scout',
+          soulFile: 'res-qa-scout.md',
+          model: { endpoint: 'spacetower_qwopus_q4', model: 'qwopus3.5-27b-v3@q4_k_s' },
+          behaviorKind: 'hybrid-agent',
+          brain: { thinking: true, temperature: 0.55 },
+          body: { thinking: false, temperature: 0.1 },
+          configuredModules: [{ id: 'onion.runescape.standard', version: '0.1.0', source: 'soul', activeFacets: ['thinking', 'body'] }],
+        },
+      }),
+      undefined,
+      now,
+    );
+
+    expect(snapshot.modelLabel).toBe('spacetower_qwopus_q4');
+    expect(snapshot.modelDetail).toBe('model qwopus3.5-27b-v3@q4_k_s | brain temp 0.55 | body temp 0.1');
+    expect(snapshot.moduleLabel).toBe('onion.runescape.standard@0.1.0');
+    expect(snapshot.moduleDetail).toBe('thinking, body | soul');
+  });
+
+  test('describes residents with model thinking disabled but no explicit endpoint', () => {
+    const snapshot = buildActivitySnapshot(
+      runtime({
+        stack: {
+          soulTitle: 'Hans',
+          soulFile: 'res-hans.md',
+          model: { thinking: false },
+          configuredModules: [],
+        },
+      }),
+      undefined,
+      now,
+    );
+
+    expect(snapshot.modelLabel).toBe('-');
+    expect(snapshot.modelDetail).toBe('model thinking off');
+  });
 });

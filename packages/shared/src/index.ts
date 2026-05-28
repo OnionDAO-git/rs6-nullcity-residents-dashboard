@@ -138,6 +138,18 @@ export interface SparkRuntimeSummary {
   activeModule?: SparkModuleSummary;
 }
 
+export interface ResidentStackSummary {
+  soulId?: string;
+  soulTitle?: string;
+  soulFile?: string;
+  model?: InferenceProfileSummary;
+  behaviorKind?: string;
+  brain?: InferenceProfileSummary;
+  body?: InferenceProfileSummary;
+  configuredModules: SparkModuleSummary[];
+  activeModule?: SparkModuleSummary;
+}
+
 export interface ResidentActionSummary {
   kind?: string;
   cause?: string;
@@ -299,6 +311,7 @@ export interface RuntimeReadModel {
     saved?: ResidentSavedState;
   };
   spark?: SparkRuntimeSummary;
+  stack?: ResidentStackSummary;
   progress?: ResidentProgressSummary;
   storyArc?: StoryArcDashboardSummary;
   memory: {
@@ -329,6 +342,7 @@ export interface ResidentDashboardRow {
   body?: RuntimeReadModel['body'];
   feed?: PerceptionFeedSummary;
   spark?: SparkRuntimeSummary;
+  stack?: ResidentStackSummary;
   progress?: ResidentProgressSummary;
   storyArc?: StoryArcDashboardSummary;
   lastEvent?: ResidentEventSummary;
@@ -483,6 +497,7 @@ export interface SoulSummary {
     brain?: InferenceProfileSummary;
     body?: InferenceProfileSummary;
   };
+  modules?: SparkModuleSummary[];
   attentionProfile?: unknown;
   variables?: Record<string, unknown>;
   hooks?: unknown[];

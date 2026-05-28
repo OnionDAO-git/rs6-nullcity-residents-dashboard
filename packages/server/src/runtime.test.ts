@@ -129,6 +129,76 @@ describe('RuntimeRepository resident feeds', () => {
     expect(model.logs.actions.at(-1)?.result).toEqual({ ok: true });
   });
 
+  test('exposes configured SOUL inference and SPARK stack for operator inspection', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-resident-stack-'));
+    const soulsRoot = path.join(root, 'souls');
+    const logsRoot = path.join(root, 'logs');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      logsRoot,
+      path.join(root, 'agent-logs'),
+      soulsRoot,
+    );
+
+    await fs.mkdir(soulsRoot, { recursive: true });
+    await fs.mkdir(path.join(logsRoot, 'res:qa-scout', 'inference'), { recursive: true });
+    await fs.writeFile(
+      path.join(soulsRoot, 'res-qa-scout.md'),
+      [
+        '---',
+        'name: res:qa-scout',
+        'display: QA Scout',
+        'model:',
+        '  endpoint: spacetower_qwopus_q4',
+        '  model: qwopus3.5-27b-v3@q4_k_s',
+        'modules:',
+        '  - id: onion.runescape.standard',
+        '    version: 0.1.0',
+        '    enabled: true',
+        'behavior:',
+        '  kind: hybrid-agent',
+        '  brain:',
+        '    thinking: true',
+        '    temperature: 0.55',
+        '  body:',
+        '    thinking: false',
+        '    temperature: 0.1',
+        '---',
+        '# QA Scout',
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(logsRoot, 'res:qa-scout', 'inference', '2026-05-28.jsonl'),
+      JSON.stringify({
+        t: '2026-05-28T12:30:00.000Z',
+        status: 'ok',
+        provider: 'openrouter',
+        model: 'anthropic/claude-3.5-haiku',
+        endpoint: 'openrouter_haiku',
+        sparkModule: { id: 'onion.runescape.standard', version: '0.1.0' },
+      }) + '\n',
+      'utf8',
+    );
+
+    const model = await repository.residentRuntime('res:qa-scout', { name: 'res:qa-scout', online: true });
+    const rows = await repository.enrichResidents([{ name: 'res:qa-scout', online: true }]);
+
+    expect(model.stack).toMatchObject({
+      soulId: 'res:qa-scout',
+      soulTitle: 'QA Scout',
+      soulFile: 'res-qa-scout.md',
+      model: { endpoint: 'spacetower_qwopus_q4', model: 'qwopus3.5-27b-v3@q4_k_s' },
+      behaviorKind: 'hybrid-agent',
+      brain: { thinking: true, temperature: 0.55 },
+      body: { thinking: false, temperature: 0.1 },
+      configuredModules: [{ id: 'onion.runescape.standard', version: '0.1.0', source: 'soul' }],
+      activeModule: { id: 'onion.runescape.standard', version: '0.1.0', source: 'inference-log' },
+    });
+    expect(rows[0]?.stack).toEqual(model.stack);
+  });
+
   test('merges trajectory action_result evidence so final timeouts beat gateway acknowledgements', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-trajectory-results-'));

@@ -1787,6 +1787,27 @@
     return [hpLabel, ...flags].filter(Boolean).join(' | ') || '-';
   }
 
+  function residentStackLabel(row: ResidentDashboardRow): string {
+    const stack = row.stack;
+    const model = stack?.model?.endpoint || stack?.model?.model || stack?.brain?.endpoint || stack?.brain?.model || stack?.body?.endpoint || stack?.body?.model;
+    const module = stack?.activeModule || row.spark?.activeModule || stack?.configuredModules?.[0];
+    const moduleLabel = module ? `${module.id}${module.version ? `@${module.version}` : ''}` : '';
+    return [model, moduleLabel].filter(Boolean).join(' | ') || '-';
+  }
+
+  function residentStackDetail(row: ResidentDashboardRow): string {
+    const stack = row.stack;
+    const module = stack?.activeModule || row.spark?.activeModule || stack?.configuredModules?.[0];
+    const parts = [
+      stack?.soulTitle || stack?.soulId,
+      stack?.model?.model,
+      stack?.model?.thinking !== undefined ? `model thinking ${stack.model.thinking ? 'on' : 'off'}` : '',
+      stack?.behaviorKind,
+      module?.source ? `module ${module.source}` : '',
+    ].filter(Boolean);
+    return parts.join(' | ');
+  }
+
   function thinkingActivity(runtime: RuntimeReadModel | undefined, activity: ReturnType<typeof buildActivitySnapshot>): SparkActivityItem[] {
     const state = asRecord(runtime?.state);
     const cognition = asRecord(state.cognition);
@@ -1800,6 +1821,7 @@
       { label: 'Move Intent', value: activity.moveLabel, detail: activity.moveDetail },
       { label: 'Resources', value: activity.attentionLabel, detail: budgetLabel(runtime) },
       { label: 'SPARK Module', value: activity.moduleLabel, detail: activity.moduleDetail },
+      { label: 'Configured Model', value: activity.modelLabel, detail: activity.modelDetail },
       { label: 'Inference', value: inferenceStatus(inference), detail: inferenceProvider(inference) },
       { label: 'Previous Intent', value: previousIntentLabel(runtime), detail: previousIntentDetail(runtime) },
     ];
@@ -3425,7 +3447,7 @@
 {#snippet ResidentTable({ rows, canDelete, onselect, ondelete }: { rows: ResidentDashboardRow[]; canDelete: boolean; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
   <section class="table-wrap">
     <table>
-      <thead><tr><th>Resident</th><th>Status</th><th>Story</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Resident</th><th>Status</th><th>Story</th><th>Stack</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
       <tbody>
         {#each rows as row}
           <tr onclick={() => onselect(`/residents/${encodeURIComponent(row.name)}`)}>
@@ -3435,6 +3457,12 @@
               <strong>{residentStoryArcLabel(row)}</strong>
               {#if residentStoryArcDetail(row)}
                 <small>{residentStoryArcDetail(row)}</small>
+              {/if}
+            </td>
+            <td>
+              <strong>{residentStackLabel(row)}</strong>
+              {#if residentStackDetail(row)}
+                <small>{residentStackDetail(row)}</small>
               {/if}
             </td>
             <td>{row.thinking?.mode || 'unknown'}</td>
@@ -3459,7 +3487,7 @@
             </td>
           </tr>
         {:else}
-          <tr><td colspan="10" class="empty">No residents reported</td></tr>
+          <tr><td colspan="11" class="empty">No residents reported</td></tr>
         {/each}
       </tbody>
     </table>

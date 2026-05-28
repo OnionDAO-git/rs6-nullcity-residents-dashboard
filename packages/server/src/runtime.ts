@@ -22,6 +22,7 @@ import type {
   RecentLetterSummary,
   RelationshipActivitySummary,
   ResidentRelationshipSummary,
+  ResidentStackSummary,
   ResidentDashboardRow,
   ResidentProgressSample,
   ResidentProgressSummary,
@@ -70,7 +71,7 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, trajectoryActions, inference, saved, progress, storyArc] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, trajectoryActions, inference, saved, progress, storyArc, soul] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
@@ -82,6 +83,7 @@ export class RuntimeRepository {
       this.readResidentSave(resident),
       this.readResidentProgress(memoryDir),
       this.readResidentStoryArc(resident),
+      this.readSoulForResident(resident),
     ]);
 
     const liveActions = feedToActionEntries(feed);
@@ -90,12 +92,13 @@ export class RuntimeRepository {
     const latestInference = inference.at(-1);
     const reaction = latestAction?.source === 'nervous-system' ? latestAction : [...mergedActions].reverse().find(entry => entry.source === 'nervous-system');
     const spark = buildSparkRuntimeSummary(mergedActions, inference);
+    const stack = buildResidentStack(soul, spark);
     const livePosition = positionFromPerception(feed?.latestPerception);
     const perceptionTick = numberField(feed?.latestPerception, 'tick');
     const feedSummary = feedToSummary(feed);
 
     return {
-      available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || mergedActions.length || inference.length || feed?.latestPerception || progress),
+      available: Boolean(state || indexMarkdown || hooksMarkdown || rulesMarkdown || mergedActions.length || inference.length || feed?.latestPerception || progress || soul),
       online: Boolean(summary?.online),
       state,
       thinking: {
@@ -139,6 +142,7 @@ export class RuntimeRepository {
         saved,
       },
       spark,
+      stack,
       progress,
       storyArc,
       memory: {
@@ -175,6 +179,7 @@ export class RuntimeRepository {
           body: slimBody(runtime.body),
           feed: runtime.body.feed,
           spark: runtime.spark,
+          stack: runtime.stack,
           progress: runtime.progress,
           storyArc: runtime.storyArc,
           lastEvent: latestEvent(runtime.logs.actions),
@@ -363,6 +368,7 @@ export class RuntimeRepository {
       title: typeof frontmatter.display === 'string' ? frontmatter.display : heading || name,
       model: modelSummary(frontmatter.model),
       behavior: behaviorSummary(frontmatter.behavior),
+      modules: moduleSummariesFromText(text),
       attentionProfile: frontmatter.attentionProfile,
       variables: Object.keys(variables).length ? variables : undefined,
       hooks: Array.isArray(frontmatter.hooks) ? frontmatter.hooks : undefined,
@@ -377,6 +383,14 @@ export class RuntimeRepository {
     const text = await readTextFile(safeJoin(this.soulsRoot, file));
     if (!text) return undefined;
     return { frontmatter: parseYamlishFrontmatter(text), body: text.replace(/^---\n[\s\S]*?\n---\s*/, '') };
+  }
+
+  private async readSoulForResident(resident: string): Promise<SoulSummary | undefined> {
+    const directFile = `${residentSlug(resident)}.md`;
+    const direct = await this.readSoul(directFile).catch(() => undefined);
+    if (direct && !direct.errors.length && feedKey(direct.id) === feedKey(resident)) return direct;
+    const souls = await this.listSouls().catch(() => []);
+    return souls.find(soul => feedKey(soul.id) === feedKey(resident));
   }
 
   private async readResidentActions(resident: string): Promise<ActionLogEntry[]> {
@@ -1338,6 +1352,21 @@ export function buildSparkRuntimeSummary(actions: ActionLogEntry[], inference: I
   };
 }
 
+function buildResidentStack(soul: SoulSummary | undefined, spark: SparkRuntimeSummary): ResidentStackSummary | undefined {
+  if (!soul && !spark.activeModule && spark.modules.length === 0) return undefined;
+  return {
+    ...(soul?.id ? { soulId: soul.id } : {}),
+    ...(soul?.title ? { soulTitle: soul.title } : {}),
+    ...(soul?.file ? { soulFile: soul.file } : {}),
+    ...(soul?.model ? { model: soul.model } : {}),
+    ...(soul?.behavior?.kind ? { behaviorKind: soul.behavior.kind } : {}),
+    ...(soul?.behavior?.brain ? { brain: soul.behavior.brain } : {}),
+    ...(soul?.behavior?.body ? { body: soul.behavior.body } : {}),
+    configuredModules: soul?.modules || [],
+    ...(spark.activeModule ? { activeModule: spark.activeModule } : {}),
+  };
+}
+
 async function readLatestFromRoots<T>(roots: string[], limit: number): Promise<T[]> {
   for (const root of roots) {
     const today = latestDatedJsonl(root);
@@ -1413,6 +1442,42 @@ function inferenceProfileSummary(value: Record<string, unknown>): InferenceProfi
     ...(numberField(value, 'temperature') !== undefined ? { temperature: numberField(value, 'temperature') } : {}),
     ...(booleanField(value, 'thinking') !== undefined ? { thinking: booleanField(value, 'thinking') } : {}),
   };
+}
+
+function moduleSummariesFromText(text: string): SparkRuntimeSummary['modules'] {
+  const frontmatter = text.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  const modulesBlock = frontmatter.match(/^modules:\s*\n((?:[ \t].*(?:\n|$))*)/m)?.[1];
+  if (!modulesBlock) return [];
+
+  const modules: SparkRuntimeSummary['modules'] = [];
+  let current: SparkRuntimeSummary['modules'][number] | undefined;
+  for (const line of modulesBlock.split('\n')) {
+    const id = line.match(/^\s*-\s+id:\s*(.+?)\s*$/)?.[1];
+    if (id) {
+      current = {
+        id: cleanYamlScalar(id),
+        source: 'soul',
+        activeFacets: ['thinking', 'body'],
+      };
+      modules.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const version = line.match(/^\s+version:\s*(.+?)\s*$/)?.[1];
+    if (version) {
+      current.version = cleanYamlScalar(version);
+      continue;
+    }
+    const enabled = line.match(/^\s+enabled:\s*(.+?)\s*$/)?.[1];
+    if (enabled && cleanYamlScalar(enabled) === 'false') {
+      current.activeFacets = [];
+    }
+  }
+  return modules.filter(module => module.id);
+}
+
+function cleanYamlScalar(value: string): string {
+  return value.trim().replace(/^['"]|['"]$/g, '');
 }
 
 function renderResidentSoul(options: {

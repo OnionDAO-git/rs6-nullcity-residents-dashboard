@@ -12,6 +12,8 @@ export interface ActivitySnapshot {
   actionResultDetail: string;
   inferenceLabel: string;
   inferenceAgeLabel: string;
+  modelLabel: string;
+  modelDetail: string;
   progressLabel: string;
   progressDetail: string;
   moveLabel: string;
@@ -56,6 +58,7 @@ export function buildActivitySnapshot(runtime: RuntimeReadModel | undefined, ses
     actionResultDetail: formatActionResultDetail(latestActionResult, actionResultAgeMs, actionResultPending, actionAgeMs),
     inferenceLabel: formatInference(latestInference),
     inferenceAgeLabel: formatAge(inferenceAgeMs),
+    ...formatConfiguredModel(runtime),
     ...formatProgress(runtime, now),
     ...formatActiveMove(runtime),
     goalLabel: formatGoal(runtime),
@@ -307,7 +310,7 @@ function formatEvents(runtime: RuntimeReadModel | undefined, perception: unknown
 }
 
 function formatSparkModule(runtime: RuntimeReadModel | undefined): { moduleLabel: string; moduleDetail: string } {
-  const module = runtime?.spark?.activeModule;
+  const module = runtime?.spark?.activeModule || runtime?.stack?.activeModule || runtime?.stack?.configuredModules.at(0);
   if (!module) {
     return { moduleLabel: 'no module logged', moduleDetail: '-' };
   }
@@ -317,6 +320,24 @@ function formatSparkModule(runtime: RuntimeReadModel | undefined): { moduleLabel
   return {
     moduleLabel: `${module.id}${version}`,
     moduleDetail: `${facets} | ${module.source}`,
+  };
+}
+
+function formatConfiguredModel(runtime: RuntimeReadModel | undefined): { modelLabel: string; modelDetail: string } {
+  const stack = runtime?.stack;
+  const model = stack?.model;
+  const label = model?.endpoint || model?.model || stack?.brain?.endpoint || stack?.body?.endpoint || '-';
+  const parts = [
+    model?.model ? `model ${model.model}` : '',
+    model?.thinking !== undefined ? `model thinking ${model.thinking ? 'on' : 'off'}` : '',
+    stack?.brain?.model ? `brain model ${stack.brain.model}` : '',
+    stack?.body?.model ? `body model ${stack.body.model}` : '',
+    stack?.brain?.temperature !== undefined ? `brain temp ${stack.brain.temperature}` : '',
+    stack?.body?.temperature !== undefined ? `body temp ${stack.body.temperature}` : '',
+  ].filter(Boolean);
+  return {
+    modelLabel: label,
+    modelDetail: parts.join(' | ') || '-',
   };
 }
 
