@@ -42,7 +42,7 @@ const dataRoots = dashboardDataRoots(serverRoot);
 
 export const config: DashboardConfig = {
   host: process.env.DASHBOARD_HOST || '127.0.0.1',
-  port: Number(process.env.DASHBOARD_PORT || 8787),
+  port: portFromEnv(process.env.DASHBOARD_PORT, process.env.PORT, 8787),
   gatewayUrl: normalizeAgentGatewayUrl(process.env.AGENT_GATEWAY_URL),
   gatewayToken: process.env.AGENT_GATEWAY_TOKEN || defaultGatewayToken,
   rsClientHost: process.env.NULLCITY_RS_HOST || '127.0.0.1:43594',
@@ -58,6 +58,14 @@ export const config: DashboardConfig = {
   webDist: process.env.DASHBOARD_WEB_DIST || path.resolve(import.meta.dir, '../../web/dist'),
   webDevOrigin: process.env.DASHBOARD_WEB_DEV_ORIGIN,
 };
+
+function portFromEnv(...values: Array<string | number | undefined>): number {
+  for (const value of values) {
+    const port = Number(value);
+    if (Number.isInteger(port) && port > 0) return port;
+  }
+  return 8787;
+}
 
 function normalizeAgentGatewayUrl(value: string | undefined): string {
   if (!value) return defaultGatewayUrl;
