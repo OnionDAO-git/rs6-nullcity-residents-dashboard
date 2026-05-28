@@ -107,6 +107,7 @@ export default class ClientKeyboardListener {
     }
 
     static addListeners(target: HTMLElement): void {
+        ClientKeyboardListener.instance ??= new ClientKeyboardListener();
         target.addEventListener('keydown', ClientKeyboardListener.keydown, false);
         target.addEventListener('keyup', ClientKeyboardListener.keyup, false);
         target.addEventListener('blur', ClientKeyboardListener.blur, false);

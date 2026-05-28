@@ -52,6 +52,7 @@ export default class ClientMouseListener {
     private static readonly wheel = (event: WheelEvent): void => ClientMouseListener.instance?.mouseWheelMoved(event);
 
     static addListeners(target: HTMLElement): void {
+        ClientMouseListener.instance ??= new ClientMouseListener();
         ClientMouseListener.touchActions.set(target, target.style.touchAction);
         target.style.touchAction = 'pinch-zoom';
 

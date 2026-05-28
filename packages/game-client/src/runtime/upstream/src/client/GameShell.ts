@@ -55,6 +55,8 @@ export default abstract class GameShell {
                 return;
             }
 
+            GameShell.killtime = 0;
+            GameShell.alreadyshutdown = false;
             canvas.tabIndex = -1;
             this.applyInitialLayout();
             canvas2d.fillStyle = 'black';
@@ -232,6 +234,7 @@ export default abstract class GameShell {
         canvas.onfocus = null;
         canvas.onblur = null;
         canvas.oncontextmenu = null;
+        GameShell.shell = null;
         window.oncontextmenu = null;
         window.removeEventListener('resize', this.handleWindowResize, false);
         window.visualViewport?.removeEventListener('resize', this.handleWindowResize, false);

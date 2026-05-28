@@ -1933,8 +1933,27 @@ pre {
 }
 
 .city-game-mount {
+  position: relative;
   width: 100%;
   min-width: 0;
+}
+
+.city-game-status {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.city-game-status > div {
+  min-width: 0;
+}
+
+.city-game-fullscreen {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 11px;
 }
 
 .city-game-canvas {
@@ -1946,6 +1965,68 @@ pre {
   margin-top: 14px;
   border: 1px solid rgba(232, 223, 207, 0.18);
   background: #111318;
+}
+
+.city-game-mount:fullscreen,
+.city-game-mount:-webkit-full-screen,
+.city-game-mount.fullscreen-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  min-height: 100vh;
+  flex-direction: column;
+  padding: 16px;
+  border: 0;
+  background: #050607;
+}
+
+.city-game-mount:fullscreen .city-game-status,
+.city-game-mount:-webkit-full-screen .city-game-status,
+.city-game-mount.fullscreen-fallback .city-game-status,
+.city-game-mount:fullscreen .city-game-actions,
+.city-game-mount:-webkit-full-screen .city-game-actions,
+.city-game-mount.fullscreen-fallback .city-game-actions {
+  position: absolute;
+  z-index: 2;
+  max-width: calc(100% - 32px);
+  border: 1px solid rgba(228, 184, 64, 0.24);
+  background: rgba(14, 12, 10, 0.86);
+  backdrop-filter: blur(8px);
+}
+
+.city-game-mount:fullscreen .city-game-status,
+.city-game-mount:-webkit-full-screen .city-game-status,
+.city-game-mount.fullscreen-fallback .city-game-status {
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  padding: 10px 12px;
+}
+
+.city-game-mount:fullscreen .city-game-actions,
+.city-game-mount:-webkit-full-screen .city-game-actions,
+.city-game-mount.fullscreen-fallback .city-game-actions {
+  left: 16px;
+  bottom: 16px;
+  margin-top: 0;
+  padding: 8px;
+}
+
+.city-game-mount:fullscreen .city-game-canvas,
+.city-game-mount:-webkit-full-screen .city-game-canvas,
+.city-game-mount.fullscreen-fallback .city-game-canvas {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  margin-top: 0;
+  border: 0;
+  aspect-ratio: auto;
 }
 
 .city-resident-list {

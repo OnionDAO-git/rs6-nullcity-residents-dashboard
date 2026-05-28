@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
-  import { createDomCanvasAdapter, createGameClient, createHttpSessionTicketAdapter, createLifecycleAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
+  import { createDomCanvasAdapter, createForkedRuntimeLifecycleAdapter, createGameClient, createHttpSessionTicketAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
@@ -45,6 +45,15 @@
   type BeforeInstallPromptEvent = Event & {
     prompt: () => Promise<void>;
     userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+  };
+
+  type FullscreenCapableDocument = Document & {
+    webkitFullscreenElement?: Element | null;
+    webkitExitFullscreen?: () => Promise<void> | void;
+  };
+
+  type FullscreenCapableElement = HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
   };
 
   const guestSession: CitySession = {
@@ -209,9 +218,15 @@
   let adminGrantMemo = '';
   let cityActionNotice = '';
   let gameClientMount: HTMLElement | undefined;
+  let gameClientCanvas: HTMLCanvasElement | undefined;
   let gameClientController: GameClientController | undefined;
   let gameClientStatus: GameClientStatus = 'idle';
   let gameClientTicketUser = '';
+  let cityGameFullscreen = false;
+  let cityGameFullscreenFallback = false;
+
+  const cityGameFullscreenAvailable =
+    'requestFullscreen' in document.documentElement || 'webkitRequestFullscreen' in document.documentElement;
 
   const basePartMap = [8, 11, 4, 6, 9, 7, 10] as const;
   const defaultIdkIdsByGender = {
@@ -310,11 +325,21 @@
       appInstalled = true;
       pwaInstallPrompt = undefined;
     };
+    const fullscreenChangeListener = () => updateCityGameFullscreenState();
+    const fullscreenKeyListener = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && cityGameFullscreenFallback) {
+        cityGameFullscreenFallback = false;
+        updateCityGameFullscreenState();
+      }
+    };
     notificationsEnabled = window.localStorage.getItem(inboxNotificationEnabledKey) === 'true';
     notificationPermission = notificationStatus();
     window.addEventListener('popstate', listener);
     window.addEventListener('beforeinstallprompt', beforeInstallPromptListener);
     window.addEventListener('appinstalled', appInstalledListener);
+    document.addEventListener('fullscreenchange', fullscreenChangeListener);
+    document.addEventListener('webkitfullscreenchange', fullscreenChangeListener);
+    document.addEventListener('keydown', fullscreenKeyListener);
     void bootstrapSession();
     void loadRoute();
     const timer = setInterval(() => void refreshQuietly(), 5000);
@@ -322,6 +347,9 @@
       window.removeEventListener('popstate', listener);
       window.removeEventListener('beforeinstallprompt', beforeInstallPromptListener);
       window.removeEventListener('appinstalled', appInstalledListener);
+      document.removeEventListener('fullscreenchange', fullscreenChangeListener);
+      document.removeEventListener('webkitfullscreenchange', fullscreenChangeListener);
+      document.removeEventListener('keydown', fullscreenKeyListener);
       clearInterval(timer);
       closeRuntimeStream();
       closeSessionStream();
@@ -1407,27 +1435,22 @@
     if (!mount) return;
     await runAction(async () => {
       await stopCityGameClient();
+      gameClientCanvas ??= document.createElement('canvas');
       gameClientController = createGameClient({
         canvas: createDomCanvasAdapter({
           container: mount,
+          canvas: gameClientCanvas,
           className: 'city-game-canvas',
           width: 765,
           height: 503,
         }),
         session: createHttpSessionTicketAdapter({ csrfToken: () => citySession.csrfToken }),
-        lifecycle: createLifecycleAdapter(({ canvas, ticket }) => {
-          gameClientTicketUser = ticket.gameUsername;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.fillStyle = '#111318';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#e8dfcf';
-            ctx.font = '24px ui-serif, Georgia, serif';
-            ctx.fillText('Null City client session ready', 32, 72);
-            ctx.font = '14px ui-monospace, SFMono-Regular, monospace';
-            ctx.fillText(`ticket user: ${ticket.gameUsername}`, 32, 112);
-            ctx.fillText('Forked runtime loader is isolated behind the package lifecycle facade.', 32, 144);
-          }
+        lifecycle: createForkedRuntimeLifecycleAdapter({
+          nodeId: 1,
+          async loadModule() {
+            const runtime = await import('client2');
+            return { Client: runtime.Client };
+          },
         }),
         config: {
           endpoint: `${window.location.host}/rs`,
@@ -1439,6 +1462,7 @@
         },
       });
       await gameClientController.start();
+      gameClientTicketUser = gameClientController.ticket?.gameUsername || '';
       cityActionNotice = `Game session ready for ${gameClientTicketUser}`;
     });
   }
@@ -1449,6 +1473,67 @@
     if (controller) await controller.destroy();
     gameClientStatus = 'stopped';
     gameClientTicketUser = '';
+  }
+
+  async function toggleCityGameFullscreen() {
+    const mount = gameClientMount;
+    if (!mount) return;
+
+    try {
+      if (currentFullscreenElement() === mount) {
+        await exitFullscreen();
+      } else if (cityGameFullscreenFallback) {
+        cityGameFullscreenFallback = false;
+      } else {
+        await requestFullscreen(mount);
+      }
+    } catch (err) {
+      cityGameFullscreenFallback = true;
+      actionError = '';
+    }
+    updateCityGameFullscreenState();
+  }
+
+  function updateCityGameFullscreenState() {
+    const nativeFullscreen = gameClientMount !== undefined && currentFullscreenElement() === gameClientMount;
+    cityGameFullscreen = nativeFullscreen || cityGameFullscreenFallback;
+    resizeCityGameClientViewport();
+  }
+
+  function currentFullscreenElement(): Element | null {
+    const fullscreenDocument = document as FullscreenCapableDocument;
+    return document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement ?? null;
+  }
+
+  async function requestFullscreen(element: HTMLElement) {
+    const fullscreenElement = element as FullscreenCapableElement;
+    if (element.requestFullscreen) {
+      await element.requestFullscreen();
+      return;
+    }
+    if (fullscreenElement.webkitRequestFullscreen) {
+      await fullscreenElement.webkitRequestFullscreen();
+      return;
+    }
+    throw new Error('Fullscreen is not supported by this browser.');
+  }
+
+  async function exitFullscreen() {
+    const fullscreenDocument = document as FullscreenCapableDocument;
+    if (document.exitFullscreen) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (fullscreenDocument.webkitExitFullscreen) {
+      await fullscreenDocument.webkitExitFullscreen();
+    }
+  }
+
+  function resizeCityGameClientViewport() {
+    window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      gameClientMount?.querySelector('canvas')?.focus();
+    }, 0);
   }
 
   function parseNumberMap(value: string): Record<string, number> {
@@ -2712,9 +2797,22 @@
   </section>
   <section class="city-world-layout">
     <div class="city-world-frame">
-      <div bind:this={gameClientMount} class="city-game-mount">
-        <strong>{gatewayStatus?.connected ? 'Gateway online' : 'Gateway unavailable'}</strong>
-        <span>{cityOnlineResidents.length} online residents · game session {gameClientStatus}</span>
+      <div bind:this={gameClientMount} class:fullscreen-fallback={cityGameFullscreenFallback} class="city-game-mount">
+        <div class="city-game-status">
+          <div>
+            <strong>{gatewayStatus?.connected ? 'Gateway online' : 'Gateway unavailable'}</strong>
+            <span>{cityOnlineResidents.length} online residents · game session {gameClientStatus}</span>
+          </div>
+          <button
+            class="city-game-fullscreen"
+            disabled={!cityGameFullscreenAvailable}
+            aria-label={cityGameFullscreen ? 'Exit fullscreen client' : 'Fullscreen client'}
+            title={cityGameFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            onclick={toggleCityGameFullscreen}
+          >
+            {cityGameFullscreen ? 'Exit' : 'Fullscreen'}
+          </button>
+        </div>
         <div class="city-game-actions">
           <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={startCityGameClient}>Start Client</button>
           <button disabled={actionBusy || !gameClientController} onclick={stopCityGameClient}>Stop</button>
