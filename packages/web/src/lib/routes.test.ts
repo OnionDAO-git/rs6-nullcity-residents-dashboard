@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { DEBUG_PREFIX, cityPath, debugPath, isDebugInternalRoute, isDebugPath, toDebugInternalRoute } from './routes';
+import {
+  DEBUG_PREFIX,
+  cityPath,
+  debugPath,
+  isDebugInternalRoute,
+  isDebugPath,
+  observeResidentDebugRoute,
+  residentDebugRoute,
+  residentRuntimeApiPath,
+  toDebugInternalRoute,
+} from './routes';
 
 describe('dashboard route helpers', () => {
   test('recognizes debug browser paths', () => {
@@ -28,5 +38,13 @@ describe('dashboard route helpers', () => {
     expect(isDebugInternalRoute('/residents/res-a')).toBe(true);
     expect(isDebugInternalRoute('/observe/player/test')).toBe(true);
     expect(isDebugInternalRoute('/world')).toBe(false);
+  });
+
+  test('builds resident browsing routes from canonical resident ids', () => {
+    expect(residentDebugRoute('res:qa-scout')).toBe('/residents/res%3Aqa-scout');
+    expect(observeResidentDebugRoute('res:hans')).toBe('/observe/resident/res%3Ahans');
+    expect(residentRuntimeApiPath('res:qa-scout')).toBe('/api/runtime/res%3Aqa-scout');
+    expect(residentRuntimeApiPath('res:qa-scout', 'inference')).toBe('/api/runtime/res%3Aqa-scout/inference');
+    expect(residentRuntimeApiPath(' res:hans ', 'memory/index')).toBe('/api/runtime/res%3Ahans/memory/index');
   });
 });

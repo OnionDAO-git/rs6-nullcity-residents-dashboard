@@ -88,6 +88,36 @@ button.active {
   color: var(--text-0);
 }
 
+.inline-link {
+  min-height: auto;
+  padding: 0;
+  color: var(--text-0);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(228, 184, 64, 0.42);
+  text-underline-offset: 3px;
+}
+
+.inline-link:hover {
+  color: var(--s-gold);
+  border-color: transparent;
+}
+
+.resident-name-link {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 18px;
+}
+
+small .resident-name-link,
+.dense-table .resident-name-link {
+  font-family: inherit;
+  font-size: inherit;
+}
+
 main {
   width: min(1280px, calc(100vw - 48px));
   margin: 0 auto;
@@ -310,6 +340,67 @@ h1 {
 
 .activity-panel.stale {
   border-left-color: var(--s-amber);
+}
+
+.resident-browse-strip {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  border-left: 3px solid var(--s-blue);
+}
+
+.resident-browse-strip > .row strong {
+  display: block;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.browse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.browse-actions a {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  color: var(--text-1);
+  background: var(--ground-1);
+  border: 1px solid var(--ground-4);
+  text-decoration: none;
+}
+
+.browse-actions a:hover {
+  border-color: var(--ground-6);
+  color: var(--text-0);
+}
+
+.resident-stack-strip {
+  align-items: stretch;
+}
+
+.resident-stack-strip span {
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.resident-stack-strip strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-0);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
 }
 
 .activity-head {

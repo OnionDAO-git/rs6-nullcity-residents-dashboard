@@ -9,7 +9,7 @@
   import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
 
   type CitySession = {
@@ -2231,6 +2231,15 @@
     return letter.deliveryChannels.length ? letter.deliveryChannels.join(', ') : 'delivery unknown';
   }
 
+  function residentMemoryFilePath(runtime: RuntimeReadModel | undefined): string | undefined {
+    return runtime?.memory.files.find(file => file === 'INDEX.md') || runtime?.memory.files[0];
+  }
+
+  function residentLastActionLabel(runtime: RuntimeReadModel | undefined): string {
+    const latestLog = asRecord(runtime?.logs.actions.at(-1));
+    return runtime?.body.lastAction?.kind || stringField(latestLog, 'kind') || stringField(latestLog, 'action') || '-';
+  }
+
   function patronBestStanding(patron: PatronDashboardSummary): PatronStandingSummary | undefined {
     return [...patron.standing].sort((a, b) => patronStandingRank(b.tier) - patronStandingRank(a.tier) || b.points - a.points)[0];
   }
@@ -2435,6 +2444,7 @@
         {/if}
       </div>
     </section>
+    {@render ResidentBrowseStrip({ name: residentName, runtime: liveSelectedRuntime })}
     <section class="split">
       <div class="panel observer-pane">
         <div class="panel-title">Spectator</div>
@@ -3450,8 +3460,11 @@
       <thead><tr><th>Resident</th><th>Status</th><th>Story</th><th>Stack</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
       <tbody>
         {#each rows as row}
-          <tr onclick={() => onselect(`/residents/${encodeURIComponent(row.name)}`)}>
-            <td><strong>{residentDisplayName(row.name)}</strong><small>{row.controllerId || 'uncontrolled'}</small></td>
+          <tr onclick={() => onselect(residentDebugRoute(row.name))}>
+            <td>
+              {@render ResidentNameLink({ name: row.name })}
+              <small>{row.controllerId || 'uncontrolled'}</small>
+            </td>
             <td><span class:ok={row.online} class="dot"></span>{row.online ? 'online' : 'offline'}</td>
             <td>
               <strong>{residentStoryArcLabel(row)}</strong>
@@ -3491,6 +3504,50 @@
         {/each}
       </tbody>
     </table>
+  </section>
+{/snippet}
+
+{#snippet ResidentNameLink({ name }: { name: string })}
+  <button
+    class="inline-link resident-name-link"
+    onclick={(event) => {
+      event.stopPropagation();
+      debugNav(residentDebugRoute(name));
+    }}
+  >
+    {residentDisplayName(name)}
+  </button>
+{/snippet}
+
+{#snippet ResidentBrowseStrip({ name, runtime }: { name: string; runtime: RuntimeReadModel | undefined })}
+  <section class="panel resident-browse-strip">
+    <div class="row">
+      <div>
+        <div class="panel-title">Browse Resident Data</div>
+        <strong>{residentDisplayName(name)}</strong>
+      </div>
+      <span class:ok={runtime?.online} class="tag">{runtime?.online ? 'online' : 'offline'}</span>
+    </div>
+    <div class="browse-actions">
+      <button onclick={() => debugNav('/residents')}>Roster</button>
+      <button onclick={() => debugNav(observeResidentDebugRoute(name))}>Spectator</button>
+      <button onclick={() => debugNav('/souls')}>Souls</button>
+      <a href={residentRuntimeApiPath(name)} target="_blank" rel="noreferrer">Runtime JSON</a>
+      <a href={residentRuntimeApiPath(name, 'history')} target="_blank" rel="noreferrer">Actions</a>
+      <a href={residentRuntimeApiPath(name, 'inference')} target="_blank" rel="noreferrer">Inference</a>
+      <a href={residentRuntimeApiPath(name, 'memory/index')} target="_blank" rel="noreferrer">Memory</a>
+      {#if residentMemoryFilePath(runtime)}
+        <a href={`${residentRuntimeApiPath(name, 'memory/file')}?path=${encodeURIComponent(residentMemoryFilePath(runtime) || '')}`} target="_blank" rel="noreferrer">Memory File</a>
+      {/if}
+    </div>
+    <div class="mini-grid resident-stack-strip">
+      <span><strong>Soul</strong>{runtime?.stack?.soulTitle || runtime?.stack?.soulId || '-'}</span>
+      <span><strong>Model</strong>{runtime?.stack?.model?.endpoint || runtime?.stack?.model?.model || runtime?.logs.inference.at(-1)?.endpoint || runtime?.logs.inference.at(-1)?.model || '-'}</span>
+      <span><strong>SPARK</strong>{runtime?.spark?.activeModule?.id || runtime?.stack?.activeModule?.id || runtime?.stack?.configuredModules[0]?.id || '-'}</span>
+      <span><strong>Last Action</strong>{residentLastActionLabel(runtime)}</span>
+      <span><strong>Inventory</strong>{inventoryLabel(runtime)}</span>
+      <span><strong>Equipment</strong>{equipmentLabel(runtime)}</span>
+    </div>
   </section>
 {/snippet}
 
@@ -3599,7 +3656,7 @@
         <div class="event-row">
           <span class="tag">{relationshipTag(row)}</span>
           <span>
-            <strong>{residentDisplayName(row.resident)}</strong>
+            {@render ResidentNameLink({ name: row.resident })}
             <small>{relationshipActivityLabel(row)}</small>
           </span>
         </div>
@@ -3627,7 +3684,14 @@
         <span class="tag">{letter.kind}</span>
         <span>
           <strong>{letter.subject}</strong>
-          <small>{letterResidentLabel(letter)} to {letter.recipient} · {letterDeliveryLabel(letter)} · {letter.dispatchedAt || 'undated'} ({letterTimeLabel(letter)})</small>
+          <small>
+            {#if letter.senderResident}
+              {@render ResidentNameLink({ name: letter.senderResident })}
+            {:else}
+              {letterResidentLabel(letter)}
+            {/if}
+            to {letter.recipient} · {letterDeliveryLabel(letter)} · {letter.dispatchedAt || 'undated'} ({letterTimeLabel(letter)})
+          </small>
         </span>
       </div>
     {:else}
@@ -3648,7 +3712,7 @@
             <td class="num">{formatScore(run.score)}</td>
             <td>{run.mode}</td>
             <td><strong>{run.module.id}</strong><small>{run.module.version || 'version unknown'}</small></td>
-            <td>{residentDisplayName(run.resident)}</td>
+            <td>{@render ResidentNameLink({ name: run.resident })}</td>
             <td>{formatDuration(run.durationMs)}</td>
             <td>{benchmarkStartedLabel(run)}</td>
           </tr>
@@ -3714,7 +3778,7 @@
             <tr><th>Run</th><td>{artifact.runId}</td></tr>
             <tr><th>Task</th><td>{artifact.task.id} {artifact.task.version || ''}</td></tr>
             <tr><th>Module</th><td>{artifact.module.id} {artifact.module.version || ''}</td></tr>
-            <tr><th>Resident</th><td>{residentDisplayName(artifact.resident)}</td></tr>
+            <tr><th>Resident</th><td>{@render ResidentNameLink({ name: artifact.resident })}</td></tr>
             <tr><th>Model</th><td>{artifact.modelProfile || '-'}</td></tr>
             <tr><th>Started</th><td>{artifact.startedAt || '-'}</td></tr>
             <tr><th>Ended</th><td>{artifact.endedAt || '-'}</td></tr>
@@ -3770,7 +3834,11 @@
   <section class="subject-grid">
     {#each souls as soul}
       <article class="card">
-        <div class="row"><strong>{soulTitle(soul)}</strong><span class="tag">{soul.id}</span></div>
+        <div class="row">
+          {@render ResidentNameLink({ name: soul.id })}
+          <span class="tag">{soul.id}</span>
+        </div>
+        <strong>{soulTitle(soul)}</strong>
         <p>{soul.file}</p>
         <div class="mini-grid">
           <span>hooks {soul.hooks?.length || 0}</span>

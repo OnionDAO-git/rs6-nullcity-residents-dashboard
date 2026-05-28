@@ -44,6 +44,19 @@ export function cityPath(route: string): string {
   return normalizePath(route);
 }
 
+export function residentDebugRoute(name: string): string {
+  return `/residents/${encodeURIComponent(normalizeResidentName(name))}`;
+}
+
+export function observeResidentDebugRoute(name: string): string {
+  return `/observe/resident/${encodeURIComponent(normalizeResidentName(name))}`;
+}
+
+export function residentRuntimeApiPath(name: string, section = ''): string {
+  const normalizedSection = normalizeRuntimeSection(section);
+  return `/api/runtime/${encodeURIComponent(normalizeResidentName(name))}${normalizedSection ? `/${normalizedSection}` : ''}`;
+}
+
 export function isDebugInternalRoute(route: string): boolean {
   const normalized = normalizePath(route);
   if (debugInternalRoots.has(normalized)) return true;
@@ -58,4 +71,12 @@ function normalizePath(pathname: string): string {
   const [pathOnly = '/'] = pathname.split(/[?#]/);
   const withSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
   return withSlash.length > 1 ? withSlash.replace(/\/+$/, '') : '/';
+}
+
+function normalizeResidentName(name: string): string {
+  return name.trim();
+}
+
+function normalizeRuntimeSection(section: string): string {
+  return section.trim().replace(/^\/+|\/+$/g, '');
 }
