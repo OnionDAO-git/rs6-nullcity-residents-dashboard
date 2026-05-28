@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 const repoRoot = path.resolve(import.meta.dir, '../../../..');
-const serverRoot = process.env.NULLCITY_SERVER_ROOT || path.join(repoRoot, 'rs6-nullcity-server');
+const serverRoot = process.env.NULLCITY_SERVER_ROOT || path.join(repoRoot, 'nullcity-server');
 const defaultGatewayUrl = 'ws://127.0.0.1:43595';
 const defaultGatewayToken = 'nullcity-local-dev';
 
@@ -19,6 +19,7 @@ export interface DashboardConfig {
   soulsRoot: string;
   residentSaveRoot: string;
   benchmarkRoot: string;
+  eventPublicRoot: string;
   webDist: string;
   webDevOrigin?: string;
 }
@@ -53,6 +54,7 @@ export const config: DashboardConfig = {
   soulsRoot: process.env.NULLCITY_SOULS_ROOT || dataRoots.soulsRoot,
   residentSaveRoot: process.env.NULLCITY_RESIDENT_SAVE_ROOT || dataRoots.residentSaveRoot,
   benchmarkRoot: process.env.NULLCITY_BENCHMARK_ROOT || dataRoots.benchmarkRoot,
+  eventPublicRoot: process.env.DASHBOARD_EVENT_PUBLIC_ROOT || path.resolve(import.meta.dir, '../public'),
   webDist: process.env.DASHBOARD_WEB_DIST || path.resolve(import.meta.dir, '../../web/dist'),
   webDevOrigin: process.env.DASHBOARD_WEB_DEV_ORIGIN,
 };

@@ -1,11 +1,12 @@
-import path from 'node:path';
 import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
 import { config } from './config';
+import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
 import { buildEventReadinessSummary } from './readiness';
 import { RuntimeRepository } from './runtime';
 import { routeRs6Api } from './rs6/routes';
-import { jsonResponse, notFound, pathExists, textResponse } from './util';
+import { serveDashboardWeb } from './static';
+import { jsonResponse, notFound, textResponse } from './util';
 
 const gateway = new GatewayClient(config.gatewayUrl, config.gatewayToken);
 const runtime = new RuntimeRepository(
@@ -43,7 +44,11 @@ const server = Bun.serve<RsProxyWebSocketData>({
       if (url.pathname.startsWith('/api/')) {
         return await routeApi(request, url);
       }
-      return await serveWeb(url);
+      if (url.pathname.startsWith('/v1/')) {
+        const publicResponse = await routePublicEventApi(request, url, { config, runtime });
+        if (publicResponse) return publicResponse;
+      }
+      return await serveDashboardWeb(url, config);
     } catch (error) {
       return jsonResponse(
         {
@@ -537,39 +542,4 @@ function streamRuntime(resident: string): Response {
       connection: 'keep-alive',
     },
   });
-}
-
-async function serveWeb(url: URL): Promise<Response> {
-  if (config.webDevOrigin) {
-    const target = new URL(`${url.pathname}${url.search}`, config.webDevOrigin);
-    return Response.redirect(target, 307);
-  }
-
-  const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-  const filePath = path.join(config.webDist, requested);
-  if (await pathExists(filePath)) return fileResponse(filePath);
-  if (path.extname(requested)) {
-    return textResponse(`${requested} not found in dashboard web build. Rebuild the web package so spectator.html and assets are present.`, {
-      status: 404,
-    });
-  }
-  const fallback = path.join(config.webDist, 'index.html');
-  if (await pathExists(fallback)) return fileResponse(fallback);
-  return textResponse('Dashboard web build not found. Run `bun run dev:web` during development.', { status: 404 });
-}
-
-function fileResponse(filePath: string): Response {
-  const type = contentType(filePath);
-  return new Response(Bun.file(filePath), type ? { headers: { 'content-type': type } } : undefined);
-}
-
-function contentType(filePath: string): string | undefined {
-  const ext = path.extname(filePath);
-  if (ext === '.html') return 'text/html; charset=utf-8';
-  if (ext === '.js') return 'text/javascript; charset=utf-8';
-  if (ext === '.css') return 'text/css; charset=utf-8';
-  if (ext === '.json') return 'application/json; charset=utf-8';
-  if (ext === '.wasm') return 'application/wasm';
-  if (ext === '.map') return 'application/json; charset=utf-8';
-  return undefined;
 }

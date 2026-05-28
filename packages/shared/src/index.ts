@@ -591,3 +591,98 @@ export function makeFrame<TKind extends ClientMessage['kind']>(
 export function subjectKey(subject: SpectatorSubject): string {
   return subject.kind === 'resident' ? `resident:${subject.name}` : `player:${subject.username}`;
 }
+
+export type DashboardFactionId = 'foundry' | 'bureau-of-continuity' | 'ledger' | 'veil';
+export type DashboardVisualTreatment = 'standard' | 'redacted';
+
+export interface FactionUiMetadata {
+  readonly id: DashboardFactionId;
+  readonly displayName: string;
+  readonly color: string;
+  readonly accentColor?: string;
+  readonly wallColor: string;
+  readonly visualTreatment: DashboardVisualTreatment;
+}
+
+export interface ModuleUiMetadata {
+  readonly id: string;
+  readonly version: string;
+  readonly displayName: string;
+  readonly owner?: string;
+  readonly risk?: 'core' | 'reviewed' | 'experimental';
+  readonly capabilities: readonly string[];
+}
+
+export interface EmotionPresetUiMetadata {
+  readonly id: 'stillness' | 'reverie' | 'unease' | 'anguish' | 'fury';
+  readonly label: string;
+  readonly color: string;
+  readonly weight: number;
+}
+
+export const FACTION_UI_METADATA: readonly FactionUiMetadata[] = [
+  { id: 'foundry', displayName: 'The Foundry', color: '#B87333', wallColor: '#B87333', visualTreatment: 'standard' },
+  {
+    id: 'bureau-of-continuity',
+    displayName: 'The Bureau of Continuity',
+    color: '#E6CB78',
+    wallColor: '#E6CB78',
+    visualTreatment: 'standard',
+  },
+  { id: 'ledger', displayName: 'The Ledger', color: '#CD7F32', wallColor: '#CD7F32', visualTreatment: 'standard' },
+  {
+    id: 'veil',
+    displayName: 'The Veil',
+    color: '#0A0A0A',
+    accentColor: '#660000',
+    wallColor: '#660000',
+    visualTreatment: 'redacted',
+  },
+];
+
+export const FACTION_UI_METADATA_BY_ID = Object.fromEntries(FACTION_UI_METADATA.map(faction => [faction.id, faction])) as Readonly<
+  Record<DashboardFactionId, FactionUiMetadata>
+>;
+
+export const MODULE_UI_METADATA: readonly ModuleUiMetadata[] = [
+  {
+    id: 'onion.runescape.standard',
+    version: '0.1.0',
+    displayName: 'RuneScape Standard',
+    owner: 'OnionDAO',
+    risk: 'reviewed',
+    capabilities: ['thinking', 'nervous-rules'],
+  },
+];
+
+export const MODULE_UI_METADATA_BY_ID: Readonly<Record<string, ModuleUiMetadata>> = Object.fromEntries(
+  MODULE_UI_METADATA.map(module => [module.id, module]),
+);
+
+export const EMOTION_PRESETS: readonly EmotionPresetUiMetadata[] = [
+  { id: 'stillness', label: 'Stillness', color: '#7FA7B8', weight: 1 },
+  { id: 'reverie', label: 'Reverie', color: '#70A870', weight: 1.1 },
+  { id: 'unease', label: 'Unease', color: '#C8913A', weight: 1.2 },
+  { id: 'anguish', label: 'Anguish', color: '#7A6FA0', weight: 1.3 },
+  { id: 'fury', label: 'Fury', color: '#B84A3A', weight: 1.3 },
+];
+
+export const UI_METADATA = {
+  factions: FACTION_UI_METADATA,
+  factionsById: FACTION_UI_METADATA_BY_ID,
+  modules: MODULE_UI_METADATA,
+  modulesById: MODULE_UI_METADATA_BY_ID,
+  emotionPresets: EMOTION_PRESETS,
+} as const;
+
+export function factionUiMetadata(id: string): FactionUiMetadata | undefined {
+  return FACTION_UI_METADATA.find(faction => faction.id === id);
+}
+
+export function factionWallColor(id: string): string | undefined {
+  return factionUiMetadata(id)?.wallColor;
+}
+
+export function moduleUiMetadata(id: string): ModuleUiMetadata | undefined {
+  return MODULE_UI_METADATA_BY_ID[id];
+}

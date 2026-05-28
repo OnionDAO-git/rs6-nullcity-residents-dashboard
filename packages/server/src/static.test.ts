@@ -1,0 +1,67 @@
+import { describe, expect, test } from 'bun:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { eventPublicPagePath, serveDashboardWeb } from './static';
+
+async function withStaticRoots<T>(run: (roots: { eventPublicRoot: string; webDist: string }) => Promise<T>): Promise<T> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-static-'));
+  try {
+    const eventPublicRoot = path.join(root, 'public');
+    const webDist = path.join(root, 'dist');
+    await fs.mkdir(path.join(eventPublicRoot, 'wall'), { recursive: true });
+    await fs.mkdir(webDist, { recursive: true });
+    await fs.writeFile(path.join(eventPublicRoot, 'index.html'), '<main>public event index</main>');
+    await fs.writeFile(path.join(eventPublicRoot, 'wall', 'index.html'), '<main>public wall</main>');
+    await fs.writeFile(path.join(webDist, 'index.html'), '<main>svelte app shell</main>');
+    return await run({ eventPublicRoot, webDist });
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+describe('serveDashboardWeb', () => {
+  test('maps the migrated public event page routes explicitly', async () => {
+    await withStaticRoots(async roots => {
+      expect(eventPublicPagePath('/wall', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'wall/index.html'));
+      expect(eventPublicPagePath('/wall/', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'wall/index.html'));
+      expect(eventPublicPagePath('/inbox', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'inbox/index.html'));
+      expect(eventPublicPagePath('/patron', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'patron/index.html'));
+      expect(eventPublicPagePath('/graveyard', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'graveyard/index.html'));
+      expect(eventPublicPagePath('/library', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'library/index.html'));
+      expect(eventPublicPagePath('/residents/res-agent', roots.eventPublicRoot)).toBeUndefined();
+    });
+  });
+
+  test('serves public event pages before redirecting to the Vite dev app', async () => {
+    await withStaticRoots(async roots => {
+      const response = await serveDashboardWeb(new URL('http://dashboard.local/wall'), {
+        ...roots,
+        webDevOrigin: 'http://127.0.0.1:5174',
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      expect(await response.text()).toContain('public wall');
+    });
+  });
+
+  test('keeps the Svelte app shell on / while serving the public event index at /index.html', async () => {
+    await withStaticRoots(async roots => {
+      const rootResponse = await serveDashboardWeb(new URL('http://dashboard.local/'), roots);
+      const indexResponse = await serveDashboardWeb(new URL('http://dashboard.local/index.html'), roots);
+
+      expect(await rootResponse.text()).toContain('svelte app shell');
+      expect(await indexResponse.text()).toContain('public event index');
+    });
+  });
+
+  test('falls back to the Svelte app shell for non-public app routes', async () => {
+    await withStaticRoots(async roots => {
+      const response = await serveDashboardWeb(new URL('http://dashboard.local/residents/res-agent'), roots);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('svelte app shell');
+    });
+  });
+});
