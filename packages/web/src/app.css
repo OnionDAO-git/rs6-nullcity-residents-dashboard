@@ -121,12 +121,96 @@ main {
   gap: 8px;
 }
 
-.navlinks button {
+.navlinks button,
+.event-menu summary {
   height: 34px;
   font-family: var(--mono);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.5px;
+}
+
+.event-menu {
+  position: relative;
+}
+
+.event-menu summary {
+  display: inline-grid;
+  min-width: 104px;
+  padding: 0 28px 0 12px;
+  align-items: center;
+  color: var(--text-1);
+  background: var(--ground-1);
+  border: 1px solid var(--ground-4);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.event-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.event-menu summary::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 11px;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.event-menu[open] summary::after {
+  top: 16px;
+  transform: rotate(225deg);
+}
+
+.event-menu summary:hover,
+.event-menu summary:focus-visible {
+  border-color: var(--ground-6);
+  outline: none;
+}
+
+.event-menu summary.active {
+  background: var(--ground-0);
+  border-bottom: 2px solid var(--s-gold);
+  color: var(--text-0);
+}
+
+.event-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  background: var(--ground-1);
+  border: 1px solid var(--ground-4);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.34);
+}
+
+.event-menu-list a {
+  display: block;
+  padding: 9px 10px;
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.event-menu-list a:hover,
+.event-menu-list a:focus-visible,
+.event-menu-list a.active {
+  background: var(--ground-2);
+  color: var(--text-0);
+  outline: none;
 }
 
 .shard-line {
@@ -1266,6 +1350,17 @@ pre {
 
   .navlinks {
     overflow-x: auto;
+  }
+
+  .event-menu {
+    position: static;
+  }
+
+  .event-menu-list {
+    position: fixed;
+    top: 48px;
+    right: 12px;
+    max-width: calc(100vw - 24px);
   }
 
   .toolbar,

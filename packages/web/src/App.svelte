@@ -88,12 +88,21 @@
     F: [45, -1, 56, 61, 67, 70, 79],
   } as const;
   const skillOrder = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 'runecrafting', 'construction'];
+  const embassyPages = [
+    { label: 'Embassy Index', path: '/index.html' },
+    { label: 'Wall', path: '/wall/' },
+    { label: 'Inbox', path: '/inbox/' },
+    { label: 'Patron', path: '/patron/' },
+    { label: 'Graveyard', path: '/graveyard/' },
+    { label: 'Library', path: '/library/' },
+  ];
 
   $: parts = route.split('/').filter(Boolean);
   $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
   $: benchmarkRunId = parts[0] === 'benchmarks' && parts[1] ? decodeURIComponent(parts[1]) : '';
   $: observeKind = parts[0] === 'observe' ? parts[1] || '' : '';
   $: observeId = parts[0] === 'observe' ? parts[2] || '' : '';
+  $: embassyPageActive = embassyPages.some(page => route === page.path || route === page.path.replace(/\/$/, ''));
   $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
   $: canDeleteResidents = Boolean(gatewayStatus?.allowDelete);
   $: activeObserveSession = findObserveRouteSession(activeSession, sessions);
@@ -1258,6 +1267,14 @@
     <button class:active={route.startsWith('/benchmarks')} onclick={() => nav('/benchmarks')}>Benchmarks</button>
     <button class:active={route === '/souls'} onclick={() => nav('/souls')}>Souls</button>
     <button class:active={route === '/logs'} onclick={() => nav('/logs')}>Logs</button>
+    <details class="event-menu">
+      <summary class:active={embassyPageActive}>Embassy</summary>
+      <div class="event-menu-list" aria-label="Embassy pages">
+        {#each embassyPages as page (page.path)}
+          <a class:active={route === page.path || route === page.path.replace(/\/$/, '')} href={page.path}>{page.label}</a>
+        {/each}
+      </div>
+    </details>
   </div>
 </nav>
 

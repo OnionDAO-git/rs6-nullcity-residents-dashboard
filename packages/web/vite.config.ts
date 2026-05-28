@@ -2,6 +2,13 @@ import { resolve } from 'node:path';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
+const dashboardServer = 'http://127.0.0.1:8787';
+const dashboardHttpProxy = {
+  target: dashboardServer,
+  changeOrigin: true,
+};
+const eventPageRoutes = ['/index.html', '/wall', '/inbox', '/patron', '/graveyard', '/library', '/v1'];
+
 export default defineConfig({
   plugins: [svelte()],
   resolve: {
@@ -25,9 +32,10 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8787',
+        target: dashboardServer,
         changeOrigin: true,
       },
+      ...Object.fromEntries(eventPageRoutes.map(route => [route, dashboardHttpProxy])),
       '/rs': {
         target: 'ws://127.0.0.1:8787',
         ws: true,
