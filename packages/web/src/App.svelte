@@ -8,6 +8,7 @@
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
+  import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -96,6 +97,7 @@
   let benchmarkRuns: BenchmarkArtifactSummary[] = [];
   let selectedBenchmark: BenchmarkArtifact | undefined;
   let benchmarkLeaderboard: BenchmarkLeaderboardRow[] = [];
+  let rawVisibleResidents: ResidentDashboardRow[] = [];
   let visibleResidents: ResidentDashboardRow[] = [];
   let cityResidents: ResidentDashboardRow[] = [];
   let cityOnlineResidents: ResidentDashboardRow[] = [];
@@ -135,6 +137,9 @@
   let spectatorModalOpen = false;
   let perceptionFeedLoadingResident = '';
   let sparkActivityTab: 'activity' | 'stats' = 'activity';
+  let residentHealthFilter: ResidentHealthFilter = 'all';
+  let residentSortMode: ResidentSortMode = 'health';
+  let residentModelQuery = '';
   let statsModelBytes: ArrayBuffer | null = null;
   let statsModelStatus = '';
   let statsModelKey = '';
@@ -270,7 +275,12 @@
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: embassyPageActive = isDebugRoute && embassyPages.some(page => browserPath === page.path || browserPath === page.path.replace(/\/$/, ''));
-  $: visibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
+  $: rawVisibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
+  $: visibleResidents = applyResidentHealthControls(rawVisibleResidents, {
+    filter: residentHealthFilter,
+    sort: residentSortMode,
+    modelQuery: residentModelQuery,
+  });
   $: canDeleteResidents = Boolean(gatewayStatus?.allowDelete);
   $: activeObserveSession = findObserveRouteSession(activeSession, sessions);
   $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
@@ -1808,6 +1818,22 @@
     return parts.join(' | ');
   }
 
+  function residentHealthTone(row: ResidentDashboardRow): string {
+    const status = residentHealthSummary(row).status;
+    if (status === 'stuck') return 'fail';
+    if (status === 'stale') return 'warn';
+    if (status === 'active-inference' || status === 'online') return 'ok';
+    return '';
+  }
+
+  function residentHealthLabel(row: ResidentDashboardRow): string {
+    return residentHealthSummary(row).label;
+  }
+
+  function residentHealthDetail(row: ResidentDashboardRow): string {
+    return residentHealthSummary(row).detail;
+  }
+
   function thinkingActivity(runtime: RuntimeReadModel | undefined, activity: ReturnType<typeof buildActivitySnapshot>): SparkActivityItem[] {
     const state = asRecord(runtime?.state);
     const cognition = asRecord(state.cognition);
@@ -2359,6 +2385,7 @@
     {@render EventReadinessPanel({ readiness: overview?.readiness })}
     {@render PatronSummaryPanel({ summary: overview?.patrons })}
     {@render RelationshipSummaryPanel({ summary: overview?.relationships })}
+    {@render ResidentHealthToolbar({ shown: visibleResidents.length, total: rawVisibleResidents.length })}
     {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: debugNav, ondelete: deleteResidentByName })}
     <section class="panel">
       <div class="panel-title">Recent Events</div>
@@ -2383,6 +2410,7 @@
         <button class="primary" onclick={() => debugNav('/residents/new')}>Spawn Resident</button>
       </div>
     </section>
+    {@render ResidentHealthToolbar({ shown: visibleResidents.length, total: rawVisibleResidents.length })}
     {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: debugNav, ondelete: deleteResidentByName })}
   {:else if route === '/residents/new'}
     <section class="page-head compact">
@@ -3457,7 +3485,7 @@
 {#snippet ResidentTable({ rows, canDelete, onselect, ondelete }: { rows: ResidentDashboardRow[]; canDelete: boolean; onselect: (path: string) => void; ondelete: (name: string) => Promise<void> })}
   <section class="table-wrap">
     <table>
-      <thead><tr><th>Resident</th><th>Status</th><th>Story</th><th>Stack</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Resident</th><th>Status</th><th>Health</th><th>Story</th><th>Stack</th><th>Thinking</th><th>Attention</th><th>Feed</th><th>Nearby</th><th>Vitals</th><th>Last Action</th><th>Actions</th></tr></thead>
       <tbody>
         {#each rows as row}
           <tr onclick={() => onselect(residentDebugRoute(row.name))}>
@@ -3466,6 +3494,10 @@
               <small>{row.controllerId || 'uncontrolled'}</small>
             </td>
             <td><span class:ok={row.online} class="dot"></span>{row.online ? 'online' : 'offline'}</td>
+            <td>
+              <span class={`tag ${residentHealthTone(row)}`}>{residentHealthLabel(row)}</span>
+              <small>{residentHealthDetail(row)}</small>
+            </td>
             <td>
               <strong>{residentStoryArcLabel(row)}</strong>
               {#if residentStoryArcDetail(row)}
@@ -3500,10 +3532,44 @@
             </td>
           </tr>
         {:else}
-          <tr><td colspan="11" class="empty">No residents reported</td></tr>
+          <tr><td colspan="12" class="empty">No residents match the current filters</td></tr>
         {/each}
       </tbody>
     </table>
+  </section>
+{/snippet}
+
+{#snippet ResidentHealthToolbar({ shown, total }: { shown: number; total: number })}
+  <section class="panel resident-health-toolbar">
+    <div>
+      <div class="panel-title">Resident Health</div>
+      <strong>{shown} / {total}</strong>
+      <small>Filter by operational state or model endpoint</small>
+    </div>
+    <div class="resident-health-controls">
+      <label>Health
+        <select bind:value={residentHealthFilter}>
+          <option value="all">all</option>
+          <option value="needs-attention">needs attention</option>
+          <option value="stuck">stuck</option>
+          <option value="stale">stale feed</option>
+          <option value="active-inference">thinking now</option>
+          <option value="online">online</option>
+          <option value="offline">offline</option>
+        </select>
+      </label>
+      <label>Sort
+        <select bind:value={residentSortMode}>
+          <option value="health">health severity</option>
+          <option value="attention">low attention</option>
+          <option value="model">model endpoint</option>
+          <option value="name">name</option>
+        </select>
+      </label>
+      <label>Model
+        <input bind:value={residentModelQuery} placeholder="qwen, qwopus, haiku" />
+      </label>
+    </div>
   </section>
 {/snippet}
 
@@ -3543,7 +3609,7 @@
     <div class="mini-grid resident-stack-strip">
       <span><strong>Soul</strong>{runtime?.stack?.soulTitle || runtime?.stack?.soulId || '-'}</span>
       <span><strong>Model</strong>{runtime?.stack?.model?.endpoint || runtime?.stack?.model?.model || runtime?.logs.inference.at(-1)?.endpoint || runtime?.logs.inference.at(-1)?.model || '-'}</span>
-      <span><strong>SPARK</strong>{runtime?.spark?.activeModule?.id || runtime?.stack?.activeModule?.id || runtime?.stack?.configuredModules[0]?.id || '-'}</span>
+      <span><strong>SPARK</strong>{runtime?.spark?.activeModule?.id || runtime?.stack?.activeModule?.id || runtime?.stack?.configuredModules?.[0]?.id || '-'}</span>
       <span><strong>Last Action</strong>{residentLastActionLabel(runtime)}</span>
       <span><strong>Inventory</strong>{inventoryLabel(runtime)}</span>
       <span><strong>Equipment</strong>{equipmentLabel(runtime)}</span>
