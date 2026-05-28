@@ -9,7 +9,8 @@
     "dev": "DASHBOARD_WEB_DEV_ORIGIN=http://127.0.0.1:5174 bun run --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' dev",
     "dev:server": "bun run --filter '@nullcity-dashboard/server' dev",
     "dev:web": "bun run --filter '@nullcity-dashboard/web' dev",
-    "build": "bun run --filter '@nullcity-dashboard/shared' --filter '@nullcity-dashboard/observer' --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' build",
+    "build": "bun run --filter '@nullcity-dashboard/shared' --filter '@nullcity-dashboard/observer' --filter '@nullcity-dashboard/game-client' --filter '@nullcity-dashboard/print-bridge' --filter '@nullcity-dashboard/server' --filter '@nullcity-dashboard/web' build",
+    "start": "bun run --filter '@nullcity-dashboard/server' start",
     "check": "bun run --filter '*' check",
     "typecheck": "bun run --filter '*' typecheck"
   },

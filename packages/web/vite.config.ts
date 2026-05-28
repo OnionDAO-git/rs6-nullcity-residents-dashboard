@@ -7,7 +7,7 @@ const dashboardHttpProxy = {
   target: dashboardServer,
   changeOrigin: true,
 };
-const eventPageRoutes = ['/index.html', '/wall', '/inbox', '/patron', '/graveyard', '/library', '/v1'];
+const eventPageRoutes = ['/debug/index.html', '/debug/wall', '/debug/inbox', '/debug/patron', '/debug/graveyard', '/debug/library', '/v1'];
 
 export default defineConfig({
   plugins: [svelte()],

@@ -1,0 +1,585 @@
+import type {
+  CityProfile,
+  CityUser,
+  InboxMessage,
+  InboxThread,
+  LandingSessionUser,
+  LibrarySoulLife,
+  PointBalance,
+  PointLedgerEntry,
+  PointResource,
+  PrintQueueEntry,
+  Printer,
+  PrintRequest,
+  ResidentPost,
+  ResidentReadModel,
+  ResidentTrade,
+  SoulContribution,
+  SoulProposal,
+  SoulQuote,
+} from './types';
+
+export class CityStoreError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400,
+  ) {
+    super(message);
+    this.name = 'CityStoreError';
+  }
+}
+
+export interface LedgerAppendInput {
+  cityUserId: string;
+  resource: PointResource;
+  delta: number;
+  sourceType: string;
+  sourceId: string;
+  memo?: string;
+  metadata?: Record<string, unknown>;
+  createdByCityUserId?: string;
+}
+
+export interface SoulProposalCreateInput {
+  proposerCityUserId: string;
+  residentName?: string;
+  displayName: string;
+  goal: string;
+  personality: string;
+  vices?: string;
+  virtues?: string;
+  fears?: string;
+  voice?: string;
+  firstMemory?: string;
+  secret?: string;
+  appearance?: Record<string, unknown>;
+  startingLevels?: Record<string, number>;
+  startingEquipment?: unknown[];
+  startingInventory?: unknown[];
+  quote: SoulQuote;
+}
+
+export interface SoulContributionInput {
+  proposalId: string;
+  cityUserId: string;
+  apAmount: number;
+  idempotencyKey?: string;
+}
+
+export interface PrintRequestCreateInput {
+  cityUserId: string;
+  title: string;
+  description?: string;
+  requestedMaterial?: string;
+  requestedColor?: string;
+  quantity?: number;
+  userNotes?: string;
+}
+
+export interface PrinterUpsertInput {
+  id?: string;
+  name: string;
+  kind: Printer['kind'];
+  adapter: Printer['adapter'];
+  bridgeId?: string;
+  enabled?: boolean;
+  adminNotes?: string;
+  capabilities?: Record<string, unknown>;
+}
+
+export interface CityStore {
+  readonly mode: string;
+
+  upsertUserFromLanding(user: LandingSessionUser): Promise<CityUser>;
+  getProfile(cityUserId: string): Promise<CityProfile>;
+  updateProfile(cityUserId: string, patch: Partial<Pick<CityProfile, 'displayName' | 'handle' | 'avatarUrl' | 'bio' | 'metadata'>>): Promise<CityProfile>;
+
+  getPointBalances(cityUserId: string): Promise<PointBalance[]>;
+  listPointLedger(cityUserId: string, resource?: PointResource): Promise<PointLedgerEntry[]>;
+  appendPointLedger(input: LedgerAppendInput): Promise<PointLedgerEntry>;
+
+  listSoulProposals(): Promise<SoulProposal[]>;
+  getSoulProposal(id: string): Promise<SoulProposal | undefined>;
+  createSoulProposal(input: SoulProposalCreateInput): Promise<SoulProposal>;
+  contributeToSoulProposal(input: SoulContributionInput): Promise<{ proposal: SoulProposal; contribution: SoulContribution; ledger: PointLedgerEntry }>;
+
+  listPrintRequests(cityUserId?: string): Promise<PrintRequest[]>;
+  getPrintRequest(id: string): Promise<PrintRequest | undefined>;
+  createPrintRequest(input: PrintRequestCreateInput): Promise<PrintRequest>;
+  updatePrintQuote(id: string, quoteGp: number, adminNotes?: string): Promise<PrintRequest>;
+  confirmPrintGp(id: string, cityUserId: string, idempotencyKey?: string): Promise<{ request: PrintRequest; ledger: PointLedgerEntry }>;
+  listPrinters(): Promise<Printer[]>;
+  upsertPrinter(input: PrinterUpsertInput): Promise<Printer>;
+  listPrintQueue(): Promise<PrintQueueEntry[]>;
+
+  listResidents(): Promise<ResidentReadModel[]>;
+  getResident(id: string): Promise<ResidentReadModel | undefined>;
+  listResidentPosts(residentId: string): Promise<ResidentPost[]>;
+  grantResidentAttention(input: ResidentAttentionGrantInput): Promise<{ ledger: PointLedgerEntry; status: string; residentId: string; mocked: boolean }>;
+  listResidentTrades(cityUserId: string): Promise<ResidentTrade[]>;
+  createResidentTrade(input: ResidentTradeCreateInput): Promise<{ trade: ResidentTrade; ledger: PointLedgerEntry; mocked: boolean }>;
+  listInboxThreads(cityUserId: string): Promise<InboxThread[]>;
+  getInboxThread(cityUserId: string, threadId: string): Promise<{ thread: InboxThread; messages: InboxMessage[] } | undefined>;
+  listLibrarySoulLives(): Promise<LibrarySoulLife[]>;
+}
+
+export interface ResidentAttentionGrantInput {
+  cityUserId: string;
+  residentId: string;
+  apAmount: number;
+  idempotencyKey?: string;
+  memo?: string;
+}
+
+export interface ResidentTradeCreateInput {
+  cityUserId: string;
+  residentId: string;
+  offeredResource: PointResource;
+  offeredAmount: number;
+  requestedItem?: string;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export async function grantPoints(
+  store: CityStore,
+  input: Omit<LedgerAppendInput, 'delta'> & { amount: number },
+): Promise<PointLedgerEntry> {
+  return store.appendPointLedger({ ...input, delta: Math.abs(Math.floor(input.amount)) });
+}
+
+export async function spendPoints(
+  store: CityStore,
+  input: Omit<LedgerAppendInput, 'delta'> & { amount: number },
+): Promise<PointLedgerEntry> {
+  return store.appendPointLedger({ ...input, delta: -Math.abs(Math.floor(input.amount)) });
+}
+
+export function createInMemoryCityStore(now: () => Date = () => new Date()): CityStore {
+  const users = new Map<string, CityUser>();
+  const usersByLandingId = new Map<string, string>();
+  const profiles = new Map<string, CityProfile>();
+  const balances = new Map<string, PointBalance>();
+  const ledger: PointLedgerEntry[] = [];
+  const soulProposals = new Map<string, SoulProposal>();
+  const soulContributions: SoulContribution[] = [];
+  const printRequests = new Map<string, PrintRequest>();
+  const printers = new Map<string, Printer>();
+  const printQueue: PrintQueueEntry[] = [];
+  const residents = new Map<string, ResidentReadModel>();
+  const residentPosts: ResidentPost[] = [];
+  const residentTrades = new Map<string, ResidentTrade>();
+  const inboxThreads = new Map<string, InboxThread>();
+  const inboxMessages = new Map<string, InboxMessage[]>();
+  const libraryLives: LibrarySoulLife[] = [];
+
+  function timestamp(): string {
+    return now().toISOString();
+  }
+
+  function makeId(prefix: string): string {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+
+  function balanceKey(cityUserId: string, resource: PointResource): string {
+    return `${cityUserId}:${resource}`;
+  }
+
+  function ensureBalance(cityUserId: string, resource: PointResource): PointBalance {
+    const key = balanceKey(cityUserId, resource);
+    let balance = balances.get(key);
+    if (!balance) {
+      balance = { resource, balance: 0, updatedAt: timestamp() };
+      balances.set(key, balance);
+    }
+    return balance;
+  }
+
+  function ensureProfile(user: CityUser): CityProfile {
+    let profile = profiles.get(user.id);
+    if (!profile) {
+      profile = {
+        cityUserId: user.id,
+        displayName: user.nameSnapshot || user.handleSnapshot || user.emailSnapshot,
+        handle: user.handleSnapshot,
+        avatarUrl: user.avatarUrlSnapshot,
+        bio: '',
+        metadata: {},
+        updatedAt: timestamp(),
+      };
+      profiles.set(user.id, profile);
+    }
+    return profile;
+  }
+
+  function requireUser(cityUserId: string): CityUser {
+    const user = users.get(cityUserId);
+    if (!user) throw new CityStoreError('city_user_not_found', 404);
+    return user;
+  }
+
+  function getLedgerDuplicate(input: LedgerAppendInput): PointLedgerEntry | undefined {
+    return ledger.find(entry =>
+      entry.cityUserId === input.cityUserId &&
+      entry.resource === input.resource &&
+      entry.sourceType === input.sourceType &&
+      entry.sourceId === input.sourceId,
+    );
+  }
+
+  const store: CityStore = {
+    mode: 'memory',
+
+    async upsertUserFromLanding(user) {
+      const existingId = usersByLandingId.get(user.id);
+      const existing = existingId ? users.get(existingId) : undefined;
+      const at = timestamp();
+      const cityUser: CityUser = existing
+        ? {
+            ...existing,
+            emailSnapshot: user.email,
+            nameSnapshot: user.name || user.handle || user.email,
+            handleSnapshot: user.handle,
+            avatarUrlSnapshot: user.avatarUrl,
+            updatedAt: at,
+          }
+        : {
+            id: makeId('usr'),
+            landingUserId: user.id,
+            emailSnapshot: user.email,
+            nameSnapshot: user.name || user.handle || user.email,
+            handleSnapshot: user.handle,
+            avatarUrlSnapshot: user.avatarUrl,
+            createdAt: at,
+            updatedAt: at,
+          };
+      users.set(cityUser.id, cityUser);
+      usersByLandingId.set(user.id, cityUser.id);
+      ensureProfile(cityUser);
+      ensureBalance(cityUser.id, 'AP');
+      ensureBalance(cityUser.id, 'GP');
+      return cityUser;
+    },
+
+    async getProfile(cityUserId) {
+      return ensureProfile(requireUser(cityUserId));
+    },
+
+    async updateProfile(cityUserId, patch) {
+      const current = await store.getProfile(cityUserId);
+      const next: CityProfile = {
+        ...current,
+        ...definedPatch(patch),
+        updatedAt: timestamp(),
+      };
+      profiles.set(cityUserId, next);
+      return next;
+    },
+
+    async getPointBalances(cityUserId) {
+      requireUser(cityUserId);
+      return [ensureBalance(cityUserId, 'AP'), ensureBalance(cityUserId, 'GP')];
+    },
+
+    async listPointLedger(cityUserId, resource) {
+      requireUser(cityUserId);
+      return ledger
+        .filter(entry => entry.cityUserId === cityUserId && (!resource || entry.resource === resource))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async appendPointLedger(input) {
+      requireUser(input.cityUserId);
+      if (!Number.isInteger(input.delta) || input.delta === 0) throw new CityStoreError('point_delta_must_be_nonzero');
+      const duplicate = getLedgerDuplicate(input);
+      if (duplicate) return duplicate;
+      const balance = ensureBalance(input.cityUserId, input.resource);
+      const nextBalance = balance.balance + input.delta;
+      if (nextBalance < 0) throw new CityStoreError('insufficient_points', 409);
+      const entry: PointLedgerEntry = {
+        id: makeId('led'),
+        cityUserId: input.cityUserId,
+        resource: input.resource,
+        delta: input.delta,
+        balanceAfter: nextBalance,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        memo: input.memo,
+        metadata: input.metadata || {},
+        createdByCityUserId: input.createdByCityUserId,
+        createdAt: timestamp(),
+      };
+      balance.balance = nextBalance;
+      balance.updatedAt = entry.createdAt;
+      ledger.push(entry);
+      return entry;
+    },
+
+    async listSoulProposals() {
+      return [...soulProposals.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+
+    async getSoulProposal(id) {
+      return soulProposals.get(id);
+    },
+
+    async createSoulProposal(input) {
+      requireUser(input.proposerCityUserId);
+      const at = timestamp();
+      const proposal: SoulProposal = {
+        id: makeId('soul'),
+        proposerCityUserId: input.proposerCityUserId,
+        status: 'funding',
+        residentName: input.residentName,
+        displayName: input.displayName,
+        goal: input.goal,
+        personality: input.personality,
+        vices: input.vices || '',
+        virtues: input.virtues || '',
+        fears: input.fears || '',
+        voice: input.voice || '',
+        firstMemory: input.firstMemory || '',
+        secret: input.secret || '',
+        appearance: input.appearance || {},
+        startingLevels: input.startingLevels || {},
+        startingEquipment: input.startingEquipment || [],
+        startingInventory: input.startingInventory || [],
+        attentionThreshold: input.quote.threshold,
+        contributedAttention: 0,
+        quote: input.quote,
+        createdAt: at,
+        updatedAt: at,
+        submittedAt: at,
+      };
+      soulProposals.set(proposal.id, proposal);
+      return proposal;
+    },
+
+    async contributeToSoulProposal(input) {
+      const proposal = soulProposals.get(input.proposalId);
+      if (!proposal) throw new CityStoreError('soul_proposal_not_found', 404);
+      if (!Number.isInteger(input.apAmount) || input.apAmount <= 0) throw new CityStoreError('ap_amount_must_be_positive');
+      if (!['funding', 'ready_to_birth'].includes(proposal.status)) throw new CityStoreError('soul_proposal_not_fundable', 409);
+      const sourceId = input.idempotencyKey || `${input.proposalId}:${input.cityUserId}:${soulContributions.length + 1}`;
+      const ledgerEntry = await store.appendPointLedger({
+        cityUserId: input.cityUserId,
+        resource: 'AP',
+        delta: -input.apAmount,
+        sourceType: 'soul_contribution',
+        sourceId,
+        memo: `Contribution to ${proposal.displayName}`,
+        metadata: { proposalId: proposal.id },
+      });
+      const existingContribution = soulContributions.find(entry => entry.ledgerEntryId === ledgerEntry.id);
+      if (existingContribution) return { proposal, contribution: existingContribution, ledger: ledgerEntry };
+      const at = timestamp();
+      const contribution: SoulContribution = {
+        id: makeId('contrib'),
+        proposalId: proposal.id,
+        cityUserId: input.cityUserId,
+        apAmount: input.apAmount,
+        ledgerEntryId: ledgerEntry.id,
+        idempotencyKey: input.idempotencyKey,
+        createdAt: at,
+      };
+      proposal.contributedAttention += input.apAmount;
+      proposal.status = proposal.contributedAttention >= proposal.attentionThreshold ? 'ready_to_birth' : 'funding';
+      proposal.updatedAt = at;
+      soulContributions.push(contribution);
+      return { proposal, contribution, ledger: ledgerEntry };
+    },
+
+    async listPrintRequests(cityUserId) {
+      return [...printRequests.values()]
+        .filter(request => !cityUserId || request.cityUserId === cityUserId)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+
+    async getPrintRequest(id) {
+      return printRequests.get(id);
+    },
+
+    async createPrintRequest(input) {
+      requireUser(input.cityUserId);
+      const at = timestamp();
+      const request: PrintRequest = {
+        id: makeId('print'),
+        cityUserId: input.cityUserId,
+        status: 'draft',
+        title: input.title,
+        description: input.description,
+        requestedMaterial: input.requestedMaterial,
+        requestedColor: input.requestedColor,
+        quantity: input.quantity && input.quantity > 0 ? Math.floor(input.quantity) : 1,
+        userNotes: input.userNotes,
+        createdAt: at,
+        updatedAt: at,
+      };
+      printRequests.set(request.id, request);
+      return request;
+    },
+
+    async updatePrintQuote(id, quoteGp, adminNotes) {
+      const request = printRequests.get(id);
+      if (!request) throw new CityStoreError('print_request_not_found', 404);
+      if (!Number.isInteger(quoteGp) || quoteGp <= 0) throw new CityStoreError('quote_gp_must_be_positive');
+      const next: PrintRequest = {
+        ...request,
+        status: 'quoted',
+        quoteGp,
+        adminNotes: adminNotes ?? request.adminNotes,
+        updatedAt: timestamp(),
+      };
+      printRequests.set(id, next);
+      return next;
+    },
+
+    async confirmPrintGp(id, cityUserId, idempotencyKey) {
+      const request = printRequests.get(id);
+      if (!request) throw new CityStoreError('print_request_not_found', 404);
+      if (request.cityUserId !== cityUserId) throw new CityStoreError('print_request_forbidden', 403);
+      if (!request.quoteGp) throw new CityStoreError('print_request_not_quoted', 409);
+      const ledgerEntry = await store.appendPointLedger({
+        cityUserId,
+        resource: 'GP',
+        delta: -request.quoteGp,
+        sourceType: 'print_request',
+        sourceId: idempotencyKey || request.id,
+        memo: `3D print request: ${request.title}`,
+        metadata: { printRequestId: request.id },
+      });
+      const next: PrintRequest = {
+        ...request,
+        status: 'paid',
+        gpLedgerEntryId: ledgerEntry.id,
+        updatedAt: timestamp(),
+      };
+      printRequests.set(id, next);
+      return { request: next, ledger: ledgerEntry };
+    },
+
+    async listPrinters() {
+      return [...printers.values()].sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    async upsertPrinter(input) {
+      const existing = input.id ? printers.get(input.id) : undefined;
+      const at = timestamp();
+      const printer: Printer = {
+        id: existing?.id || input.id || makeId('printer'),
+        name: input.name,
+        kind: input.kind,
+        adapter: input.adapter,
+        bridgeId: input.bridgeId ?? existing?.bridgeId,
+        enabled: input.enabled ?? existing?.enabled ?? true,
+        adminNotes: input.adminNotes ?? existing?.adminNotes,
+        capabilities: input.capabilities || existing?.capabilities || {},
+        createdAt: existing?.createdAt || at,
+        updatedAt: at,
+      };
+      printers.set(printer.id, printer);
+      return printer;
+    },
+
+    async listPrintQueue() {
+      return [...printQueue].sort((a, b) => (a.queuePosition || 9999) - (b.queuePosition || 9999));
+    },
+
+    async listResidents() {
+      return [...residents.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+    },
+
+    async getResident(id) {
+      return residents.get(id) || [...residents.values()].find(resident => resident.nullcityResidentId === id);
+    },
+
+    async listResidentPosts(residentId) {
+      return residentPosts
+        .filter(post => post.residentId === residentId && post.visibility === 'public')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async grantResidentAttention(input) {
+      const apAmount = Math.max(1, Math.floor(Number(input.apAmount)));
+      const ledgerEntry = await store.appendPointLedger({
+        cityUserId: input.cityUserId,
+        resource: 'AP',
+        delta: -apAmount,
+        sourceType: 'resident_attention_grant',
+        sourceId: input.idempotencyKey || `${input.residentId}:${apAmount}`,
+        memo: input.memo || `Resident attention grant: ${input.residentId}`,
+        metadata: { residentId: input.residentId, mocked: true },
+      });
+      return { ledger: ledgerEntry, status: 'pending_nullcity', residentId: input.residentId, mocked: true };
+    },
+
+    async listResidentTrades(cityUserId) {
+      requireUser(cityUserId);
+      return [...residentTrades.values()]
+        .filter(trade => trade.cityUserId === cityUserId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async createResidentTrade(input) {
+      const idempotencyKey = input.idempotencyKey;
+      const existing = idempotencyKey
+        ? [...residentTrades.values()].find(trade => trade.cityUserId === input.cityUserId && trade.idempotencyKey === idempotencyKey)
+        : undefined;
+      if (existing) {
+        const existingLedger = ledger.find(entry => entry.id === existing.pointLedgerEntryId);
+        if (existingLedger) return { trade: existing, ledger: existingLedger, mocked: true };
+      }
+      const amount = Math.max(1, Math.floor(Number(input.offeredAmount)));
+      const tradeId = makeId('trade');
+      const ledgerEntry = await store.appendPointLedger({
+        cityUserId: input.cityUserId,
+        resource: input.offeredResource,
+        delta: -amount,
+        sourceType: 'resident_trade',
+        sourceId: idempotencyKey || tradeId,
+        memo: `Resident trade: ${input.residentId}`,
+        metadata: { residentId: input.residentId, tradeId, mocked: true },
+      });
+      const at = timestamp();
+      const trade: ResidentTrade = {
+        id: tradeId,
+        cityUserId: input.cityUserId,
+        residentId: input.residentId,
+        status: 'pending_nullcity',
+        offeredResource: input.offeredResource,
+        offeredAmount: amount,
+        requestedItem: input.requestedItem,
+        idempotencyKey,
+        pointLedgerEntryId: ledgerEntry.id,
+        metadata: input.metadata || {},
+        createdAt: at,
+        updatedAt: at,
+      };
+      residentTrades.set(trade.id, trade);
+      return { trade, ledger: ledgerEntry, mocked: true };
+    },
+
+    async listInboxThreads(cityUserId) {
+      requireUser(cityUserId);
+      return [...inboxThreads.values()]
+        .filter(thread => thread.cityUserId === cityUserId)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+
+    async getInboxThread(cityUserId, threadId) {
+      const thread = inboxThreads.get(threadId);
+      if (!thread || thread.cityUserId !== cityUserId) return undefined;
+      return { thread, messages: inboxMessages.get(threadId) || [] };
+    },
+
+    async listLibrarySoulLives() {
+      return [...libraryLives].sort((a, b) => (b.diedAt || b.updatedAt).localeCompare(a.diedAt || a.updatedAt));
+    },
+  };
+
+  return store;
+}
+
+function definedPatch<T extends Record<string, unknown>>(patch: T): Partial<T> {
+  return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<T>;
+}

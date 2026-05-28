@@ -8,17 +8,17 @@ export interface DashboardWebRoots {
 }
 
 const eventPageRoutes: Readonly<Record<string, string>> = {
-  '/index.html': 'index.html',
-  '/wall': 'wall/index.html',
-  '/wall/': 'wall/index.html',
-  '/inbox': 'inbox/index.html',
-  '/inbox/': 'inbox/index.html',
-  '/patron': 'patron/index.html',
-  '/patron/': 'patron/index.html',
-  '/graveyard': 'graveyard/index.html',
-  '/graveyard/': 'graveyard/index.html',
-  '/library': 'library/index.html',
-  '/library/': 'library/index.html',
+  '/debug/index.html': 'index.html',
+  '/debug/wall': 'wall/index.html',
+  '/debug/wall/': 'wall/index.html',
+  '/debug/inbox': 'inbox/index.html',
+  '/debug/inbox/': 'inbox/index.html',
+  '/debug/patron': 'patron/index.html',
+  '/debug/patron/': 'patron/index.html',
+  '/debug/graveyard': 'graveyard/index.html',
+  '/debug/graveyard/': 'graveyard/index.html',
+  '/debug/library': 'library/index.html',
+  '/debug/library/': 'library/index.html',
 };
 
 export function eventPublicPagePath(pathname: string, eventPublicRoot: string): string | undefined {
@@ -29,6 +29,9 @@ export function eventPublicPagePath(pathname: string, eventPublicRoot: string): 
 export async function serveDashboardWeb(url: URL, roots: DashboardWebRoots): Promise<Response> {
   const eventPagePath = eventPublicPagePath(url.pathname, roots.eventPublicRoot);
   if (eventPagePath && await pathExists(eventPagePath)) return fileResponse(eventPagePath);
+  if (isRetiredOperationsRoute(url.pathname)) {
+    return textResponse('Legacy dashboard route moved under /debug.', { status: 404 });
+  }
 
   if (roots.webDevOrigin) {
     const target = new URL(`${url.pathname}${url.search}`, roots.webDevOrigin);
@@ -46,6 +49,24 @@ export async function serveDashboardWeb(url: URL, roots: DashboardWebRoots): Pro
   const fallback = path.join(roots.webDist, 'index.html');
   if (await pathExists(fallback)) return fileResponse(fallback);
   return textResponse('Dashboard web build not found. Run `bun run dev:web` during development.', { status: 404 });
+}
+
+function isRetiredOperationsRoute(pathname: string): boolean {
+  return (
+    pathname === '/observe' ||
+    pathname.startsWith('/observe/') ||
+    pathname === '/benchmarks' ||
+    pathname.startsWith('/benchmarks/') ||
+    pathname === '/souls' ||
+    pathname === '/logs' ||
+    pathname === '/residents/new' ||
+    pathname === '/wall' ||
+    pathname === '/wall/' ||
+    pathname === '/patron' ||
+    pathname === '/patron/' ||
+    pathname === '/graveyard' ||
+    pathname === '/graveyard/'
+  );
 }
 
 function fileResponse(filePath: string): Response {

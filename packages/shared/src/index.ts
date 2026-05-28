@@ -620,6 +620,216 @@ export interface EmotionPresetUiMetadata {
   readonly weight: number;
 }
 
+export type CityPointResource = 'AP' | 'GP';
+
+export interface CitySessionUser {
+  id: string;
+  landingUserId: string;
+  email?: string;
+  name: string;
+  handle?: string;
+  avatarUrl?: string;
+  isAdmin: boolean;
+  roles?: Array<'attendee' | 'admin'>;
+  profileClaimed?: boolean;
+}
+
+export interface CitySessionResponse {
+  authenticated: boolean;
+  loginUrl: string;
+  logoutUrl?: string;
+  user?: CitySessionUser;
+  points?: CityPointBalance[];
+}
+
+export interface CityPointBalance {
+  resource: CityPointResource;
+  balance: number;
+  pending?: number;
+  updatedAt?: string;
+}
+
+export interface CityPointLedgerEntry {
+  id: string;
+  resource: CityPointResource;
+  delta: number;
+  balanceAfter: number;
+  sourceType: string;
+  sourceId: string;
+  memo?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface CityProfile {
+  id: string;
+  landingUserId: string;
+  displayName: string;
+  handle?: string;
+  avatarUrl?: string;
+  points: CityPointBalance[];
+  recentLedger: CityPointLedgerEntry[];
+}
+
+export type SoulProposalStatus =
+  | 'draft'
+  | 'submitted'
+  | 'funding'
+  | 'ready_to_birth'
+  | 'birthing'
+  | 'born'
+  | 'rejected'
+  | 'expired';
+
+export interface SoulProposalQuoteLine {
+  key: string;
+  label: string;
+  ap: number;
+  detail?: string;
+}
+
+export interface SoulProposalQuote {
+  threshold: number;
+  lines: SoulProposalQuoteLine[];
+}
+
+export interface SoulProposalSummary {
+  id: string;
+  status: SoulProposalStatus;
+  displayName: string;
+  residentName?: string;
+  goal: string;
+  personality?: string;
+  vices?: string;
+  virtues?: string;
+  voice?: string;
+  attentionThreshold: number;
+  contributedAttention: number;
+  quote?: SoulProposalQuote;
+  proposer?: Pick<CitySessionUser, 'id' | 'name' | 'handle' | 'avatarUrl'>;
+  bornResidentId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SoulProposalContribution {
+  id: string;
+  proposalId: string;
+  cityUserId: string;
+  apAmount: number;
+  createdAt: string;
+}
+
+export type CityResidentStatus = 'alive' | 'deceased' | 'unknown';
+
+export interface CityResidentPublicSummary {
+  id: string;
+  nullcityResidentId: string;
+  displayName: string;
+  status: CityResidentStatus;
+  bornAt?: string;
+  diedAt?: string;
+  deathCause?: string;
+  currentAttention?: number;
+  goal?: string;
+  latestThought?: string;
+  latestSeenAt?: string;
+  sourceProposalId?: string;
+  latestSnapshot?: {
+    tick?: number;
+    attention?: number;
+    stats?: Record<string, unknown>;
+    equipment?: unknown[];
+    inventorySummary?: Record<string, unknown>;
+    thoughts?: Record<string, unknown>;
+    position?: Position;
+    createdAt: string;
+  };
+}
+
+export interface ResidentPostSummary {
+  id: string;
+  residentId: string;
+  body: string;
+  source: 'resident' | 'overseer' | 'admin';
+  createdAt: string;
+}
+
+export interface InboxThreadSummary {
+  id: string;
+  resident: CityResidentPublicSummary;
+  status: string;
+  unreadCount: number;
+  updatedAt: string;
+  latestMessage?: InboxMessageSummary;
+}
+
+export interface InboxMessageSummary {
+  id: string;
+  threadId: string;
+  senderType: 'attendee' | 'resident' | 'system' | 'admin';
+  body: string;
+  messageType: string;
+  metadata?: Record<string, unknown>;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface LibrarySoulLifeSummary {
+  id: string;
+  nullcityResidentId: string;
+  displayName?: string;
+  bornAt?: string;
+  diedAt?: string;
+  deathCause?: string;
+  accomplishedGoal?: boolean;
+  goalSummary?: string;
+  meaningfulEvents: unknown[];
+  epitaph?: string;
+}
+
+export type PrintRequestStatus =
+  | 'draft'
+  | 'uploaded'
+  | 'quoted'
+  | 'awaiting_gp_confirmation'
+  | 'paid'
+  | 'approved'
+  | 'slicing'
+  | 'queued'
+  | 'printing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'refunded';
+
+export interface PrinterSummary {
+  id: string;
+  name: string;
+  kind: 'bambu-p2s' | 'snapmaker-u1' | 'generic';
+  adapter: string;
+  enabled: boolean;
+  status?: 'unknown' | 'idle' | 'printing' | 'paused' | 'offline' | 'error';
+  capabilities?: Record<string, unknown>;
+  updatedAt?: string;
+}
+
+export interface PrintRequestSummary {
+  id: string;
+  status: PrintRequestStatus;
+  title: string;
+  description?: string;
+  requestedMaterial?: string;
+  requestedColor?: string;
+  quantity: number;
+  quoteGp?: number;
+  assignedPrinter?: PrinterSummary;
+  userNotes?: string;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const FACTION_UI_METADATA: readonly FactionUiMetadata[] = [
   { id: 'foundry', displayName: 'The Foundry', color: '#B87333', wallColor: '#B87333', visualTreatment: 'standard' },
   {

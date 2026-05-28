@@ -11,8 +11,19 @@
     "baseUrl": ".",
     "paths": {
       "@nullcity-dashboard/shared": ["../shared/src/index.ts"],
-      "@nullcity-dashboard/observer": ["../observer/src/index.ts"]
+      "@nullcity-dashboard/observer": ["../observer/src/index.ts"],
+      "@nullcity-dashboard/game-client": ["../game-client/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "../shared/src/**/*.ts", "../observer/src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "../shared/src/**/*.ts",
+    "../observer/src/**/*.ts",
+    "../game-client/src/index.ts",
+    "../game-client/src/canvas/**/*.ts",
+    "../game-client/src/lifecycle/**/*.ts",
+    "../game-client/src/session-ticket/**/*.ts",
+    "../game-client/src/orchestrator.ts"
+  ]
 }

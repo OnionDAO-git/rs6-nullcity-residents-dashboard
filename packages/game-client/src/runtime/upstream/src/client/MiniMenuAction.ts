@@ -1,0 +1,81 @@
+export const enum MiniMenuAction {
+    _PRIORITY = 2000,
+
+    TGT_LOC = 32,
+    OP_LOC1 = 16,
+    OP_LOC2 = 29,
+    OP_LOC3 = 17,
+    OP_LOC4 = 27,
+    OP_LOC5 = 1002,
+    USEHELD_ONLOC = 5,
+
+    TGT_NPC = 21,
+    OP_NPC1 = 12,
+    OP_NPC2 = 30,
+    OP_NPC3 = 4,
+    OP_NPC4 = 34,
+    OP_NPC5 = 20,
+    USEHELD_ONNPC = 49,
+
+    TGT_OBJ = 15,
+    OP_OBJ1 = 2,
+    OP_OBJ2 = 38,
+    OP_OBJ3 = 3,
+    OP_OBJ4 = 8,
+    OP_OBJ5 = 36,
+    USEHELD_ONOBJ = 47,
+
+    TGT_PLAYER = 1,
+    OP_PLAYER1 = 10,
+    ACCEPT_DUELREQ = 46,
+    OP_PLAYER2 = 39,
+    OP_PLAYER3 = 44,
+    OP_PLAYER4 = 14,
+    ACCEPT_TRADEREQ = 26,
+    OP_PLAYER5 = 41,
+    USEHELD_ONPLAYER = 22,
+
+    TGT_HELD = 37,
+    OP_HELD1 = 52,
+    OP_HELD2 = 6,
+    OP_HELD3 = 31,
+    OP_HELD4 = 43,
+    OP_HELD5 = 11,
+    USEHELD_ONHELD = 56,
+    OP_V3_HELD6 = 1007,
+
+    INV_BUTTON1 = 53,
+    INV_BUTTON2 = 25,
+    INV_BUTTON3 = 55,
+    INV_BUTTON4 = 48,
+    INV_BUTTON5 = 24,
+
+    WALK = 7,
+
+    IF_BUTTON = 42,
+    IF_BUTTONX = 50,
+    TGT_BUTTON = 33,
+    CLOSE_BUTTON = 9,
+    CLOSE_TUTORIAL = 40,
+    TOGGLE_BUTTON = 23,
+    SELECT_BUTTON = 57,
+    PAUSE_BUTTON = 54,
+
+    USEHELD_START = 19,
+
+    OP_LOC6 = 1004,
+    OP_NPC6 = 1001,
+    OP_OBJ6 = 1003,
+    OP_HELD6 = 1006,
+
+    CANCEL = 1005,
+
+    ABUSE_REPORT = 28,
+
+    FRIENDLIST_ADD = 45,
+    IGNORELIST_ADD = 51,
+    FRIENDLIST_DEL = 13,
+    IGNORELIST_DEL = 35,
+
+    MESSAGE_PRIVATE = 18,
+}

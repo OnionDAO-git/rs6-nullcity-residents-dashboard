@@ -2,18 +2,70 @@
   import { onMount } from 'svelte';
   import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
+  import { createDomCanvasAdapter, createGameClient, createHttpSessionTicketAdapter, createLifecycleAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
   import { api, routeTo } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
+  import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
+  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
 
-  let route = window.location.pathname;
+  type CitySession = {
+    authenticated: boolean;
+    name: string;
+    handle: string;
+    email: string;
+    avatarUrl: string;
+    ap: number;
+    gp: number;
+    admin: boolean;
+    loginUrl: string;
+    logoutUrl: string;
+    csrfToken: string;
+    cityUserId: string;
+  };
+
+  type CityEntry = {
+    label: string;
+    path: string;
+    tone: string;
+    metric: string;
+    detail: string;
+  };
+
+  type CityNavItem = {
+    label: string;
+    path: string;
+    match: string;
+    glyph: string;
+  };
+
+  const guestSession: CitySession = {
+    authenticated: false,
+    name: 'Guest attendee',
+    handle: 'not signed in',
+    email: '',
+    avatarUrl: '',
+    ap: 0,
+    gp: 0,
+    admin: false,
+    loginUrl: '/login',
+    logoutUrl: '',
+    csrfToken: '',
+    cityUserId: '',
+  };
+
+  let browserPath = window.location.pathname;
+  let route = toRouteForShell(browserPath);
   let loading = false;
   let actionBusy = false;
   let error = '';
   let actionError = '';
+  let cityDataError = '';
+  let sessionLoading = true;
+  let citySession: CitySession = guestSession;
   let overview: DashboardOverview | undefined;
   let gatewayStatus: GatewayStatus | undefined;
   let residents: ResidentDashboardRow[] = [];
@@ -26,6 +78,28 @@
   let selectedBenchmark: BenchmarkArtifact | undefined;
   let benchmarkLeaderboard: BenchmarkLeaderboardRow[] = [];
   let visibleResidents: ResidentDashboardRow[] = [];
+  let cityResidents: ResidentDashboardRow[] = [];
+  let cityOnlineResidents: ResidentDashboardRow[] = [];
+  let cityLowAttentionResidents: ResidentDashboardRow[] = [];
+  let cityFeaturedResidents: ResidentDashboardRow[] = [];
+  let cityEntries: CityEntry[] = [];
+  let cityResident: ResidentDashboardRow | undefined;
+  let cityProfileData: CityProfileData | undefined;
+  let cityLedger: PointLedgerEntry[] = [];
+  let cityLedgerFilter: PointResource | 'all' = 'all';
+  let cityProposals: SoulProposal[] = [];
+  let citySelectedProposal: SoulProposal | undefined;
+  let cityProposalQuote: SoulQuote | undefined;
+  let cityInboxThreads: InboxThread[] = [];
+  let citySelectedThread: InboxThreadDetail | undefined;
+  let cityPrintRequests: PrintRequest[] = [];
+  let citySelectedPrint: PrintRequest | undefined;
+  let cityPrinters: Printer[] = [];
+  let cityPrintQueue: PrintQueueEntry[] = [];
+  let cityDirectoryResidents: ResidentReadModel[] = [];
+  let cityResidentReadModel: ResidentReadModel | undefined;
+  let cityResidentPosts: ResidentPost[] = [];
+  let cityLibraryLives: LibrarySoulLife[] = [];
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
@@ -81,6 +155,51 @@
   let spawnInferenceDefaultsLoaded = false;
   let spawnDraftRoute = '';
   let disconnectPolicy = 'idle';
+  let profileDisplayName = '';
+  let profileHandle = '';
+  let profileAvatarUrl = '';
+  let proposalResidentName = '';
+  let proposalDisplayName = '';
+  let proposalGoal = '';
+  let proposalPersonality = '';
+  let proposalVirtues = '';
+  let proposalVices = '';
+  let proposalFears = '';
+  let proposalVoice = '';
+  let proposalFirstMemory = '';
+  let proposalSecret = '';
+  let proposalLevels = 'hitpoints:10';
+  let proposalEquipment = '';
+  let proposalInventory = '';
+  let contributionAp = '100';
+  let grantAttentionAp = '100';
+  let grantAttentionMemo = '';
+  let printTitle = '';
+  let printDescription = '';
+  let printMaterial = 'PLA';
+  let printColor = '';
+  let printQuantity = '1';
+  let printUserNotes = '';
+  let printFileName = '';
+  let printFileMime = 'model/stl';
+  let printFileSize = '';
+  let printerName = '';
+  let printerKind: Printer['kind'] = 'generic';
+  let printerAdapter: Printer['adapter'] = 'manual';
+  let printerBridgeId = '';
+  let printerEnabled = true;
+  let printerNotes = '';
+  let printQuoteGp = '40';
+  let printQuoteNotes = '';
+  let adminGrantCityUserId = '';
+  let adminGrantResource: PointResource = 'AP';
+  let adminGrantAmount = '100';
+  let adminGrantMemo = '';
+  let cityActionNotice = '';
+  let gameClientMount: HTMLElement | undefined;
+  let gameClientController: GameClientController | undefined;
+  let gameClientStatus: GameClientStatus = 'idle';
+  let gameClientTicketUser = '';
 
   const basePartMap = [8, 11, 4, 6, 9, 7, 10] as const;
   const defaultIdkIdsByGender = {
@@ -88,22 +207,43 @@
     F: [45, -1, 56, 61, 67, 70, 79],
   } as const;
   const skillOrder = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 'runecrafting', 'construction'];
-  const embassyPages = [
-    { label: 'Embassy Index', path: '/index.html' },
-    { label: 'Wall', path: '/wall/' },
-    { label: 'Inbox', path: '/inbox/' },
-    { label: 'Patron', path: '/patron/' },
-    { label: 'Graveyard', path: '/graveyard/' },
-    { label: 'Library', path: '/library/' },
+  const cityNavItems: CityNavItem[] = [
+    { label: 'Overview', path: '/', match: '/', glyph: 'OV' },
+    { label: 'World', path: '/world', match: '/world', glyph: 'WO' },
+    { label: 'Embassy', path: '/embassy', match: '/embassy', glyph: 'EM' },
+    { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
+    { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
+    { label: 'Prints', path: '/prints', match: '/prints', glyph: 'PR' },
+    { label: 'Profile', path: '/profile', match: '/profile', glyph: 'PF' },
   ];
 
+  const embassyPages = [
+    { label: 'Embassy Index', path: debugPath('/index.html') },
+    { label: 'Wall', path: debugPath('/wall/') },
+    { label: 'Inbox', path: debugPath('/inbox/') },
+    { label: 'Patron', path: debugPath('/patron/') },
+    { label: 'Graveyard', path: debugPath('/graveyard/') },
+    { label: 'Library', path: debugPath('/library/') },
+  ];
+
+  $: isDebugRoute = isDebugPath(browserPath);
+  $: route = toRouteForShell(browserPath);
   $: parts = route.split('/').filter(Boolean);
-  $: residentName = parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
-  $: benchmarkRunId = parts[0] === 'benchmarks' && parts[1] ? decodeURIComponent(parts[1]) : '';
-  $: observeKind = parts[0] === 'observe' ? parts[1] || '' : '';
-  $: observeId = parts[0] === 'observe' ? parts[2] || '' : '';
-  $: embassyPageActive = embassyPages.some(page => route === page.path || route === page.path.replace(/\/$/, ''));
-  $: visibleResidents = route === '/' ? overview?.residents || [] : residents;
+  $: residentName = isDebugRoute && parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
+  $: benchmarkRunId = isDebugRoute && parts[0] === 'benchmarks' && parts[1] ? decodeURIComponent(parts[1]) : '';
+  $: cityParts = browserPath.split('/').filter(Boolean);
+  $: cityResidentId = !isDebugRoute && cityParts[0] === 'residents' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
+  $: cityProposalId = !isDebugRoute && cityParts[0] === 'embassy' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
+  $: cityInboxThreadId = !isDebugRoute && cityParts[0] === 'inbox' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
+  $: cityPrintId = !isDebugRoute && cityParts[0] === 'prints' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
+  $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
+  $: cityResidents = overview?.residents || residents;
+  $: cityOnlineResidents = cityResidents.filter(row => row.online);
+  $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
+  $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
+  $: cityEntries = cityEntryPoints(citySession, cityResidents);
+  $: embassyPageActive = isDebugRoute && embassyPages.some(page => browserPath === page.path || browserPath === page.path.replace(/\/$/, ''));
+  $: visibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
   $: canDeleteResidents = Boolean(gatewayStatus?.allowDelete);
   $: activeObserveSession = findObserveRouteSession(activeSession, sessions);
   $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
@@ -137,20 +277,21 @@
     zoom: spectatorZoom,
   };
   $: {
-    if (route === '/residents/new' && spawnDraftRoute !== route) {
+    if (isDebugRoute && route === '/residents/new' && spawnDraftRoute !== route) {
       seedSpawnDraft();
       spawnDraftRoute = route;
-    } else if (route !== '/residents/new') {
+    } else if (!isDebugRoute || route !== '/residents/new') {
       spawnDraftRoute = '';
     }
   }
 
   onMount(() => {
     const listener = () => {
-      route = window.location.pathname;
+      browserPath = window.location.pathname;
       void loadRoute();
     };
     window.addEventListener('popstate', listener);
+    void bootstrapSession();
     void loadRoute();
     const timer = setInterval(() => void refreshQuietly(), 5000);
     return () => {
@@ -158,6 +299,7 @@
       clearInterval(timer);
       closeRuntimeStream();
       closeSessionStream();
+      void stopCityGameClient();
     };
   });
 
@@ -169,41 +311,46 @@
     }
   }
 
+  function normalizeRoutePath(pathname: string): string {
+    const [pathOnly = '/'] = pathname.split(/[?#]/);
+    const withSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
+    return withSlash.length > 1 ? withSlash.replace(/\/+$/, '') : '/';
+  }
+
+  function toRouteForShell(pathname: string): string {
+    return isDebugPath(pathname) ? toDebugInternalRoute(pathname) : normalizeRoutePath(pathname);
+  }
+
+  function debugNav(path: string) {
+    routeTo(debugPath(path));
+  }
+
+  function cityNav(path: string) {
+    routeTo(cityPath(path));
+  }
+
+  async function bootstrapSession() {
+    sessionLoading = true;
+    try {
+      citySession = normalizeCitySession(await cityApi.session());
+    } catch {
+      citySession = guestSession;
+    } finally {
+      setCityCsrfToken(citySession.csrfToken);
+      sessionLoading = false;
+    }
+  }
+
   async function loadRoute(showSpinner = true) {
+    const currentBrowserPath = window.location.pathname;
+    browserPath = currentBrowserPath;
+    const currentIsDebug = isDebugPath(currentBrowserPath);
+    const currentRoute = toRouteForShell(currentBrowserPath);
     if (showSpinner) loading = true;
     error = '';
     try {
-      if (route === '/') {
-        overview = await api.overview();
-        gatewayStatus = overview.gateway;
-      }
-      else if (route === '/residents') {
-        [residents, gatewayStatus] = await Promise.all([api.residents(filter), api.gatewayStatus()]);
-      }
-      else if (route === '/residents/new') {
-        seedSpawnDefaults();
-        souls = await api.souls();
-      }
-      else if (residentName) {
-        [selectedRuntime, sessions, gatewayStatus] = await Promise.all([api.runtime(residentName), api.sessions(), api.gatewayStatus()]);
-        openRuntimeStream(residentName);
-        syncResidentStream();
-      }
-      else if (route === '/observe' || route.startsWith('/observe/')) {
-        const observedResident = observeKind === 'resident' && observeId ? decodeURIComponent(observeId) : '';
-        const observedRuntime = observedResident ? api.runtime(observedResident).catch(() => undefined) : Promise.resolve(undefined);
-        [subjects, sessions, selectedRuntime, gatewayStatus] = await Promise.all([api.subjects(), api.sessions(), observedRuntime, api.gatewayStatus()]);
-        await ensureObserveRouteSession();
-        syncObserveStream();
-      }
-      else if (route === '/souls') souls = await api.souls();
-      else if (route === '/logs') logs = await api.logs();
-      else if (route === '/benchmarks') [benchmarkRuns, benchmarkLeaderboard] = await Promise.all([api.benchmarks(), api.benchmarkLeaderboard()]);
-      else if (benchmarkRunId) [selectedBenchmark, benchmarkRuns, benchmarkLeaderboard] = await Promise.all([api.benchmark(benchmarkRunId), api.benchmarks(), api.benchmarkLeaderboard()]);
-      if (!residentName) {
-        closeRuntimeStream();
-      }
-      if (!residentName && !route.startsWith('/observe/')) closeSessionStream();
+      if (currentIsDebug) await loadDebugRoute(currentRoute);
+      else await loadCityRoute(currentRoute);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Request failed';
     } finally {
@@ -211,8 +358,348 @@
     }
   }
 
-  function nav(path: string) {
-    routeTo(path);
+  async function loadDebugRoute(activeRoute: string) {
+    cityDataError = '';
+    const activeResidentName = residentNameFromDebugRoute(activeRoute);
+    const activeBenchmarkRunId = benchmarkRunIdFromDebugRoute(activeRoute);
+    const activeObserve = observePartsFromDebugRoute(activeRoute);
+    if (activeRoute === '/') {
+      overview = await api.overview();
+      gatewayStatus = overview.gateway;
+    }
+    else if (activeRoute === '/residents') {
+      [residents, gatewayStatus] = await Promise.all([api.residents(filter), api.gatewayStatus()]);
+    }
+    else if (activeRoute === '/residents/new') {
+      seedSpawnDefaults();
+      souls = await api.souls();
+    }
+    else if (activeResidentName) {
+      [selectedRuntime, sessions, gatewayStatus] = await Promise.all([api.runtime(activeResidentName), api.sessions(), api.gatewayStatus()]);
+      openRuntimeStream(activeResidentName);
+      syncResidentStream(activeResidentName);
+    }
+    else if (activeRoute === '/observe' || activeRoute.startsWith('/observe/')) {
+      const observedResident = activeObserve.kind === 'resident' && activeObserve.id ? decodeURIComponent(activeObserve.id) : '';
+      const observedRuntime = observedResident ? api.runtime(observedResident).catch(() => undefined) : Promise.resolve(undefined);
+      [subjects, sessions, selectedRuntime, gatewayStatus] = await Promise.all([api.subjects(), api.sessions(), observedRuntime, api.gatewayStatus()]);
+      await ensureObserveRouteSession(activeRoute);
+      syncObserveStream(activeRoute);
+    }
+    else if (activeRoute === '/souls') souls = await api.souls();
+    else if (activeRoute === '/logs') logs = await api.logs();
+    else if (activeRoute === '/benchmarks') [benchmarkRuns, benchmarkLeaderboard] = await Promise.all([api.benchmarks(), api.benchmarkLeaderboard()]);
+    else if (activeBenchmarkRunId) [selectedBenchmark, benchmarkRuns, benchmarkLeaderboard] = await Promise.all([api.benchmark(activeBenchmarkRunId), api.benchmarks(), api.benchmarkLeaderboard()]);
+    if (!activeResidentName) {
+      closeRuntimeStream();
+    }
+    if (!activeResidentName && !activeRoute.startsWith('/observe/')) closeSessionStream();
+  }
+
+  async function loadCityRoute(activeRoute: string) {
+    closeRuntimeStream();
+    closeSessionStream();
+    if (!cityRouteNeedsSnapshot(activeRoute)) return;
+    await loadCitySnapshot();
+    if (sessionLoading) await bootstrapSession();
+    if (!citySession.authenticated && cityRouteRequiresLogin(activeRoute)) {
+      clearProtectedCityData();
+      return;
+    }
+    if (activeRoute === '/') {
+      const [proposalsPayload, printsPayload, inboxPayload] = await Promise.all([
+        cityLoad(cityApi.proposals(), { proposals: [] }),
+        citySession.authenticated ? cityLoad(cityApi.prints(), { requests: [] }) : Promise.resolve({ requests: [] }),
+        citySession.authenticated ? cityLoad(cityApi.inbox(), { threads: [] }) : Promise.resolve({ threads: [] }),
+      ]);
+      cityProposals = proposalsPayload.proposals;
+      cityPrintRequests = printsPayload.requests;
+      cityInboxThreads = inboxPayload.threads;
+    }
+    if (activeRoute === '/profile') {
+      const [profilePayload, ledgerPayload] = await Promise.all([
+        cityLoad(cityApi.profile(), undefined),
+        cityLoad(cityApi.ledger(cityLedgerFilter === 'all' ? undefined : cityLedgerFilter), { entries: [] }),
+      ]);
+      cityProfileData = profilePayload?.profile;
+      cityLedger = ledgerPayload.entries;
+      seedProfileDraft();
+    }
+    if (activeRoute === '/embassy') {
+      cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
+      citySelectedProposal = undefined;
+    }
+    if (activeRoute === '/embassy/new') {
+      cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
+      citySelectedProposal = undefined;
+      await refreshProposalQuote();
+    }
+    if (cityProposalId) {
+      const [proposalPayload, proposalsPayload] = await Promise.all([
+        cityLoad(cityApi.proposal(cityProposalId), undefined),
+        cityLoad(cityApi.proposals(), { proposals: [] }),
+      ]);
+      citySelectedProposal = proposalPayload?.proposal;
+      cityProposals = proposalsPayload.proposals;
+    }
+    if (activeRoute === '/residents' || cityResidentId) {
+      cityDirectoryResidents = (await cityLoad(cityApi.residents(), { residents: [] })).residents;
+    }
+    if (cityResidentId) {
+      const cityResidentApiId = cityResident?.name || cityResidentId;
+      const [residentPayload, postsPayload] = await Promise.all([
+        cityLoad(cityApi.resident(cityResidentApiId), undefined),
+        cityLoad(cityApi.residentPosts(cityResidentApiId), { posts: [] }),
+      ]);
+      cityResidentReadModel = residentPayload?.resident;
+      cityResidentPosts = postsPayload.posts;
+    } else {
+      cityResidentReadModel = undefined;
+      cityResidentPosts = [];
+    }
+    if (activeRoute === '/inbox' || cityInboxThreadId) {
+      cityInboxThreads = (await cityLoad(cityApi.inbox(), { threads: [] })).threads;
+      citySelectedThread = cityInboxThreadId ? await cityLoad(cityApi.inboxThread(cityInboxThreadId), undefined) : undefined;
+    }
+    if (activeRoute === '/prints' || activeRoute === '/prints/new' || cityPrintId) {
+      cityPrintRequests = (await cityLoad(cityApi.prints(), { requests: [] })).requests;
+      citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
+    }
+    if (activeRoute.startsWith('/admin')) {
+      const [printersPayload, queuePayload, proposalsPayload, printsPayload, ledgerPayload] = await Promise.all([
+        cityLoad(cityApi.adminPrinters(), { printers: [] }),
+        cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
+        cityLoad(cityApi.proposals(), { proposals: [] }),
+        cityLoad(cityApi.prints(), { requests: [] }),
+        cityLoad(cityApi.ledger(), { entries: [] }),
+      ]);
+      cityPrinters = printersPayload.printers;
+      cityPrintQueue = queuePayload.queue;
+      cityProposals = proposalsPayload.proposals;
+      cityPrintRequests = printsPayload.requests;
+      cityLedger = ledgerPayload.entries;
+    }
+    if (activeRoute === '/library') {
+      cityLibraryLives = (await cityLoad(cityApi.library(), { lives: [] })).lives;
+    }
+    if (activeRoute === '/library') souls = await api.souls().catch(() => []);
+  }
+
+  async function loadCitySnapshot() {
+    try {
+      overview = await api.overview();
+      gatewayStatus = overview.gateway;
+      residents = overview.residents || [];
+      cityDataError = '';
+    } catch (err) {
+      cityDataError = err instanceof Error ? err.message : 'City data unavailable';
+    }
+  }
+
+  function cityRouteNeedsSnapshot(activeRoute: string): boolean {
+    return activeRoute === '/' ||
+      activeRoute === '/profile' ||
+      activeRoute === '/world' ||
+      activeRoute === '/embassy' ||
+      activeRoute.startsWith('/embassy/') ||
+      activeRoute === '/residents' ||
+      activeRoute.startsWith('/residents/') ||
+      activeRoute === '/inbox' ||
+      activeRoute.startsWith('/inbox/') ||
+      activeRoute === '/prints' ||
+      activeRoute.startsWith('/prints/') ||
+      activeRoute === '/library' ||
+      activeRoute.startsWith('/admin');
+  }
+
+  function cityRouteRequiresLogin(activeRoute: string): boolean {
+    return activeRoute === '/profile' ||
+      activeRoute === '/inbox' ||
+      activeRoute.startsWith('/inbox/') ||
+      activeRoute === '/prints' ||
+      activeRoute.startsWith('/prints/') ||
+      activeRoute.startsWith('/admin');
+  }
+
+  function clearProtectedCityData() {
+    cityProfileData = undefined;
+    cityLedger = [];
+    cityInboxThreads = [];
+    citySelectedThread = undefined;
+    cityPrintRequests = [];
+    citySelectedPrint = undefined;
+    cityPrinters = [];
+    cityPrintQueue = [];
+  }
+
+  async function cityLoad<T>(promise: Promise<T>, fallback: T): Promise<T>;
+  async function cityLoad<T>(promise: Promise<T>, fallback: T | undefined): Promise<T | undefined>;
+  async function cityLoad<T>(promise: Promise<T>, fallback: T | undefined): Promise<T | undefined> {
+    try {
+      return await promise;
+    } catch (err) {
+      handleCityApiError(err);
+      return fallback;
+    }
+  }
+
+  function handleCityApiError(err: unknown) {
+    if (err instanceof CityApiError && err.status === 401) {
+      citySession = { ...guestSession, loginUrl: err.loginUrl || citySession.loginUrl || guestSession.loginUrl };
+      setCityCsrfToken(undefined);
+      cityDataError = '';
+      return;
+    }
+    cityDataError = err instanceof Error ? err.message : 'City API request failed';
+  }
+
+  function residentNameFromDebugRoute(activeRoute: string): string {
+    const activeParts = activeRoute.split('/').filter(Boolean);
+    return activeParts[0] === 'residents' && activeParts[1] && activeParts[1] !== 'new' ? decodeURIComponent(activeParts[1]) : '';
+  }
+
+  function benchmarkRunIdFromDebugRoute(activeRoute: string): string {
+    const activeParts = activeRoute.split('/').filter(Boolean);
+    return activeParts[0] === 'benchmarks' && activeParts[1] ? decodeURIComponent(activeParts[1]) : '';
+  }
+
+  function observePartsFromDebugRoute(activeRoute: string): { kind: string; id: string } {
+    const activeParts = activeRoute.split('/').filter(Boolean);
+    return activeParts[0] === 'observe' ? { kind: activeParts[1] || '', id: activeParts[2] || '' } : { kind: '', id: '' };
+  }
+
+  function normalizeCitySession(value: unknown): CitySession {
+    const root = asRecord(value);
+    const user = asRecord(root.user || root.profile || root.attendee);
+    const balances = asRecord(root.balances || root.points || root.wallet);
+    const pointBalances = Array.isArray(root.points) ? root.points : Array.isArray(root.balances) ? root.balances : [];
+    const roles = arrayStrings(root.roles).concat(arrayStrings(user.roles));
+    const authenticated = booleanField(root, 'authenticated') ?? Boolean(Object.keys(user).length || stringField(root, 'userId'));
+    const name =
+      stringField(user, 'displayName') ||
+      stringField(user, 'name') ||
+      stringField(root, 'displayName') ||
+      stringField(root, 'name') ||
+      (authenticated ? 'Onion DAO attendee' : guestSession.name);
+    const handle =
+      stringField(user, 'handle') ||
+      stringField(root, 'handle') ||
+      stringField(user, 'username') ||
+      stringField(root, 'username') ||
+      (authenticated ? 'attendee' : guestSession.handle);
+    return {
+      authenticated,
+      name,
+      handle: authenticated && !handle.startsWith('@') ? `@${handle}` : handle,
+      email: stringField(user, 'email') || stringField(root, 'email') || '',
+      avatarUrl: stringField(user, 'avatarUrl') || stringField(user, 'avatar') || stringField(root, 'avatarUrl') || '',
+      ap: pointBalance(pointBalances, 'AP') ?? numberField(balances, 'ap') ?? numberField(balances, 'AP') ?? numberField(root, 'ap') ?? numberField(root, 'AP') ?? 0,
+      gp: pointBalance(pointBalances, 'GP') ?? numberField(balances, 'gp') ?? numberField(balances, 'GP') ?? numberField(root, 'gp') ?? numberField(root, 'GP') ?? 0,
+      admin:
+        booleanField(root, 'admin') ??
+        booleanField(root, 'isAdmin') ??
+        booleanField(user, 'admin') ??
+        booleanField(user, 'isAdmin') ??
+        roles.includes('admin'),
+      loginUrl: stringField(root, 'loginUrl') || guestSession.loginUrl,
+      logoutUrl: stringField(root, 'logoutUrl') || '',
+      csrfToken: stringField(root, 'csrfToken') || stringField(root, 'csrf') || '',
+      cityUserId: stringField(user, 'id') || stringField(root, 'cityUserId') || '',
+    };
+  }
+
+  function pointBalance(values: unknown[], resource: 'AP' | 'GP'): number | undefined {
+    for (const value of values) {
+      const record = asRecord(value);
+      if (String(record.resource || '').toUpperCase() === resource) return numberField(record, 'balance') ?? 0;
+    }
+    return undefined;
+  }
+
+  function arrayStrings(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+  }
+
+  function cityEntryPoints(session: CitySession, rows: ResidentDashboardRow[]): CityEntry[] {
+    const online = rows.filter(row => row.online).length;
+    const lowAp = rows.filter(row => (row.attention ?? 999) <= 2).length;
+    const readyProposals = cityProposals.filter(proposal => proposal.status === 'ready_to_birth').length;
+    const activePrints = cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
+    const unreadThreads = cityInboxThreads.filter(thread => !thread.latestMessage?.readAt).length;
+    return [
+      {
+        label: 'Profile / AP / GP',
+        path: '/profile',
+        tone: 'gold',
+        metric: `${session.ap.toLocaleString()} AP / ${session.gp.toLocaleString()} GP`,
+        detail: session.authenticated ? `${session.handle} ledger ready` : 'Sign in to load attendee balances',
+      },
+      {
+        label: 'Enter City',
+        path: '/world',
+        tone: 'teal',
+        metric: gatewayStatus?.connected ? 'gateway online' : 'gateway quiet',
+        detail: `${online.toLocaleString()} resident${online === 1 ? '' : 's'} online`,
+      },
+      {
+        label: 'Embassy',
+        path: '/embassy',
+        tone: 'green',
+        metric: `${readyProposals.toLocaleString()} ready`,
+        detail: `${cityProposals.length.toLocaleString()} soul proposal${cityProposals.length === 1 ? '' : 's'}`,
+      },
+      {
+        label: 'Residents',
+        path: '/residents',
+        tone: 'blue',
+        metric: rows.length.toLocaleString(),
+        detail: `${lowAp.toLocaleString()} need attention`,
+      },
+      {
+        label: 'Inbox',
+        path: '/inbox',
+        tone: 'mauve',
+        metric: `${unreadThreads.toLocaleString()} unread`,
+        detail: 'Resident conversations and AP requests',
+      },
+      {
+        label: 'Print Queue',
+        path: '/prints',
+        tone: 'amber',
+        metric: `${activePrints.toLocaleString()} active`,
+        detail: 'GP burn and printer queue status',
+      },
+    ];
+  }
+
+  function cityNavActive(item: CityNavItem): boolean {
+    const current = normalizeRoutePath(browserPath);
+    return item.path === '/' ? current === '/' : current === item.match || current.startsWith(`${item.match}/`);
+  }
+
+  function isKnownCityRoute(activeRoute: string): boolean {
+    if (activeRoute === '/' || activeRoute === '/login') return true;
+    if (activeRoute === '/profile' || activeRoute === '/world' || activeRoute === '/library') return true;
+    if (activeRoute === '/residents') return true;
+    if (activeRoute.startsWith('/residents/') && activeRoute !== '/residents/new') return true;
+    if (activeRoute === '/embassy' || activeRoute === '/embassy/new' || activeRoute.startsWith('/embassy/')) return true;
+    if (activeRoute === '/inbox' || activeRoute.startsWith('/inbox/')) return true;
+    if (activeRoute === '/prints' || activeRoute === '/prints/new' || activeRoute.startsWith('/prints/')) return true;
+    return activeRoute === '/admin' || activeRoute.startsWith('/admin/');
+  }
+
+  function legacyDebugEquivalent(activeRoute: string): string {
+    return debugPath(activeRoute);
+  }
+
+  function isLegacyOperationalRoute(activeRoute: string): boolean {
+    return activeRoute === '/observe' ||
+      activeRoute.startsWith('/observe/') ||
+      activeRoute === '/benchmarks' ||
+      activeRoute.startsWith('/benchmarks/') ||
+      activeRoute === '/souls' ||
+      activeRoute === '/logs' ||
+      activeRoute === '/residents/new';
   }
 
   function seedSpawnDefaults() {
@@ -309,7 +796,7 @@
       saveSpawnInferenceDefaults();
       await api.createResident(body);
       await api.residentCommand(name, 'connect', { observe: true, control: false, onDisconnect: disconnectPolicy });
-      nav(`/residents/${encodeURIComponent(name)}`);
+      debugNav(`/residents/${encodeURIComponent(name)}`);
     });
   }
 
@@ -356,7 +843,7 @@
       const deletingCurrentResident = residentName.toLowerCase() === name.toLowerCase();
       await api.deleteResident(name);
       if (deletingCurrentResident) {
-        nav('/residents');
+        debugNav('/residents');
       }
       await loadRoute(false);
     });
@@ -395,7 +882,7 @@
     const session = await api.observe(subject, mode);
     upsertSession(session);
     activeSession = session;
-    nav(`/observe/${subjectPath(subject)}`);
+    debugNav(`/observe/${subjectPath(subject)}`);
     openSessionStream(session);
   }
 
@@ -423,9 +910,9 @@
     return isResidentOnline(selectedRuntime, activeResidentSession);
   }
 
-  async function ensureObserveRouteSession() {
-    if (!route.startsWith('/observe/') || findObserveRouteSession(activeSession, sessions)) return;
-    const subject = subjectFromObserveRoute();
+  async function ensureObserveRouteSession(activeRoute = route) {
+    if (!activeRoute.startsWith('/observe/') || findObserveRouteSession(activeSession, sessions, activeRoute)) return;
+    const subject = subjectFromObserveRoute(activeRoute);
     if (!subject) return;
     if (!subjectIsKnownOnline(subject)) return;
     const session = await api.observe(subject, 'follow');
@@ -434,16 +921,17 @@
     openSessionStream(session);
   }
 
-  function subjectFromObserveRoute(): SpectatorSubject | undefined {
-    if (!observeKind || !observeId) return undefined;
-    const id = decodeURIComponent(observeId);
-    if (observeKind === 'resident') return { kind: 'resident', name: id };
-    if (observeKind === 'player') return { kind: 'player', username: id };
+  function subjectFromObserveRoute(activeRoute = route): SpectatorSubject | undefined {
+    const activeObserve = observePartsFromDebugRoute(activeRoute);
+    if (!activeObserve.kind || !activeObserve.id) return undefined;
+    const id = decodeURIComponent(activeObserve.id);
+    if (activeObserve.kind === 'resident') return { kind: 'resident', name: id };
+    if (activeObserve.kind === 'player') return { kind: 'player', username: id };
     return undefined;
   }
 
-  function findObserveRouteSession(active: SpectatorSession | undefined, available: SpectatorSession[]): SpectatorSession | undefined {
-    const subject = subjectFromObserveRoute();
+  function findObserveRouteSession(active: SpectatorSession | undefined, available: SpectatorSession[], activeRoute = route): SpectatorSession | undefined {
+    const subject = subjectFromObserveRoute(activeRoute);
     if (!subject || !subjectIsKnownOnline(subject)) return undefined;
     return [active, ...available].find(session => session?.connected && subjectMatches(session.subject, subject.kind, subjectId(subject)));
   }
@@ -514,14 +1002,14 @@
     sessions = [session, ...sessions.filter(candidate => candidate.id !== session.id)];
   }
 
-  function syncObserveStream() {
-    const session = findObserveRouteSession(activeSession, sessions);
+  function syncObserveStream(activeRoute = route) {
+    const session = findObserveRouteSession(activeSession, sessions, activeRoute);
     if (session) openSessionStream(session);
     else closeSessionStream();
   }
 
-  function syncResidentStream() {
-    const session = findResidentSession(activeSession, sessions, residentName);
+  function syncResidentStream(name = residentName) {
+    const session = findResidentSession(activeSession, sessions, name);
     if (session) openSessionStream(session);
     else closeSessionStream();
   }
@@ -583,13 +1071,296 @@
     spectatorModalOpen = false;
   }
 
+  function seedProfileDraft() {
+    if (!cityProfileData) return;
+    profileDisplayName = cityProfileData.displayName || citySession.name;
+    profileHandle = cityProfileData.handle || citySession.handle.replace(/^@/, '');
+    profileAvatarUrl = cityProfileData.avatarUrl || citySession.avatarUrl;
+  }
+
+  async function saveProfile() {
+    await runAction(async () => {
+      await cityApi.updateProfile({
+        displayName: profileDisplayName.trim(),
+        handle: profileHandle.trim(),
+        avatarUrl: profileAvatarUrl.trim(),
+      });
+      cityActionNotice = 'Profile saved';
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function syncCheckins() {
+    await runAction(async () => {
+      const result = await cityApi.syncCheckins();
+      cityActionNotice = result.message || `Synced ${result.awarded.length} check-in award${result.awarded.length === 1 ? '' : 's'}`;
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  function proposalInput(): SoulProposalInput {
+    return {
+      residentName: proposalResidentName.trim(),
+      displayName: proposalDisplayName.trim() || 'Unnamed soul',
+      goal: proposalGoal.trim() || 'Find a place in Null City.',
+      personality: proposalPersonality.trim(),
+      virtues: proposalVirtues.trim(),
+      vices: proposalVices.trim(),
+      fears: proposalFears.trim(),
+      voice: proposalVoice.trim(),
+      firstMemory: proposalFirstMemory.trim(),
+      secret: proposalSecret.trim(),
+      startingLevels: parseNumberMap(proposalLevels),
+      startingEquipment: parseCsvList(proposalEquipment),
+      startingInventory: parseCsvList(proposalInventory),
+    };
+  }
+
+  async function refreshProposalQuote() {
+    if (!citySession.authenticated) return;
+    const input = proposalInput();
+    if (!input.displayName && !input.goal) return;
+    cityProposalQuote = await cityLoad(cityApi.quoteSoulProposal(input), undefined);
+  }
+
+  async function createSoulProposal() {
+    await runAction(async () => {
+      const { proposal } = await cityApi.createProposal(proposalInput());
+      cityActionNotice = 'Soul proposal submitted';
+      cityNav(`/embassy/${encodeURIComponent(proposal.id)}`);
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function contributeToSoulProposal(id: string) {
+    await runAction(async () => {
+      const amount = positiveInt(contributionAp, 'AP contribution');
+      const { proposal } = await cityApi.contributeToProposal(id, amount);
+      citySelectedProposal = proposal;
+      cityActionNotice = `${amount.toLocaleString()} AP contributed`;
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function grantResidentAttention(residentId: string) {
+    await runAction(async () => {
+      const apAmount = positiveInt(grantAttentionAp, 'AP grant');
+      await cityApi.grantResidentAttention(residentId, {
+        apAmount,
+        memo: grantAttentionMemo.trim(),
+        idempotencyKey: crypto.randomUUID(),
+      });
+      cityActionNotice = `${apAmount.toLocaleString()} AP grant sent`;
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function createPrintRequest() {
+    await runAction(async () => {
+      const { request } = await cityApi.createPrint({
+        title: printTitle.trim() || 'Untitled print',
+        description: printDescription.trim(),
+        requestedMaterial: printMaterial.trim(),
+        requestedColor: printColor.trim(),
+        quantity: positiveInt(printQuantity, 'Print quantity'),
+        userNotes: printUserNotes.trim(),
+      });
+      if (printFileName.trim()) {
+        await cityApi.uploadPrintMetadata(request.id, {
+          fileName: printFileName.trim(),
+          mime: printFileMime.trim() || 'application/octet-stream',
+          sizeBytes: Math.max(0, Number(printFileSize) || 0),
+        });
+      }
+      cityActionNotice = 'Print request created';
+      cityNav(`/prints/${encodeURIComponent(request.id)}`);
+      await loadRoute(false);
+    });
+  }
+
+  async function confirmPrintGp(id: string) {
+    await runAction(async () => {
+      const { request } = await cityApi.confirmPrintGp(id);
+      citySelectedPrint = request;
+      cityActionNotice = 'GP spend confirmed';
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function savePrinter() {
+    await runAction(async () => {
+      await cityApi.upsertPrinter({
+        name: printerName.trim() || 'Unnamed printer',
+        kind: printerKind,
+        adapter: printerAdapter,
+        bridgeId: printerBridgeId.trim(),
+        enabled: printerEnabled,
+        adminNotes: printerNotes.trim(),
+      });
+      cityActionNotice = 'Printer saved';
+      await loadRoute(false);
+    });
+  }
+
+  async function testPrinter(id: string) {
+    await runAction(async () => {
+      const result = await cityApi.testPrinter(id);
+      cityActionNotice = `${id}: ${result.status}`;
+      await loadRoute(false);
+    });
+  }
+
+  async function quotePrintRequest(id: string) {
+    await runAction(async () => {
+      const quoteGp = positiveInt(printQuoteGp, 'GP quote');
+      const { request } = await cityApi.quotePrint(id, quoteGp, printQuoteNotes.trim());
+      citySelectedPrint = request;
+      cityActionNotice = `${quoteGp.toLocaleString()} GP quote saved`;
+      await loadRoute(false);
+    });
+  }
+
+  async function grantPoints() {
+    await runAction(async () => {
+      const amount = positiveInt(adminGrantAmount, 'Grant amount');
+      await cityApi.grantPoints({
+        cityUserId: adminGrantCityUserId.trim(),
+        resource: adminGrantResource,
+        amount,
+        memo: adminGrantMemo.trim() || 'Admin grant',
+        sourceId: crypto.randomUUID(),
+      });
+      cityActionNotice = `${amount.toLocaleString()} ${adminGrantResource} granted`;
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function startCityGameClient() {
+    const mount = gameClientMount;
+    if (!mount) return;
+    await runAction(async () => {
+      await stopCityGameClient();
+      gameClientController = createGameClient({
+        canvas: createDomCanvasAdapter({
+          container: mount,
+          className: 'city-game-canvas',
+          width: 765,
+          height: 503,
+        }),
+        session: createHttpSessionTicketAdapter({ csrfToken: () => citySession.csrfToken }),
+        lifecycle: createLifecycleAdapter(({ canvas, ticket }) => {
+          gameClientTicketUser = ticket.gameUsername;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#111318';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#e8dfcf';
+            ctx.font = '24px ui-serif, Georgia, serif';
+            ctx.fillText('Null City client session ready', 32, 72);
+            ctx.font = '14px ui-monospace, SFMono-Regular, monospace';
+            ctx.fillText(`ticket user: ${ticket.gameUsername}`, 32, 112);
+            ctx.fillText('Forked runtime loader is isolated behind the package lifecycle facade.', 32, 144);
+          }
+        }),
+        config: {
+          endpoint: `${window.location.host}/rs`,
+          secure: window.location.protocol === 'https:',
+          mode: 'player',
+        },
+        onStatusChange: status => {
+          gameClientStatus = status;
+        },
+      });
+      await gameClientController.start();
+      cityActionNotice = `Game session ready for ${gameClientTicketUser}`;
+    });
+  }
+
+  async function stopCityGameClient() {
+    const controller = gameClientController;
+    gameClientController = undefined;
+    if (controller) await controller.destroy();
+    gameClientStatus = 'stopped';
+    gameClientTicketUser = '';
+  }
+
+  function parseNumberMap(value: string): Record<string, number> {
+    return Object.fromEntries(
+      value
+        .split(/[\n,]+/)
+        .map(entry => entry.trim())
+        .filter(Boolean)
+        .map(entry => {
+          const [key = '', raw = '1'] = entry.split(/[:=]/);
+          return [key.trim(), Math.max(1, Math.floor(Number(raw) || 1))];
+        })
+        .filter(([key]) => Boolean(key)),
+    );
+  }
+
+  function parseCsvList(value: string): string[] {
+    return value.split(/[\n,]+/).map(entry => entry.trim()).filter(Boolean);
+  }
+
+  function positiveInt(value: string, label: string): number {
+    const amount = Math.floor(Number(value));
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error(`${label} must be a positive number`);
+    return amount;
+  }
+
+  function proposalProgress(proposal: SoulProposal): number {
+    if (!proposal.attentionThreshold) return 0;
+    return Math.min(100, Math.round((proposal.contributedAttention / proposal.attentionThreshold) * 100));
+  }
+
+  function proposalRemaining(proposal: SoulProposal): number {
+    return Math.max(0, proposal.attentionThreshold - proposal.contributedAttention);
+  }
+
+  function statusTone(status: string): string {
+    if (['ready_to_birth', 'paid', 'approved', 'queued', 'printing', 'completed', 'alive'].includes(status)) return 'ok';
+    if (['failed', 'cancelled', 'refunded', 'rejected', 'expired', 'deceased'].includes(status)) return 'fail';
+    return 'warn';
+  }
+
+  function cityResidentLabelFromId(id: string): string {
+    const record = cityDirectoryResidents.find(row => row.id === id || row.nullcityResidentId === id);
+    const live = cityResidents.find(row => row.name === id || residentSlug(row.name) === residentSlug(id));
+    return record?.displayName || (live ? residentDisplayName(live.name) : id);
+  }
+
+  function selectedCityResidentDisplay(): string {
+    return cityResidentReadModel?.displayName || (cityResident ? residentDisplayName(cityResident.name) : cityResidentId);
+  }
+
+  function ledgerDelta(entry: PointLedgerEntry): string {
+    const sign = entry.delta > 0 ? '+' : '';
+    return `${sign}${entry.delta.toLocaleString()} ${entry.resource}`;
+  }
+
+  function activePrintCount(): number {
+    return cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
+  }
+
   async function runAction(fn: () => Promise<void>) {
     actionBusy = true;
     actionError = '';
     try {
       await fn();
     } catch (err) {
-      actionError = err instanceof Error ? err.message : 'Action failed';
+      if (err instanceof CityApiError && err.status === 401) {
+        handleCityApiError(err);
+        actionError = 'Login required for this action.';
+      } else {
+        actionError = err instanceof Error ? err.message : 'Action failed';
+      }
     } finally {
       actionBusy = false;
     }
@@ -1255,23 +2026,24 @@
 </script>
 
 <svelte:head>
-  <title>Null City Resident Operations</title>
+  <title>{isDebugRoute ? 'Null City Resident Operations' : 'Null City Dashboard'}</title>
 </svelte:head>
 
+{#if isDebugRoute}
 <nav class="topbar">
-  <button class="brand" onclick={() => nav('/')}>Null City Ops</button>
+  <button class="brand" onclick={() => debugNav('/')}>Null City Ops</button>
   <div class="navlinks">
-    <button class:active={route === '/'} onclick={() => nav('/')}>Overview</button>
-    <button class:active={route.startsWith('/residents')} onclick={() => nav('/residents')}>Residents</button>
-    <button class:active={route.startsWith('/observe')} onclick={() => nav('/observe')}>Observe</button>
-    <button class:active={route.startsWith('/benchmarks')} onclick={() => nav('/benchmarks')}>Benchmarks</button>
-    <button class:active={route === '/souls'} onclick={() => nav('/souls')}>Souls</button>
-    <button class:active={route === '/logs'} onclick={() => nav('/logs')}>Logs</button>
+    <button class:active={route === '/'} onclick={() => debugNav('/')}>Overview</button>
+    <button class:active={route.startsWith('/residents')} onclick={() => debugNav('/residents')}>Residents</button>
+    <button class:active={route.startsWith('/observe')} onclick={() => debugNav('/observe')}>Observe</button>
+    <button class:active={route.startsWith('/benchmarks')} onclick={() => debugNav('/benchmarks')}>Benchmarks</button>
+    <button class:active={route === '/souls'} onclick={() => debugNav('/souls')}>Souls</button>
+    <button class:active={route === '/logs'} onclick={() => debugNav('/logs')}>Logs</button>
     <details class="event-menu">
       <summary class:active={embassyPageActive}>Embassy</summary>
       <div class="event-menu-list" aria-label="Embassy pages">
         {#each embassyPages as page (page.path)}
-          <a class:active={route === page.path || route === page.path.replace(/\/$/, '')} href={page.path}>{page.label}</a>
+          <a class:active={browserPath === page.path || browserPath === page.path.replace(/\/$/, '')} href={page.path}>{page.label}</a>
         {/each}
       </div>
     </details>
@@ -1304,7 +2076,7 @@
     {@render EventReadinessPanel({ readiness: overview?.readiness })}
     {@render PatronSummaryPanel({ summary: overview?.patrons })}
     {@render RelationshipSummaryPanel({ summary: overview?.relationships })}
-    {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
+    {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: debugNav, ondelete: deleteResidentByName })}
     <section class="panel">
       <div class="panel-title">Recent Events</div>
       {@render EventList({ events: overview?.recentEvents || [] })}
@@ -1325,10 +2097,10 @@
           <option value="online">online</option>
           <option value="offline">offline</option>
         </select>
-        <button class="primary" onclick={() => nav('/residents/new')}>Spawn Resident</button>
+        <button class="primary" onclick={() => debugNav('/residents/new')}>Spawn Resident</button>
       </div>
     </section>
-    {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: nav, ondelete: deleteResidentByName })}
+    {@render ResidentTable({ rows: visibleResidents, canDelete: canDeleteResidents, onselect: debugNav, ondelete: deleteResidentByName })}
   {:else if route === '/residents/new'}
     <section class="page-head compact">
       <p class="kicker">Lifecycle</p>
@@ -1434,7 +2206,7 @@
         <p class="kicker">Spectator Session</p>
         <h1>{session ? subjectLabel(session.subject) : 'Subject unavailable'}</h1>
       </div>
-      <button onclick={() => nav('/observe')}>Subjects</button>
+      <button onclick={() => debugNav('/observe')}>Subjects</button>
     </section>
     {#if session?.subject.kind === 'resident'}
       {@render ActivityPanel({ activity: buildActivitySnapshot(withLiveResidentBody(selectedRuntime, session), session), runtime: selectedRuntime })}
@@ -1468,7 +2240,7 @@
         <p class="kicker">Benchmark Detail</p>
         <h1>{selectedBenchmark?.task.id || benchmarkRunId}</h1>
       </div>
-      <button onclick={() => nav('/benchmarks')}>Runs</button>
+      <button onclick={() => debugNav('/benchmarks')}>Runs</button>
     </section>
     {@render BenchmarkLeaderboard({ rows: benchmarkLeaderboard })}
     {@render BenchmarkDetail({ artifact: selectedBenchmark })}
@@ -1504,6 +2276,840 @@
     </div>
   </div>
 {/if}
+{:else}
+  {@render CityShell()}
+{/if}
+
+{#snippet CityShell()}
+  <div class="city-shell">
+    <aside class="city-rail" aria-label="City navigation">
+      <button class="city-brand" onclick={() => cityNav('/')}>
+        <span class="city-mark" aria-hidden="true"></span>
+        <span>
+          <strong>Null City</strong>
+          <small>Onion DAO console</small>
+        </span>
+      </button>
+      <div class="city-session-chip" class:guest={!citySession.authenticated}>
+        <span>{sessionLoading ? 'Syncing session' : citySession.name}</span>
+        <strong>{citySession.authenticated ? citySession.handle : 'Guest access'}</strong>
+      </div>
+      <div class="city-nav">
+        {#each cityNavItems as item (item.path)}
+          <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
+            <span aria-hidden="true">{item.glyph}</span>
+            {item.label}
+          </button>
+        {/each}
+      </div>
+      <div class="city-nav secondary">
+        {#if citySession.admin}
+          <button class:active={route.startsWith('/admin')} onclick={() => cityNav('/admin')}>AD Admin</button>
+        {/if}
+        <button onclick={() => debugNav('/')}>DB Debug</button>
+      </div>
+    </aside>
+
+    <main class="city-main">
+      <div class="shard-line city-shards" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+
+      {#if cityDataError}
+        <div class="notice city-notice">City data is not connected. Showing the shell with empty states.</div>
+      {/if}
+      {#if actionError}
+        <div class="notice rose">{actionError}</div>
+      {/if}
+      {#if cityActionNotice}
+        <div class="notice">{cityActionNotice}</div>
+      {/if}
+      {#if loading}
+        <div class="notice">Loading city state</div>
+      {/if}
+
+      {#if route === '/'}
+        {@render CityOverview()}
+      {:else if route === '/profile'}
+        {@render CityProfile()}
+      {:else if route === '/world'}
+        {@render CityWorld()}
+      {:else if route === '/embassy' || route === '/embassy/new' || route.startsWith('/embassy/')}
+        {@render CityEmbassy()}
+      {:else if route === '/residents'}
+        {@render CityResidents()}
+      {:else if cityResidentId}
+        {@render CityResidentProfile()}
+      {:else if route === '/inbox' || route.startsWith('/inbox/')}
+        {@render CityInbox()}
+      {:else if route === '/prints' || route.startsWith('/prints/')}
+        {@render CityPrints()}
+      {:else if route === '/library'}
+        {@render CityLibrary()}
+      {:else if route === '/admin' || route.startsWith('/admin/')}
+        {@render CityAdmin()}
+      {:else if route === '/login'}
+        {@render CityLogin()}
+      {:else}
+        {@render CityNotFound()}
+      {/if}
+    </main>
+
+    <nav class="city-bottom-nav" aria-label="Primary city navigation">
+      {#each cityNavItems.slice(0, 5) as item (item.path)}
+        <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
+          <span aria-hidden="true">{item.glyph}</span>
+          {item.label}
+        </button>
+      {/each}
+    </nav>
+  </div>
+{/snippet}
+
+{#snippet CityOverview()}
+  <section class="city-hero-band">
+    <div>
+      <p class="kicker">City Dashboard</p>
+      <h1>Null City</h1>
+      <p class="city-lede">Resident signal, attendee ledger, Embassy proposals, inbox, and print queue in one console.</p>
+    </div>
+    <div class="city-ledger-strip">
+      <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
+      <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
+      <span><small>Session</small><strong>{citySession.authenticated ? citySession.handle : 'guest'}</strong></span>
+    </div>
+  </section>
+
+  {#if !citySession.authenticated}
+    <section class="city-auth-band">
+      <div>
+        <p class="kicker">Attendee Session</p>
+        <strong>Guest mode</strong>
+        <span>Public residents and the Library are visible. AP, GP, inbox, Embassy actions, and prints unlock when `/api/session` returns an attendee.</span>
+      </div>
+      <button class="primary" onclick={() => cityNav('/login')}>Login</button>
+    </section>
+  {/if}
+
+  {#if citySession.admin}
+    <section class="city-admin-strip">
+      <strong>Admin alerts</strong>
+      <span>{cityLowAttentionResidents.length} residents need attention · print queue idle · economy audit quiet</span>
+      <button onclick={() => cityNav('/admin')}>Open Admin</button>
+    </section>
+  {/if}
+
+  <section class="city-entry-grid">
+    {#each cityEntries as entry (entry.path)}
+      <button class={`city-entry tone-${entry.tone}`} onclick={() => cityNav(entry.path)}>
+        <span>{entry.label}</span>
+        <strong>{entry.metric}</strong>
+        <small>{entry.detail}</small>
+      </button>
+    {/each}
+  </section>
+
+  <section class="city-dashboard-grid">
+    <div class="city-panel span-2">
+      <div class="row">
+        <div class="panel-title">Resident Activity</div>
+        <button onclick={() => cityNav('/residents')}>Directory</button>
+      </div>
+      {@render CityResidentList({ rows: cityFeaturedResidents })}
+    </div>
+    <div class="city-panel">
+      <div class="panel-title">Embassy</div>
+      <div class="city-card-list compact">
+        {#each cityProposals.slice(0, 3) as proposal (proposal.id)}
+          <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+            <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+            <strong>{proposal.displayName}</strong>
+            <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No proposals ready</strong>
+            <span>Birth funding and contribution history will appear here.</span>
+          </div>
+        {/each}
+      </div>
+      <button class="primary" onclick={() => cityNav('/embassy/new')}>New Proposal</button>
+    </div>
+    <div class="city-panel">
+      <div class="panel-title">Print Queue</div>
+      <div class="city-queue-meter">
+        <span style={`--queue-fill: ${Math.min(100, activePrintCount() * 20)}%`}></span>
+      </div>
+      <div class="city-card-list compact">
+        {#each cityPrintRequests.slice(0, 3) as request (request.id)}
+          <button onclick={() => cityNav(`/prints/${encodeURIComponent(request.id)}`)}>
+            <span class={`tag ${statusTone(request.status)}`}>{request.status}</span>
+            <strong>{request.title}</strong>
+            <small>{request.quoteGp ? `${request.quoteGp.toLocaleString()} GP` : 'unquoted'}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No active requests</strong>
+            <span>Quote, GP burn, slicing, and printer assignment status lands here.</span>
+          </div>
+        {/each}
+      </div>
+      <button onclick={() => cityNav('/prints')}>Prints</button>
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CityAuthCta({ label = 'Login required' }: { label?: string })}
+  <section class="city-auth-band">
+    <div>
+      <p class="kicker">Attendee Session</p>
+      <strong>{label}</strong>
+      <span>Use the Onion DAO login to load AP, GP, inbox, Embassy actions, and print workflows.</span>
+    </div>
+    <a class="city-link-button" href={citySession.loginUrl}>Open Login</a>
+  </section>
+{/snippet}
+
+{#snippet CityProfile()}
+  <section class="city-page-head">
+    <p class="kicker">Profile</p>
+    <h1>{citySession.authenticated ? citySession.name : 'Guest'}</h1>
+  </section>
+  {#if !citySession.authenticated}
+    {@render CityAuthCta({ label: 'Login to view your profile' })}
+  {/if}
+  <section class="city-dashboard-grid">
+    <div class="city-panel profile-panel">
+      <div class="city-avatar">{citySession.name.slice(0, 2).toUpperCase()}</div>
+      <div>
+        <strong>{citySession.name}</strong>
+        <span>{citySession.handle}</span>
+        {#if citySession.email}<small>{citySession.email}</small>{/if}
+      </div>
+    </div>
+    <div class="city-panel">
+      <div class="panel-title">Balances</div>
+      <div class="city-balance-grid">
+        <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
+        <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
+      </div>
+    </div>
+    <div class="city-panel span-2">
+      <div class="row">
+        <div class="panel-title">Profile Settings</div>
+        <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={saveProfile}>Save</button>
+      </div>
+      <div class="city-form-grid">
+        <label>Display name <input bind:value={profileDisplayName} placeholder={citySession.name} disabled={!citySession.authenticated} /></label>
+        <label>Handle <input bind:value={profileHandle} placeholder={citySession.handle.replace(/^@/, '')} disabled={!citySession.authenticated} /></label>
+        <label class="span-2">Avatar URL <input bind:value={profileAvatarUrl} placeholder="https://..." disabled={!citySession.authenticated} /></label>
+      </div>
+    </div>
+    <div class="city-panel span-2">
+      <div class="row">
+        <div class="panel-title">Ledger</div>
+        <div class="actions">
+          <select bind:value={cityLedgerFilter} onchange={() => loadRoute(false)} disabled={!citySession.authenticated}>
+            <option value="all">All</option>
+            <option value="AP">AP</option>
+            <option value="GP">GP</option>
+          </select>
+          <button disabled={actionBusy || !citySession.authenticated} onclick={syncCheckins}>Sync Check-ins</button>
+        </div>
+      </div>
+      <div class="city-record-list">
+        {#each cityLedger as entry (entry.id)}
+          <article>
+            <span class={`tag ${entry.delta >= 0 ? 'ok' : 'warn'}`}>{ledgerDelta(entry)}</span>
+            <div>
+              <strong>{entry.memo || labelize(entry.sourceType)}</strong>
+              <small>{entry.sourceType} · balance {entry.balanceAfter.toLocaleString()} · {entry.createdAt ? timeAgo(entry.createdAt) : 'undated'}</small>
+            </div>
+          </article>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No attendee ledger entries</strong>
+            <span>Check-ins, soul contributions, resident grants, and print burns will appear here.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CityWorld()}
+  <section class="city-page-head">
+    <p class="kicker">World</p>
+    <h1>Enter City</h1>
+  </section>
+  <section class="city-world-layout">
+    <div class="city-world-frame">
+      <div bind:this={gameClientMount} class="city-game-mount">
+        <strong>{gatewayStatus?.connected ? 'Gateway online' : 'Gateway unavailable'}</strong>
+        <span>{cityOnlineResidents.length} online residents · game session {gameClientStatus}</span>
+        <div class="city-game-actions">
+          <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={startCityGameClient}>Start Client</button>
+          <button disabled={actionBusy || !gameClientController} onclick={stopCityGameClient}>Stop</button>
+        </div>
+      </div>
+    </div>
+    <aside class="city-panel">
+      <div class="panel-title">Online Residents</div>
+      {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8) })}
+    </aside>
+  </section>
+{/snippet}
+
+{#snippet CityEmbassy()}
+  <section class="city-page-head">
+    <p class="kicker">Embassy</p>
+    <h1>{route === '/embassy/new' ? 'New Soul' : citySelectedProposal ? citySelectedProposal.displayName : 'Soul Proposals'}</h1>
+  </section>
+  {#if !citySession.authenticated && route !== '/embassy'}
+    {@render CityAuthCta({ label: 'Login to use Embassy actions' })}
+  {/if}
+  {#if route === '/embassy/new'}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Composer</div>
+          <div class="actions">
+            <button disabled={actionBusy || !citySession.authenticated} onclick={refreshProposalQuote}>Quote</button>
+            <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={createSoulProposal}>Submit</button>
+          </div>
+        </div>
+        <div class="city-form-grid">
+          <label>Resident name <input bind:value={proposalResidentName} placeholder="optional_resident_name" /></label>
+          <label>Display name <input bind:value={proposalDisplayName} placeholder="Mire Scribe" /></label>
+          <label class="span-2">Goal <textarea bind:value={proposalGoal} rows="3" placeholder="What should this soul want?"></textarea></label>
+          <label class="span-2">Personality <textarea bind:value={proposalPersonality} rows="3"></textarea></label>
+          <label>Virtues <textarea bind:value={proposalVirtues} rows="3"></textarea></label>
+          <label>Vices <textarea bind:value={proposalVices} rows="3"></textarea></label>
+          <label>Fears <textarea bind:value={proposalFears} rows="3"></textarea></label>
+          <label>Voice <textarea bind:value={proposalVoice} rows="3"></textarea></label>
+          <label class="span-2">First memory <textarea bind:value={proposalFirstMemory} rows="3"></textarea></label>
+          <label class="span-2">Secret <textarea bind:value={proposalSecret} rows="3"></textarea></label>
+          <label>Starting levels <textarea bind:value={proposalLevels} rows="3" placeholder="hitpoints:10, mining:5"></textarea></label>
+          <label>Equipment <textarea bind:value={proposalEquipment} rows="3" placeholder="bronze pickaxe"></textarea></label>
+          <label class="span-2">Inventory <textarea bind:value={proposalInventory} rows="3" placeholder="bread, tinderbox"></textarea></label>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Quote</div>
+        {#if cityProposalQuote}
+          <div class="city-balance-grid">
+            <span><small>Threshold</small><strong>{cityProposalQuote.threshold.toLocaleString()} AP</strong></span>
+            <span><small>Base</small><strong>{cityProposalQuote.breakdown.base.toLocaleString()}</strong></span>
+            <span><small>Levels</small><strong>{cityProposalQuote.breakdown.levels.toLocaleString()}</strong></span>
+            <span><small>Items</small><strong>{(cityProposalQuote.breakdown.equipment + cityProposalQuote.breakdown.inventory).toLocaleString()}</strong></span>
+          </div>
+        {:else}
+          <div class="city-empty-state"><strong>No quote yet</strong><span>Use Quote to preview the AP threshold.</span></div>
+        {/if}
+      </div>
+    </section>
+  {:else if citySelectedProposal}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Proposal</div>
+          <span class={`tag ${statusTone(citySelectedProposal.status)}`}>{citySelectedProposal.status}</span>
+        </div>
+        <div class="city-proposal-meter">
+          <span style={`--queue-fill: ${proposalProgress(citySelectedProposal)}%`}></span>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Funded</small><strong>{citySelectedProposal.contributedAttention.toLocaleString()} AP</strong></span>
+          <span><small>Threshold</small><strong>{citySelectedProposal.attentionThreshold.toLocaleString()} AP</strong></span>
+          <span><small>Remaining</small><strong>{proposalRemaining(citySelectedProposal).toLocaleString()} AP</strong></span>
+          <span><small>Updated</small><strong>{timeAgo(citySelectedProposal.updatedAt)}</strong></span>
+        </div>
+        <div class="city-copy-block">
+          <strong>{citySelectedProposal.goal}</strong>
+          <p>{citySelectedProposal.personality || 'No personality text supplied.'}</p>
+          <small>{citySelectedProposal.virtues} {citySelectedProposal.vices}</small>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Contribute AP</div>
+        <div class="city-form-grid single">
+          <label>Amount <input bind:value={contributionAp} inputmode="numeric" /></label>
+          <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={() => citySelectedProposal && contributeToSoulProposal(citySelectedProposal.id)}>Contribute</button>
+        </div>
+      </div>
+    </section>
+  {:else}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Funding Queue</div>
+          <button class="primary" onclick={() => cityNav('/embassy/new')}>New Proposal</button>
+        </div>
+        <div class="city-card-list">
+          {#each cityProposals as proposal (proposal.id)}
+            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+              <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+              <strong>{proposal.displayName}</strong>
+              <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP · {proposalRemaining(proposal).toLocaleString()} remaining</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No proposals reported</strong>
+              <span>Needs AP, ready to birth, born, and mine filters populate from the Embassy API.</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Balances</div>
+        <div class="city-balance-grid">
+          <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
+          <span><small>Ready</small><strong>{cityProposals.filter(proposal => proposal.status === 'ready_to_birth').length}</strong></span>
+        </div>
+      </div>
+    </section>
+  {/if}
+{/snippet}
+
+{#snippet CityResidents()}
+  <section class="city-page-head">
+    <p class="kicker">Residents</p>
+    <h1>Directory</h1>
+  </section>
+  <section class="city-dashboard-grid">
+    <div class="city-panel span-2">
+      <div class="panel-title">Live Residents</div>
+      {@render CityResidentList({ rows: cityResidents })}
+    </div>
+    <div class="city-panel">
+      <div class="panel-title">City Records</div>
+      <div class="city-card-list compact">
+        {#each cityDirectoryResidents as resident (resident.id)}
+          <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.nullcityResidentId)}`)}>
+            <span class={`tag ${statusTone(resident.status)}`}>{resident.status}</span>
+            <strong>{resident.displayName}</strong>
+            <small>{resident.goal || resident.latestThought || resident.updatedAt}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state"><strong>No city resident records</strong><span>Live operations data is still available from the dashboard snapshot.</span></div>
+        {/each}
+      </div>
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CityResidentProfile()}
+  <section class="city-page-head">
+    <p class="kicker">Resident</p>
+    <h1>{selectedCityResidentDisplay()}</h1>
+  </section>
+  {#if cityResident || cityResidentReadModel}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="panel-title">Public State</div>
+        <div class="city-resident-profile-grid">
+          <span><small>Status</small><strong>{cityResidentReadModel?.status || (cityResident?.online ? 'online' : 'offline')}</strong></span>
+          <span><small>Attention</small><strong>{cityResidentReadModel?.currentAttention ?? cityResident?.attention ?? '-'}</strong></span>
+          <span><small>Vitals</small><strong>{cityResident ? residentVitalsLabel(cityResident) : '-'}</strong></span>
+          <span><small>Position</small><strong>{cityResident?.position ? formatPosition(cityResident.position) : '-'}</strong></span>
+        </div>
+        <div class="city-copy-block">
+          <strong>{cityResidentReadModel?.goal || 'No public goal recorded'}</strong>
+          <p>{cityResidentReadModel?.latestThought || 'No resident post has been projected yet.'}</p>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Grant Attention</div>
+        {#if citySession.authenticated}
+          <div class="city-form-grid single">
+            <label>AP <input bind:value={grantAttentionAp} inputmode="numeric" /></label>
+            <label>Memo <input bind:value={grantAttentionMemo} placeholder="optional" /></label>
+            <button disabled={actionBusy} onclick={() => grantResidentAttention(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>Grant</button>
+          </div>
+        {:else}
+          {@render CityAuthCta({ label: 'Login to grant AP' })}
+        {/if}
+      </div>
+      <div class="city-panel span-2">
+        <div class="panel-title">Posts</div>
+        <div class="city-record-list">
+          {#each cityResidentPosts as post (post.id)}
+            <article>
+              <span class="tag">{post.source}</span>
+              <div>
+                <strong>{post.body}</strong>
+                <small>{post.createdAt ? timeAgo(post.createdAt) : 'undated'}</small>
+              </div>
+            </article>
+          {:else}
+            <div class="city-empty-state"><strong>No public posts</strong><span>Resident status posts and overseer notes appear here.</span></div>
+          {/each}
+        </div>
+      </div>
+    </section>
+  {:else}
+    <section class="city-panel"><div class="empty">Resident not found in public city data</div></section>
+  {/if}
+{/snippet}
+
+{#snippet CityInbox()}
+  <section class="city-page-head">
+    <p class="kicker">Inbox</p>
+    <h1>Messages</h1>
+  </section>
+  {#if !citySession.authenticated}
+    {@render CityAuthCta({ label: 'Login to view inbox' })}
+  {:else}
+    <section class="city-dashboard-grid">
+      <div class="city-panel">
+        <div class="panel-title">Threads</div>
+        <div class="city-card-list compact">
+          {#each cityInboxThreads as thread (thread.id)}
+            <button class:active={cityInboxThreadId === thread.id} onclick={() => cityNav(`/inbox/${encodeURIComponent(thread.id)}`)}>
+              <span class="tag">{thread.status}</span>
+              <strong>{cityResidentLabelFromId(thread.residentId)}</strong>
+              <small>{thread.latestMessage?.body || `updated ${timeAgo(thread.updatedAt)}`}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state"><strong>No unread messages</strong><span>Resident AP requests, trades, and private threads appear here.</span></div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel span-2">
+        <div class="panel-title">Conversation</div>
+        {#if citySelectedThread}
+          <div class="city-record-list">
+            {#each citySelectedThread.messages as message (message.id)}
+              <article>
+                <span class="tag">{message.senderType}</span>
+                <div>
+                  <strong>{message.body}</strong>
+                  <small>{message.messageType} · {timeAgo(message.createdAt)}</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No messages</strong><span>This thread has no delivered messages yet.</span></div>
+            {/each}
+          </div>
+        {:else}
+          <div class="city-empty-state"><strong>Select a thread</strong><span>Resident messages and AP-for-GP trade prompts appear in the conversation panel.</span></div>
+        {/if}
+      </div>
+    </section>
+  {/if}
+{/snippet}
+
+{#snippet CityPrints()}
+  <section class="city-page-head">
+    <p class="kicker">Prints</p>
+    <h1>{route === '/prints/new' ? 'New Print' : citySelectedPrint ? citySelectedPrint.title : 'Print Queue'}</h1>
+  </section>
+  {#if !citySession.authenticated}
+    {@render CityAuthCta({ label: 'Login to request prints' })}
+  {:else if route === '/prints/new'}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Request</div>
+          <button class="primary" disabled={actionBusy} onclick={createPrintRequest}>Submit</button>
+        </div>
+        <div class="city-form-grid">
+          <label class="span-2">Title <input bind:value={printTitle} placeholder="Resident miniature" /></label>
+          <label>Material <input bind:value={printMaterial} placeholder="PLA" /></label>
+          <label>Color <input bind:value={printColor} placeholder="black" /></label>
+          <label>Quantity <input bind:value={printQuantity} inputmode="numeric" /></label>
+          <label class="span-2">Description <textarea bind:value={printDescription} rows="4"></textarea></label>
+          <label class="span-2">Notes <textarea bind:value={printUserNotes} rows="3"></textarea></label>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">File Metadata</div>
+        <div class="city-form-grid single">
+          <label>File name <input bind:value={printFileName} placeholder="model.stl" /></label>
+          <label>MIME <input bind:value={printFileMime} /></label>
+          <label>Size bytes <input bind:value={printFileSize} inputmode="numeric" /></label>
+        </div>
+      </div>
+    </section>
+  {:else if citySelectedPrint}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Request</div>
+          <span class={`tag ${statusTone(citySelectedPrint.status)}`}>{citySelectedPrint.status}</span>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Material</small><strong>{citySelectedPrint.requestedMaterial || '-'}</strong></span>
+          <span><small>Color</small><strong>{citySelectedPrint.requestedColor || '-'}</strong></span>
+          <span><small>Qty</small><strong>{citySelectedPrint.quantity}</strong></span>
+          <span><small>Quote</small><strong>{citySelectedPrint.quoteGp ? `${citySelectedPrint.quoteGp.toLocaleString()} GP` : '-'}</strong></span>
+        </div>
+        <div class="city-copy-block">
+          <strong>{citySelectedPrint.description || 'No description supplied'}</strong>
+          <p>{citySelectedPrint.userNotes || citySelectedPrint.adminNotes || 'No request notes.'}</p>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Payment</div>
+        {#if citySelectedPrint.quoteGp && !citySelectedPrint.gpLedgerEntryId}
+          <button class="primary" disabled={actionBusy} onclick={() => citySelectedPrint && confirmPrintGp(citySelectedPrint.id)}>Confirm GP</button>
+        {:else if citySelectedPrint.gpLedgerEntryId}
+          <div class="city-empty-state"><strong>GP confirmed</strong><span>{citySelectedPrint.gpLedgerEntryId}</span></div>
+        {:else}
+          <div class="city-empty-state"><strong>Waiting for quote</strong><span>An admin quote unlocks GP confirmation.</span></div>
+        {/if}
+      </div>
+    </section>
+  {:else}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Requests</div>
+          <button class="primary" onclick={() => cityNav('/prints/new')}>New Request</button>
+        </div>
+        <div class="city-card-list">
+          {#each cityPrintRequests as request (request.id)}
+            <button onclick={() => cityNav(`/prints/${encodeURIComponent(request.id)}`)}>
+              <span class={`tag ${statusTone(request.status)}`}>{request.status}</span>
+              <strong>{request.title}</strong>
+              <small>{request.quoteGp ? `${request.quoteGp.toLocaleString()} GP` : 'unquoted'} · {request.requestedMaterial || 'material open'} · {timeAgo(request.updatedAt)}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state"><strong>No active print requests</strong><span>Quote, approval, GP burn, slicing, printing, and pickup states appear here.</span></div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Queue</div>
+        <div class="city-queue-meter">
+          <span style={`--queue-fill: ${Math.min(100, activePrintCount() * 20)}%`}></span>
+        </div>
+        <div class="city-empty-state"><strong>{activePrintCount()} active</strong><span>Admin printer assignment appears in queue admin.</span></div>
+      </div>
+    </section>
+  {/if}
+{/snippet}
+
+{#snippet CityLibrary()}
+  <section class="city-page-head">
+    <p class="kicker">Library</p>
+    <h1>Souls</h1>
+  </section>
+  <section class="city-dashboard-grid">
+    <div class="city-panel span-2">
+      <div class="panel-title">Lives</div>
+      <div class="city-card-list">
+        {#each cityLibraryLives as life (life.id)}
+          <button onclick={() => life.nullcityResidentId ? cityNav(`/residents/${encodeURIComponent(life.nullcityResidentId)}`) : undefined}>
+            <span class={`tag ${life.diedAt ? 'fail' : 'ok'}`}>{life.diedAt ? 'deceased' : 'alive'}</span>
+            <strong>{life.nullcityResidentId}</strong>
+            <small>{life.goalSummary || life.epitaph || `${life.meaningfulEvents.length} meaningful events`}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state"><strong>No projected soul lives</strong><span>Born residents and memorialized souls appear here.</span></div>
+        {/each}
+      </div>
+    </div>
+    <div class="city-panel">
+      <div class="panel-title">Soul Files</div>
+      {@render SoulGrid({ souls })}
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CityAdmin()}
+  <section class="city-page-head">
+    <p class="kicker">Admin</p>
+    <h1>Operations</h1>
+  </section>
+  {#if citySession.admin}
+    <section class="city-entry-grid">
+      <button class="city-entry tone-amber" onclick={() => cityNav('/admin/print-queue')}><span>Print Queue</span><strong>{cityPrintQueue.length}</strong><small>Printer board and job controls</small></button>
+      <button class="city-entry tone-teal" onclick={() => cityNav('/admin/printers')}><span>Printers</span><strong>{cityPrinters.length}</strong><small>Bambu, Snapmaker, and manual adapters</small></button>
+      <button class="city-entry tone-green" onclick={() => cityNav('/admin/souls')}><span>Soul Moderation</span><strong>{cityProposals.filter(proposal => proposal.status === 'ready_to_birth').length}</strong><small>Birth controls and moderation</small></button>
+      <button class="city-entry tone-blue" onclick={() => cityNav('/admin/economy')}><span>Economy</span><strong>audit</strong><small>AP/GP grants and adjustments</small></button>
+      <button class="city-entry tone-mauve" onclick={() => debugNav('/')}><span>Debug</span><strong>ops</strong><small>Resident operations dashboard</small></button>
+    </section>
+    {#if route === '/admin/printers'}
+      <section class="city-dashboard-grid">
+        <div class="city-panel span-2">
+          <div class="panel-title">Printer Records</div>
+          <div class="city-card-list">
+            {#each cityPrinters as printer (printer.id)}
+              <article class="city-admin-row">
+                <span class={`tag ${printer.enabled ? 'ok' : 'warn'}`}>{printer.enabled ? 'enabled' : 'disabled'}</span>
+                <strong>{printer.name}</strong>
+                <small>{printer.kind} · {printer.adapter} · {printer.bridgeId || 'no bridge'}</small>
+                <button disabled={actionBusy} onclick={() => testPrinter(printer.id)}>Test</button>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No printers configured</strong><span>Add Bambu P2S, Snapmaker U1, or manual printer records.</span></div>
+            {/each}
+          </div>
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Add Printer</div>
+          <div class="city-form-grid single">
+            <label>Name <input bind:value={printerName} /></label>
+            <label>Kind
+              <select bind:value={printerKind}>
+                <option value="generic">Generic</option>
+                <option value="bambu-p2s">Bambu P2S</option>
+                <option value="snapmaker-u1">Snapmaker U1</option>
+              </select>
+            </label>
+            <label>Adapter
+              <select bind:value={printerAdapter}>
+                <option value="manual">Manual</option>
+                <option value="fdm-monster">FDM Monster</option>
+                <option value="bambu-lan">Bambu LAN</option>
+                <option value="moonraker">Moonraker</option>
+                <option value="snapmaker-u1">Snapmaker U1</option>
+              </select>
+            </label>
+            <label>Bridge ID <input bind:value={printerBridgeId} /></label>
+            <label>Notes <textarea bind:value={printerNotes} rows="3"></textarea></label>
+            <label class="checkbox-line"><input type="checkbox" bind:checked={printerEnabled} /> Enabled</label>
+            <button class="primary" disabled={actionBusy} onclick={savePrinter}>Save Printer</button>
+          </div>
+        </div>
+      </section>
+    {:else if route === '/admin/print-queue'}
+      <section class="city-dashboard-grid">
+        <div class="city-panel span-2">
+          <div class="panel-title">Queue</div>
+          <div class="city-record-list">
+            {#each cityPrintQueue as item (item.id)}
+              <article>
+                <span class={`tag ${statusTone(item.status)}`}>{item.status}</span>
+                <div>
+                  <strong>{item.printRequestId}</strong>
+                  <small>priority {item.priority} · printer {item.printerId || 'unassigned'} · position {item.queuePosition ?? '-'}</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No queue entries</strong><span>Paid and approved print jobs will appear here.</span></div>
+            {/each}
+          </div>
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Quote Request</div>
+          <div class="city-card-list compact">
+            {#each cityPrintRequests as request (request.id)}
+              <button class:active={citySelectedPrint?.id === request.id} onclick={() => (citySelectedPrint = request)}>
+                <span class={`tag ${statusTone(request.status)}`}>{request.status}</span>
+                <strong>{request.title}</strong>
+                <small>{request.quoteGp ? `${request.quoteGp} GP` : 'unquoted'}</small>
+              </button>
+            {/each}
+          </div>
+          {#if citySelectedPrint}
+            <div class="city-form-grid single">
+              <label>GP quote <input bind:value={printQuoteGp} inputmode="numeric" /></label>
+              <label>Admin notes <textarea bind:value={printQuoteNotes} rows="3"></textarea></label>
+              <button class="primary" disabled={actionBusy} onclick={() => citySelectedPrint && quotePrintRequest(citySelectedPrint.id)}>Save Quote</button>
+            </div>
+          {/if}
+        </div>
+      </section>
+    {:else if route === '/admin/economy'}
+      <section class="city-dashboard-grid">
+        <div class="city-panel">
+          <div class="panel-title">Grant Points</div>
+          <div class="city-form-grid single">
+            <label>City user ID <input bind:value={adminGrantCityUserId} placeholder={citySession.cityUserId || 'current admin'} /></label>
+            <label>Resource
+              <select bind:value={adminGrantResource}>
+                <option value="AP">AP</option>
+                <option value="GP">GP</option>
+              </select>
+            </label>
+            <label>Amount <input bind:value={adminGrantAmount} inputmode="numeric" /></label>
+            <label>Memo <textarea bind:value={adminGrantMemo} rows="3"></textarea></label>
+            <button class="primary" disabled={actionBusy} onclick={grantPoints}>Grant</button>
+          </div>
+        </div>
+        <div class="city-panel span-2">
+          <div class="panel-title">Recent Ledger</div>
+          <div class="city-record-list">
+            {#each cityLedger as entry (entry.id)}
+              <article>
+                <span class={`tag ${entry.delta >= 0 ? 'ok' : 'warn'}`}>{ledgerDelta(entry)}</span>
+                <div><strong>{entry.memo || entry.sourceType}</strong><small>{entry.cityUserId} · {timeAgo(entry.createdAt)}</small></div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No loaded ledger rows</strong><span>Open Profile first to load the current admin ledger.</span></div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {:else if route === '/admin/souls'}
+      <section class="city-panel">
+        <div class="panel-title">Soul Proposals</div>
+        <div class="city-card-list">
+          {#each cityProposals as proposal (proposal.id)}
+            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+              <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+              <strong>{proposal.displayName}</strong>
+              <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP</small>
+            </button>
+          {:else}
+            <div class="city-empty-state"><strong>No soul proposals</strong><span>Submitted proposals appear here for birth operations.</span></div>
+          {/each}
+        </div>
+      </section>
+    {/if}
+  {:else}
+    {@render CityAuthCta({ label: 'Admin session required' })}
+  {/if}
+{/snippet}
+
+{#snippet CityLogin()}
+  <section class="city-page-head">
+    <p class="kicker">Session</p>
+    <h1>Login</h1>
+  </section>
+  <section class="city-panel">
+    <div class="city-empty-state">
+      <strong>Login endpoint unavailable</strong>
+      <span>The shell will switch from guest mode when `/api/session` returns an authenticated attendee.</span>
+    </div>
+    <a class="city-link-button" href={citySession.loginUrl}>Open Login</a>
+  </section>
+{/snippet}
+
+{#snippet CityNotFound()}
+  <section class="city-page-head">
+    <p class="kicker">{isLegacyOperationalRoute(route) ? 'Moved' : 'Not Found'}</p>
+    <h1>{isLegacyOperationalRoute(route) ? 'Debug Route' : '404'}</h1>
+  </section>
+  <section class="city-panel">
+    {#if isLegacyOperationalRoute(route)}
+      <div class="city-empty-state">
+        <strong>Operational route moved</strong>
+        <span>{legacyDebugEquivalent(route)}</span>
+      </div>
+      <button onclick={() => debugNav(route)}>Open Debug</button>
+    {:else if !isKnownCityRoute(route)}
+      <div class="empty">No city route matches {route}</div>
+    {/if}
+  </section>
+{/snippet}
+
+{#snippet CityResidentList({ rows }: { rows: ResidentDashboardRow[] })}
+  <div class="city-resident-list">
+    {#each rows as row (row.name)}
+      <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
+        <span class:ok={row.online} class="dot"></span>
+        <strong>{residentDisplayName(row.name)}</strong>
+        <small>{residentStoryArcLabel(row)} · {residentFeedLabel(row)}</small>
+        <em>{row.attention ?? '-'} attn</em>
+      </button>
+    {:else}
+      <div class="empty">No public residents reported</div>
+    {/each}
+  </div>
+{/snippet}
 
 {#snippet SpectatorSurface({ large }: { large: boolean })}
   <div class="observer-surface" class:large>
@@ -1735,7 +3341,7 @@
       <thead><tr><th>Task</th><th>Status</th><th>Score</th><th>Mode</th><th>Module</th><th>Resident</th><th>Duration</th><th>Started</th></tr></thead>
       <tbody>
         {#each runs as run}
-          <tr onclick={() => nav(`/benchmarks/${encodeURIComponent(run.runId)}`)}>
+          <tr onclick={() => debugNav(`/benchmarks/${encodeURIComponent(run.runId)}`)}>
             <td><strong>{run.task.id}</strong><small>{run.runId}</small></td>
             <td><span class:ok={run.status === 'passed'} class:warn={run.status !== 'passed'} class="tag">{benchmarkStatusLabel(run.status)}</span></td>
             <td class="num">{formatScore(run.score)}</td>

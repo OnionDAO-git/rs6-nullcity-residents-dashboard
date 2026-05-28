@@ -1,4 +1,6 @@
 import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
+import { routeCityApi } from './city/routes';
+import { createCityServicesFromEnv, initializeCityServices } from './city/services';
 import { config } from './config';
 import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
@@ -9,6 +11,8 @@ import { serveDashboardWeb } from './static';
 import { jsonResponse, notFound, textResponse } from './util';
 
 const gateway = new GatewayClient(config.gatewayUrl, config.gatewayToken);
+const city = createCityServicesFromEnv();
+await initializeCityServices(city);
 const runtime = new RuntimeRepository(
   config.memoryRoot,
   config.logsRoot,
@@ -153,8 +157,18 @@ function parseHostPort(value: string): { host: string; port: number } {
 async function routeApi(request: Request, url: URL): Promise<Response> {
   const method = request.method;
   const pathname = url.pathname;
+  if (method === 'GET' && pathname === '/api/health') {
+    return jsonResponse({
+      ok: true,
+      service: 'nullcity-residents-dashboard',
+      store: city.store.mode,
+      at: new Date().toISOString(),
+    });
+  }
   const rs6Response = await routeRs6Api(request, pathname);
   if (rs6Response) return rs6Response;
+  const cityResponse = await routeCityApi(request, url, city);
+  if (cityResponse) return cityResponse;
 
   if (method === 'GET' && pathname === '/api/gateway/status') return jsonResponse(await gateway.probeStatus());
   if (method === 'GET' && pathname === '/api/controller/status') return jsonResponse(await runtime.status());

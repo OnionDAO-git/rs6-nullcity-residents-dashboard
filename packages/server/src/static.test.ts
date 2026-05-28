@@ -23,19 +23,20 @@ async function withStaticRoots<T>(run: (roots: { eventPublicRoot: string; webDis
 describe('serveDashboardWeb', () => {
   test('maps the migrated public event page routes explicitly', async () => {
     await withStaticRoots(async roots => {
-      expect(eventPublicPagePath('/wall', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'wall/index.html'));
-      expect(eventPublicPagePath('/wall/', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'wall/index.html'));
-      expect(eventPublicPagePath('/inbox', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'inbox/index.html'));
-      expect(eventPublicPagePath('/patron', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'patron/index.html'));
-      expect(eventPublicPagePath('/graveyard', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'graveyard/index.html'));
-      expect(eventPublicPagePath('/library', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'library/index.html'));
+      expect(eventPublicPagePath('/debug/wall', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'wall/index.html'));
+      expect(eventPublicPagePath('/debug/wall/', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'wall/index.html'));
+      expect(eventPublicPagePath('/debug/inbox', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'inbox/index.html'));
+      expect(eventPublicPagePath('/debug/patron', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'patron/index.html'));
+      expect(eventPublicPagePath('/debug/graveyard', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'graveyard/index.html'));
+      expect(eventPublicPagePath('/debug/library', roots.eventPublicRoot)).toBe(path.join(roots.eventPublicRoot, 'library/index.html'));
+      expect(eventPublicPagePath('/wall', roots.eventPublicRoot)).toBeUndefined();
       expect(eventPublicPagePath('/residents/res-agent', roots.eventPublicRoot)).toBeUndefined();
     });
   });
 
   test('serves public event pages before redirecting to the Vite dev app', async () => {
     await withStaticRoots(async roots => {
-      const response = await serveDashboardWeb(new URL('http://dashboard.local/wall'), {
+      const response = await serveDashboardWeb(new URL('http://dashboard.local/debug/wall'), {
         ...roots,
         webDevOrigin: 'http://127.0.0.1:5174',
       });
@@ -46,10 +47,10 @@ describe('serveDashboardWeb', () => {
     });
   });
 
-  test('keeps the Svelte app shell on / while serving the public event index at /index.html', async () => {
+  test('keeps the Svelte app shell on / while serving the public event index under /debug', async () => {
     await withStaticRoots(async roots => {
       const rootResponse = await serveDashboardWeb(new URL('http://dashboard.local/'), roots);
-      const indexResponse = await serveDashboardWeb(new URL('http://dashboard.local/index.html'), roots);
+      const indexResponse = await serveDashboardWeb(new URL('http://dashboard.local/debug/index.html'), roots);
 
       expect(await rootResponse.text()).toContain('svelte app shell');
       expect(await indexResponse.text()).toContain('public event index');
@@ -62,6 +63,15 @@ describe('serveDashboardWeb', () => {
 
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('svelte app shell');
+    });
+  });
+
+  test('returns 404 for retired operations routes that are not new city routes', async () => {
+    await withStaticRoots(async roots => {
+      const response = await serveDashboardWeb(new URL('http://dashboard.local/observe'), roots);
+
+      expect(response.status).toBe(404);
+      expect(await response.text()).toContain('/debug');
     });
   });
 });

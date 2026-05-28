@@ -10,6 +10,7 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@nullcity-dashboard/game-client": "*",
     "@nullcity-dashboard/observer": "*",
     "@nullcity-dashboard/shared": "*",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
