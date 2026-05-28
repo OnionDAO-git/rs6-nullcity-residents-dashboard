@@ -45,7 +45,7 @@ export const config: DashboardConfig = {
   port: portFromEnv(process.env.DASHBOARD_PORT, process.env.PORT, 8787),
   gatewayUrl: normalizeAgentGatewayUrl(process.env.AGENT_GATEWAY_URL),
   gatewayToken: process.env.AGENT_GATEWAY_TOKEN || defaultGatewayToken,
-  rsClientHost: process.env.NULLCITY_RS_HOST || '127.0.0.1:43594',
+  rsClientHost: normalizeRsClientHost(process.env.NULLCITY_RS_HOST),
   rsClientSecure: process.env.NULLCITY_RS_SECURE === 'true',
   serverRoot,
   memoryRoot: process.env.NULLCITY_MEMORY_ROOT || dataRoots.memoryRoot,
@@ -79,4 +79,37 @@ function normalizeAgentGatewayUrl(value: string | undefined): string {
     return value;
   }
   return value;
+}
+
+export function normalizeRsClientHost(value: string | undefined): string {
+  const host = value || '127.0.0.1:43594';
+  const parsed = parseRsClientHost(host);
+  if (parsed.port === 43595) {
+    throw new Error('NULLCITY_RS_HOST points at the AgentGateway on port 43595. Use the RuneScape game gateway on port 43594.');
+  }
+  if (parsed.port === 43591 || parsed.port === 43592) {
+    throw new Error('NULLCITY_RS_HOST must point at the RuneScape game gateway on port 43594, not the login or update server directly.');
+  }
+  return `${parsed.host}:${parsed.port}`;
+}
+
+export function parseRsClientHost(value: string): { host: string; port: number } {
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error('NULLCITY_RS_HOST must be host:port.');
+  if (/^wss?:\/\//i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+    throw new Error('NULLCITY_RS_HOST must be the raw TCP game gateway host:port, not an HTTP or WebSocket URL.');
+  }
+
+  let hostPort = trimmed;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    const url = new URL(trimmed);
+    hostPort = url.host;
+  }
+
+  const url = new URL(`tcp://${hostPort}`);
+  const port = Number(url.port);
+  if (!url.hostname || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`NULLCITY_RS_HOST must be host:port, got ${value}`);
+  }
+  return { host: url.hostname, port };
 }

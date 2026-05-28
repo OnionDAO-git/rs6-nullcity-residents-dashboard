@@ -1,7 +1,7 @@
 import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
 import { routeCityApi } from './city/routes';
 import { createCityServicesFromEnv, initializeCityServices } from './city/services';
-import { config } from './config';
+import { config, parseRsClientHost } from './config';
 import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
 import { buildEventReadinessSummary } from './readiness';
@@ -40,7 +40,11 @@ const server = Bun.serve<RsProxyWebSocketData>({
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname === '/rs' && request.headers.get('upgrade')?.toLowerCase() === 'websocket') {
-      return server.upgrade(request, { data: { queue: [], closing: false } satisfies RsProxyWebSocketData })
+      const protocol = acceptedWebSocketProtocol(request);
+      return server.upgrade(request, {
+        data: { queue: [], closing: false } satisfies RsProxyWebSocketData,
+        headers: protocol ? { 'Sec-WebSocket-Protocol': protocol } : undefined,
+      })
         ? undefined
         : textResponse('WebSocket upgrade failed', { status: 400 });
     }
@@ -80,7 +84,7 @@ console.log(`NullCity dashboard server listening on http://${server.hostname}:${
 
 async function openRsProxyConnection(ws: Bun.ServerWebSocket<RsProxyWebSocketData>): Promise<void> {
   try {
-    const target = parseHostPort(config.rsClientHost);
+    const target = parseRsClientHost(config.rsClientHost);
     const tcp = await Bun.connect<RsProxyTcpData>({
       hostname: target.host,
       port: target.port,
@@ -98,11 +102,13 @@ async function openRsProxyConnection(ws: Bun.ServerWebSocket<RsProxyWebSocketDat
           socket.data.ws.data.tcp = undefined;
           closeRsProxyWebSocket(socket.data.ws);
         },
-        error(socket) {
+        error(socket, error) {
+          console.error(`RuneScape gateway proxy error (${config.rsClientHost}): ${errorMessage(error)}`);
           socket.data.ws.data.tcp = undefined;
           closeRsProxyWebSocket(socket.data.ws);
         },
-        connectError(socket) {
+        connectError(socket, error) {
+          console.error(`RuneScape gateway connection failed (${config.rsClientHost}): ${errorMessage(error)}`);
           closeRsProxyWebSocket(socket.data.ws, 1011, 'RuneScape gateway connection failed');
         },
       },
@@ -115,7 +121,8 @@ async function openRsProxyConnection(ws: Bun.ServerWebSocket<RsProxyWebSocketDat
 
     ws.data.tcp = tcp;
     for (const queued of ws.data.queue.splice(0)) tcp.write(toTcpChunk(queued));
-  } catch {
+  } catch (error) {
+    console.error(`RuneScape gateway proxy failed (${config.rsClientHost}): ${errorMessage(error)}`);
     closeRsProxyWebSocket(ws, 1011, 'RuneScape gateway connection failed');
   }
 }
@@ -145,13 +152,22 @@ function toTcpChunk(message: WsMessage): Uint8Array | string {
   return message instanceof ArrayBuffer ? new Uint8Array(message) : message;
 }
 
-function parseHostPort(value: string): { host: string; port: number } {
-  const [host, portValue] = value.split(':');
-  const port = Number(portValue);
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`NULLCITY_RS_HOST must be host:port, got ${value}`);
-  }
-  return { host, port };
+function acceptedWebSocketProtocol(request: Request): string | undefined {
+  const header = request.headers.get('sec-websocket-protocol');
+  if (!header) return undefined;
+  return header.split(',').map(protocol => protocol.trim()).find(protocol => protocol === 'binary');
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function publicRequestProtocol(request: Request, url: URL): 'http:' | 'https:' {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  if (forwardedProto === 'https') return 'https:';
+  if (forwardedProto === 'http') return 'http:';
+  if (request.headers.get('x-forwarded-ssl')?.toLowerCase() === 'on') return 'https:';
+  return url.protocol === 'https:' ? 'https:' : 'http:';
 }
 
 async function routeApi(request: Request, url: URL): Promise<Response> {
@@ -173,10 +189,11 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   if (method === 'GET' && pathname === '/api/gateway/status') return jsonResponse(await gateway.probeStatus());
   if (method === 'GET' && pathname === '/api/controller/status') return jsonResponse(await runtime.status());
   if (method === 'GET' && pathname === '/api/controller/config') {
+    const protocol = publicRequestProtocol(request, url);
     return jsonResponse({
       gatewayUrl: config.gatewayUrl,
       rsClientHost: `${url.host}/rs`,
-      rsClientSecure: url.protocol === 'https:',
+      rsClientSecure: protocol === 'https:',
       rsGatewayHost: config.rsClientHost,
       memoryRoot: config.memoryRoot,
       logsRoot: config.logsRoot,
