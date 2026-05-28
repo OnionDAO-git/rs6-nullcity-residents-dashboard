@@ -7,7 +7,6 @@ Deploy the NullCity residents dashboard to Railway.
 
 Required environment:
   LANDING_DATABASE_URL       Existing landing-2026 Postgres URL. Use a read-only user if possible.
-  CITY_PRINT_BRIDGE_TOKEN    Shared token used by the LAN print bridge.
 
 Common options:
   RAILWAY_PROJECT_ID         Existing Railway project ID. Alias: PROJECT_ID.
@@ -21,6 +20,9 @@ Common options:
   AGENT_GATEWAY_URL          Defaults to ws://${{game.RAILWAY_PRIVATE_DOMAIN}}:43595.
   AGENT_GATEWAY_TOKEN        Defaults to ${{game.AGENT_GATEWAY_AUTH_TOKEN}}.
   NULLCITY_RS_HOST           Defaults to ${{game.RAILWAY_PRIVATE_DOMAIN}}:43594.
+  NIXPACKS_NODE_VERSION      Node major version for Nixpacks builds. Default: 22
+  CITY_PRINT_BRIDGE_TOKEN    Shared LAN print bridge token. Reused from service when set,
+                             generated when no service token exists.
   CUSTOM_DOMAIN              Optional custom domain to attach, for example city.oniondao.dev.
   CITY_PUBLIC_BASE_URL       Public base URL. Default: https://city.oniondao.dev
   ENV_FILE                   Optional file to source before reading config, for example .env.production
@@ -66,18 +68,21 @@ AUTH_COOKIE_DOMAIN="${AUTH_COOKIE_DOMAIN:-.oniondao.dev}"
 SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-true}"
 DASHBOARD_HOST="${DASHBOARD_HOST:-0.0.0.0}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-\${{ PORT }}}"
+NIXPACKS_NODE_VERSION="${NIXPACKS_NODE_VERSION:-22}"
 DEPLOY_MESSAGE="${DEPLOY_MESSAGE:-Configure and deploy residents dashboard}"
 DRY_RUN="${DRY_RUN:-0}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
 SKIP_DOMAIN="${SKIP_DOMAIN:-0}"
 SKIP_POSTGRES="${SKIP_POSTGRES:-0}"
 CREATE_NEW_PROJECT_SELECTED=0
+APP_SERVICE_CREATED=0
 NULLCITY_RS_PORT="${NULLCITY_RS_PORT:-43594}"
 AGENT_GATEWAY_PORT="${AGENT_GATEWAY_PORT:-43595}"
 NULLCITY_SERVER_PRIVATE_DOMAIN_REF="\${{${RAILWAY_SERVER_GAME_SERVICE}.RAILWAY_PRIVATE_DOMAIN}}"
 AGENT_GATEWAY_URL="${AGENT_GATEWAY_URL:-ws://${NULLCITY_SERVER_PRIVATE_DOMAIN_REF}:${AGENT_GATEWAY_PORT}}"
 AGENT_GATEWAY_TOKEN="${AGENT_GATEWAY_TOKEN:-\${{${RAILWAY_SERVER_GAME_SERVICE}.AGENT_GATEWAY_AUTH_TOKEN}}}"
 NULLCITY_RS_HOST="${NULLCITY_RS_HOST:-${NULLCITY_SERVER_PRIVATE_DOMAIN_REF}:${NULLCITY_RS_PORT}}"
+CITY_PRINT_BRIDGE_TOKEN="${CITY_PRINT_BRIDGE_TOKEN:-}"
 
 export RAILWAY_CALLER="${RAILWAY_CALLER:-script:residents-dashboard-railway-deploy}"
 export RAILWAY_AGENT_SESSION="${RAILWAY_AGENT_SESSION:-railway-deploy-$(date +%Y%m%d%H%M%S)-$$}"
@@ -378,6 +383,78 @@ set_optional_service_var() {
   fi
 }
 
+service_variable_value() {
+  local key="$1"
+  local variable_json
+  local args=(--service "$RAILWAY_APP_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --json)
+  if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
+    args+=(--project "$RAILWAY_PROJECT_ID")
+  fi
+
+  variable_json="$(railway variable list "${args[@]}" 2>/dev/null || true)"
+  if [[ -z "$variable_json" ]]; then
+    return 1
+  fi
+
+  printf '%s' "$variable_json" | jq -r --arg key "$key" '
+    def value_from_object:
+      .[$key] // .variables?[$key] // .data?[$key] // empty;
+    def value_from_array:
+      map(select((.name? // .key? // .variableName? // "") == $key))
+      | first
+      | (.value? // .rawValue? // .val? // empty);
+    if type == "object" then
+      if (.variables? | type) == "array" then
+        .variables | value_from_array
+      elif (.data? | type) == "array" then
+        .data | value_from_array
+      else
+        value_from_object
+      end
+    elif type == "array" then
+      value_from_array
+    else
+      empty
+    end
+  '
+}
+
+generate_print_bridge_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32
+    return
+  fi
+  die "CITY_PRINT_BRIDGE_TOKEN is unset and openssl is unavailable for generating one"
+}
+
+resolve_print_bridge_token() {
+  if [[ -n "$CITY_PRINT_BRIDGE_TOKEN" ]]; then
+    log "Using CITY_PRINT_BRIDGE_TOKEN from environment"
+    return
+  fi
+
+  local existing_token
+  existing_token="$(service_variable_value CITY_PRINT_BRIDGE_TOKEN || true)"
+  if [[ -n "$existing_token" ]]; then
+    CITY_PRINT_BRIDGE_TOKEN="$existing_token"
+    log "Reusing existing CITY_PRINT_BRIDGE_TOKEN from $RAILWAY_APP_SERVICE"
+    return
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    CITY_PRINT_BRIDGE_TOKEN="dry-run-generated-print-bridge-token"
+    log "DRY RUN: would generate CITY_PRINT_BRIDGE_TOKEN when no existing service token is found"
+    return
+  fi
+
+  CITY_PRINT_BRIDGE_TOKEN="$(generate_print_bridge_token)"
+  if [[ "$APP_SERVICE_CREATED" == "1" ]]; then
+    log "Generated CITY_PRINT_BRIDGE_TOKEN for new $RAILWAY_APP_SERVICE service"
+  else
+    log "Generated missing CITY_PRINT_BRIDGE_TOKEN for existing $RAILWAY_APP_SERVICE service"
+  fi
+}
+
 ensure_project() {
   if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
     log "Linking Railway project $RAILWAY_PROJECT_ID"
@@ -450,6 +527,7 @@ ensure_environment() {
 
 ensure_app_service() {
   log "Ensuring app service $RAILWAY_APP_SERVICE"
+  APP_SERVICE_CREATED=0
   if [[ "$DRY_RUN" == "1" ]]; then
     log "DRY RUN: would create app service when missing"
     return
@@ -458,6 +536,7 @@ ensure_app_service() {
   if service_exists "$RAILWAY_APP_SERVICE"; then
     return
   fi
+  APP_SERVICE_CREATED=1
   run_quiet "create app service" railway add --service "$RAILWAY_APP_SERVICE" --json
 }
 
@@ -490,6 +569,7 @@ configure_variables() {
   log "Configuring production variables on $RAILWAY_APP_SERVICE"
   set_service_var DASHBOARD_HOST "$DASHBOARD_HOST"
   set_service_var DASHBOARD_PORT "$DASHBOARD_PORT"
+  set_service_var NIXPACKS_NODE_VERSION "$NIXPACKS_NODE_VERSION"
   set_service_var CITY_DATABASE_URL "$city_database_url"
   set_service_var LANDING_DATABASE_URL "$LANDING_DATABASE_URL"
   set_service_var LANDING_AUTH_BASE_URL "$LANDING_AUTH_BASE_URL"
@@ -556,10 +636,6 @@ main() {
   require_cmd railway
   require_cmd jq
   require_env LANDING_DATABASE_URL
-  require_env AGENT_GATEWAY_URL
-  require_env AGENT_GATEWAY_TOKEN
-  require_env NULLCITY_RS_HOST
-  require_env CITY_PRINT_BRIDGE_TOKEN
 
   [[ "$NULLCITY_RS_HOST" == *:* ]] || die "NULLCITY_RS_HOST must be host:port"
 
@@ -569,6 +645,7 @@ main() {
   ensure_project
   ensure_environment
   ensure_app_service
+  resolve_print_bridge_token
   ensure_postgres_service
   configure_variables
   configure_domain

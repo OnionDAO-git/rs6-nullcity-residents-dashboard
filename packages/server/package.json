@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@nullcity-dashboard/shared": "*",
-    "@runejs/filestore": "file:../../../runejs/rs6-filestore",
+    "@runejs/filestore": "0.17.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

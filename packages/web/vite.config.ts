@@ -13,9 +13,9 @@ export default defineConfig({
   plugins: [svelte()],
   resolve: {
     alias: {
-      client2: resolve(__dirname, '../../../nullcity-client-ts/src/client/Client.ts'),
-      '#3rdparty': resolve(__dirname, '../../../nullcity-client-ts/src/3rdparty'),
-      '#': resolve(__dirname, '../../../nullcity-client-ts/src'),
+      client2: resolve(__dirname, '../game-client/src/runtime/upstream/src/client/Client.ts'),
+      '#3rdparty': resolve(__dirname, '../game-client/src/runtime/upstream/src/3rdparty'),
+      '#': resolve(__dirname, '../game-client/src/runtime/upstream/src'),
     },
   },
   define: {
