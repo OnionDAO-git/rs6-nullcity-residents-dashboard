@@ -64,6 +64,41 @@ CITY_PRINT_BRIDGE_TOKEN=<shared bridge token>
 
 The local checkout is not linked to a Railway project by default. Link or deploy it into the same Railway project/environment as `landing-2026`, add a separate Postgres service for this dashboard, and attach `city.oniondao.dev` to the dashboard service.
 
+### Railway deploy script
+
+`./railway-deploy.sh` can create or reuse the Railway project, ensure the production environment, create the dashboard service, provision the city Postgres service when missing, set the required dashboard variables, optionally attach a custom domain, and upload a deployment.
+
+The landing database is not created by this repository. Pass the existing `landing-2026` database URL as `LANDING_DATABASE_URL`; a read-only database user is preferred.
+
+```sh
+ENV_FILE=.env.production ./railway-deploy.sh
+```
+
+At minimum the script needs:
+
+```sh
+LANDING_DATABASE_URL=postgres://...
+AGENT_GATEWAY_URL=wss://...
+AGENT_GATEWAY_TOKEN=...
+NULLCITY_RS_HOST=host:43594
+CITY_PRINT_BRIDGE_TOKEN=...
+```
+
+Useful options:
+
+```sh
+RAILWAY_SELECT_PROJECT=1
+RAILWAY_WORKSPACE=<workspace id or name>
+RAILWAY_PROJECT_ID=<existing project id>
+RAILWAY_ENVIRONMENT=production
+RAILWAY_APP_SERVICE=residents-dashboard
+CUSTOM_DOMAIN=city.oniondao.dev
+SKIP_DEPLOY=1
+DRY_RUN=1
+```
+
+When run from an interactive terminal and `RAILWAY_PROJECT_ID` is not set, the script can list Railway workspaces and projects so you can choose an existing project or create a new project in the selected workspace. Set `RAILWAY_SELECT_PROJECT=0` to disable prompts in local runs.
+
 ## Print Bridge
 
 The LAN print bridge can run separately from the Railway web service and poll the city API with `PRINT_BRIDGE_CITY_BASE_URL` and `PRINT_BRIDGE_CITY_TOKEN`.

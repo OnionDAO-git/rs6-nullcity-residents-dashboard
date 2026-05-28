@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Null City</title>
+  <rect width="512" height="512" rx="96" fill="#101820"/>
+  <path d="M96 352V160h56l112 124V160h64v192h-56L160 228v124H96Z" fill="#f5f1e8"/>
+  <path d="M368 160h48v192h-48V160Z" fill="#d4a017"/>
+  <path d="M96 392h320v40H96v-40Z" fill="#6fd3c1"/>
+</svg>

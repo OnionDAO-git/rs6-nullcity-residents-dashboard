@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101820" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Null City" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
     <title>NullCity Spectator</title>
     <style>
       html,
@@ -28,12 +36,15 @@
       #status {
         position: fixed;
         left: 12px;
+        right: 12px;
         bottom: 12px;
+        max-width: min(680px, calc(100vw - 24px));
         padding: 6px 8px;
         border: 1px solid rgba(228, 184, 64, 0.34);
         background: rgba(5, 4, 3, 0.82);
         color: #d8c8a4;
         font: 12px monospace;
+        overflow-wrap: anywhere;
       }
     </style>
   </head>

@@ -42,6 +42,11 @@
     glyph: string;
   };
 
+  type BeforeInstallPromptEvent = Event & {
+    prompt: () => Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+  };
+
   const guestSession: CitySession = {
     authenticated: false,
     name: 'Guest attendee',
@@ -66,6 +71,11 @@
   let cityDataError = '';
   let sessionLoading = true;
   let citySession: CitySession = guestSession;
+  let notificationPermission: NotificationPermission | 'unsupported' = notificationStatus();
+  let notificationsEnabled = false;
+  let inboxNotificationReady = false;
+  let pwaInstallPrompt: BeforeInstallPromptEvent | undefined;
+  let appInstalled = window.matchMedia('(display-mode: standalone)').matches;
   let overview: DashboardOverview | undefined;
   let gatewayStatus: GatewayStatus | undefined;
   let residents: ResidentDashboardRow[] = [];
@@ -126,6 +136,8 @@
   const defaultInferenceEndpoint = 'default';
   const defaultInferenceTemperature = '0.6';
   const spawnInferenceStorageKey = 'nullcity.spawnInference';
+  const inboxNotificationEnabledKey = 'nullcity.inboxNotifications.enabled';
+  const inboxNotificationSeenKeyPrefix = 'nullcity.inboxNotifications.seen';
   const spectatorZoomMin = 0.5;
   const spectatorZoomMax = 3;
   const spectatorZoomStep = 0.25;
@@ -290,12 +302,26 @@
       browserPath = window.location.pathname;
       void loadRoute();
     };
+    const beforeInstallPromptListener = (event: Event) => {
+      event.preventDefault();
+      pwaInstallPrompt = event as BeforeInstallPromptEvent;
+    };
+    const appInstalledListener = () => {
+      appInstalled = true;
+      pwaInstallPrompt = undefined;
+    };
+    notificationsEnabled = window.localStorage.getItem(inboxNotificationEnabledKey) === 'true';
+    notificationPermission = notificationStatus();
     window.addEventListener('popstate', listener);
+    window.addEventListener('beforeinstallprompt', beforeInstallPromptListener);
+    window.addEventListener('appinstalled', appInstalledListener);
     void bootstrapSession();
     void loadRoute();
     const timer = setInterval(() => void refreshQuietly(), 5000);
     return () => {
       window.removeEventListener('popstate', listener);
+      window.removeEventListener('beforeinstallprompt', beforeInstallPromptListener);
+      window.removeEventListener('appinstalled', appInstalledListener);
       clearInterval(timer);
       closeRuntimeStream();
       closeSessionStream();
@@ -337,6 +363,7 @@
       citySession = guestSession;
     } finally {
       setCityCsrfToken(citySession.csrfToken);
+      if (!citySession.authenticated) inboxNotificationReady = false;
       sessionLoading = false;
     }
   }
@@ -483,6 +510,14 @@
       cityLibraryLives = (await cityLoad(cityApi.library(), { lives: [] })).lives;
     }
     if (activeRoute === '/library') souls = await api.souls().catch(() => []);
+    await refreshInboxNotifications(activeRoute);
+  }
+
+  async function refreshInboxNotifications(activeRoute: string) {
+    if (!citySession.authenticated || !notificationsEnabled || notificationPermission !== 'granted') return;
+    const routeHasInbox = activeRoute === '/' || activeRoute === '/inbox' || activeRoute.startsWith('/inbox/');
+    const threads = routeHasInbox ? cityInboxThreads : (await cityLoad(cityApi.inbox(), { threads: [] })).threads;
+    await processInboxNotifications(threads);
   }
 
   async function loadCitySnapshot() {
@@ -675,6 +710,131 @@
   function cityNavActive(item: CityNavItem): boolean {
     const current = normalizeRoutePath(browserPath);
     return item.path === '/' ? current === '/' : current === item.match || current.startsWith(`${item.match}/`);
+  }
+
+  function notificationStatus(): NotificationPermission | 'unsupported' {
+    return 'Notification' in window ? Notification.permission : 'unsupported';
+  }
+
+  function notificationButtonLabel(): string {
+    if (!citySession.authenticated) return 'Login for notifications';
+    if (notificationPermission === 'unsupported') return 'Notifications unavailable';
+    if (notificationPermission === 'denied') return 'Notifications blocked';
+    return notificationsEnabled && notificationPermission === 'granted' ? 'Notifications on' : 'Enable notifications';
+  }
+
+  function canRequestInboxNotifications(): boolean {
+    return citySession.authenticated && notificationPermission !== 'unsupported' && notificationPermission !== 'denied';
+  }
+
+  async function enableInboxNotifications() {
+    if (!canRequestInboxNotifications()) return;
+    if (notificationPermission !== 'granted') {
+      notificationPermission = await Notification.requestPermission();
+    }
+    if (notificationPermission !== 'granted') return;
+    notificationsEnabled = true;
+    window.localStorage.setItem(inboxNotificationEnabledKey, 'true');
+    await seedInboxNotificationState();
+    cityActionNotice = 'Notifications enabled';
+  }
+
+  function disableInboxNotifications() {
+    notificationsEnabled = false;
+    inboxNotificationReady = false;
+    window.localStorage.removeItem(inboxNotificationEnabledKey);
+    cityActionNotice = 'Notifications disabled';
+  }
+
+  async function toggleInboxNotifications() {
+    if (notificationsEnabled && notificationPermission === 'granted') {
+      disableInboxNotifications();
+    } else {
+      await enableInboxNotifications();
+    }
+  }
+
+  async function installPwa() {
+    const promptEvent = pwaInstallPrompt;
+    if (!promptEvent) return;
+    await promptEvent.prompt();
+    await promptEvent.userChoice.catch(() => undefined);
+    pwaInstallPrompt = undefined;
+  }
+
+  async function seedInboxNotificationState() {
+    const threads = cityInboxThreads.length ? cityInboxThreads : (await cityLoad(cityApi.inbox(), { threads: [] })).threads;
+    saveSeenInboxMessageIds(new Set(threads.map(thread => thread.latestMessage?.id).filter((id): id is string => Boolean(id))));
+    inboxNotificationReady = true;
+  }
+
+  async function processInboxNotifications(threads: InboxThread[]) {
+    let seen = loadSeenInboxMessageIds();
+    if (!inboxNotificationReady) {
+      if (!seen.size) {
+        seen = new Set(threads.map(thread => thread.latestMessage?.id).filter((id): id is string => Boolean(id)));
+        saveSeenInboxMessageIds(seen);
+        inboxNotificationReady = true;
+        return;
+      }
+      inboxNotificationReady = true;
+    }
+
+    const nextSeen = new Set(seen);
+    for (const thread of threads) {
+      const message = thread.latestMessage;
+      if (!message?.id) continue;
+      if (message.senderType !== 'resident' || message.readAt || seen.has(message.id)) {
+        nextSeen.add(message.id);
+        continue;
+      }
+      await showInboxNotification(thread);
+      nextSeen.add(message.id);
+    }
+    saveSeenInboxMessageIds(nextSeen);
+  }
+
+  function loadSeenInboxMessageIds(): Set<string> {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(inboxNotificationSeenKey()) || '[]');
+      return new Set(Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function saveSeenInboxMessageIds(ids: Set<string>) {
+    const recent = Array.from(ids).slice(-80);
+    window.localStorage.setItem(inboxNotificationSeenKey(), JSON.stringify(recent));
+  }
+
+  function inboxNotificationSeenKey(): string {
+    return `${inboxNotificationSeenKeyPrefix}.${citySession.cityUserId || citySession.email || 'guest'}`;
+  }
+
+  async function showInboxNotification(thread: InboxThread) {
+    const message = thread.latestMessage;
+    if (!message || notificationPermission !== 'granted') return;
+    const resident = cityResidentLabelFromId(thread.residentId);
+    const url = `/inbox/${encodeURIComponent(thread.id)}`;
+    const options: NotificationOptions = {
+      body: message.body,
+      tag: `nullcity-inbox-${thread.id}`,
+      icon: '/icons/icon.svg',
+      badge: '/icons/icon.svg',
+      data: { url },
+    };
+    const registration = await navigator.serviceWorker?.ready.catch(() => undefined);
+    if (registration?.showNotification) {
+      await registration.showNotification(`${resident} emailed you`, options);
+    } else {
+      const notification = new Notification(`${resident} emailed you`, options);
+      notification.onclick = () => {
+        window.focus();
+        cityNav(url);
+        notification.close();
+      };
+    }
   }
 
   function isKnownCityRoute(activeRoute: string): boolean {
@@ -2294,6 +2454,14 @@
         <span>{sessionLoading ? 'Syncing session' : citySession.name}</span>
         <strong>{citySession.authenticated ? citySession.handle : 'Guest access'}</strong>
       </div>
+      <div class="city-pwa-panel">
+        <button disabled={!canRequestInboxNotifications()} class:active={notificationsEnabled && notificationPermission === 'granted'} onclick={toggleInboxNotifications}>
+          {notificationButtonLabel()}
+        </button>
+        {#if pwaInstallPrompt && !appInstalled}
+          <button onclick={installPwa}>Install App</button>
+        {/if}
+      </div>
       <div class="city-nav">
         {#each cityNavItems as item (item.path)}
           <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
@@ -2356,7 +2524,7 @@
     </main>
 
     <nav class="city-bottom-nav" aria-label="Primary city navigation">
-      {#each cityNavItems.slice(0, 5) as item (item.path)}
+      {#each cityNavItems as item (item.path)}
         <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
           <span aria-hidden="true">{item.glyph}</span>
           {item.label}
