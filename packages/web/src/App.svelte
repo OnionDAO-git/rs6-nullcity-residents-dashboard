@@ -332,11 +332,17 @@
         updateCityGameFullscreenState();
       }
     };
+    const gameErrorListener = (event: Event) => {
+      const detail = (event as CustomEvent<{ page?: string }>).detail;
+      gameClientStatus = 'error';
+      actionError = detail?.page ? `Game client failed: ${detail.page}` : 'Game client failed.';
+    };
     notificationsEnabled = window.localStorage.getItem(inboxNotificationEnabledKey) === 'true';
     notificationPermission = notificationStatus();
     window.addEventListener('popstate', listener);
     window.addEventListener('beforeinstallprompt', beforeInstallPromptListener);
     window.addEventListener('appinstalled', appInstalledListener);
+    window.addEventListener('nullcity:game-error', gameErrorListener);
     document.addEventListener('fullscreenchange', fullscreenChangeListener);
     document.addEventListener('webkitfullscreenchange', fullscreenChangeListener);
     document.addEventListener('keydown', fullscreenKeyListener);
@@ -347,6 +353,7 @@
       window.removeEventListener('popstate', listener);
       window.removeEventListener('beforeinstallprompt', beforeInstallPromptListener);
       window.removeEventListener('appinstalled', appInstalledListener);
+      window.removeEventListener('nullcity:game-error', gameErrorListener);
       document.removeEventListener('fullscreenchange', fullscreenChangeListener);
       document.removeEventListener('webkitfullscreenchange', fullscreenChangeListener);
       document.removeEventListener('keydown', fullscreenKeyListener);
@@ -1453,7 +1460,7 @@
           },
         }),
         config: {
-          endpoint: `${window.location.host}/rs`,
+          endpoint: '/rs',
           secure: window.location.protocol === 'https:',
           mode: 'player',
         },

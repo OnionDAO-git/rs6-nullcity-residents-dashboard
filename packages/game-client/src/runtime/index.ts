@@ -29,10 +29,12 @@ export function createForkedRuntimeLifecycleAdapter(
       const previousCanvasId = context.canvas.id;
       const previousHost = runtimeGlobal().__NULLCITY_RS_HOST__;
       const previousSecure = runtimeGlobal().__NULLCITY_RS_SECURE__;
+      const previousEmbedded = runtimeGlobal().__NULLCITY_EMBEDDED_CLIENT__;
 
       context.canvas.id = (options.canvasId ?? previousCanvasId) || DEFAULT_CANVAS_ID;
-      runtimeGlobal().__NULLCITY_RS_HOST__ = endpointHost(context.config.endpoint);
+      runtimeGlobal().__NULLCITY_RS_HOST__ = endpointTarget(context.config.endpoint);
       runtimeGlobal().__NULLCITY_RS_SECURE__ = context.config.secure;
+      runtimeGlobal().__NULLCITY_EMBEDDED_CLIENT__ = true;
 
       try {
         const module = await loadRuntimeModule(options, context);
@@ -53,12 +55,14 @@ export function createForkedRuntimeLifecycleAdapter(
             context.canvas.id = previousCanvasId;
             restoreRuntimeGlobal('__NULLCITY_RS_HOST__', previousHost);
             restoreRuntimeGlobal('__NULLCITY_RS_SECURE__', previousSecure);
+            restoreRuntimeGlobal('__NULLCITY_EMBEDDED_CLIENT__', previousEmbedded);
           },
         } satisfies GameClientHandle;
       } catch (error) {
         context.canvas.id = previousCanvasId;
         restoreRuntimeGlobal('__NULLCITY_RS_HOST__', previousHost);
         restoreRuntimeGlobal('__NULLCITY_RS_SECURE__', previousSecure);
+        restoreRuntimeGlobal('__NULLCITY_EMBEDDED_CLIENT__', previousEmbedded);
         throw error;
       }
     },
@@ -80,26 +84,33 @@ async function loadRuntimeModule(
   ].join(' '));
 }
 
-function endpointHost(endpoint: string): string {
+function endpointTarget(endpoint: string): string {
+  if (/^[\w.-]+:\d+(?:\/.*)?$/.test(endpoint)) {
+    return endpoint;
+  }
+
   try {
-    return new URL(endpoint, window.location.href).host;
+    const url = new URL(endpoint, window.location.href);
+    return `${url.host}${url.pathname === '/' ? '' : url.pathname}`;
   } catch {
-    return endpoint.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    return endpoint.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '');
   }
 }
 
 function runtimeGlobal(): typeof globalThis & {
   __NULLCITY_RS_HOST__?: string;
   __NULLCITY_RS_SECURE__?: boolean;
+  __NULLCITY_EMBEDDED_CLIENT__?: boolean;
 } {
   return globalThis;
 }
 
-function restoreRuntimeGlobal<K extends '__NULLCITY_RS_HOST__' | '__NULLCITY_RS_SECURE__'>(
+function restoreRuntimeGlobal<K extends '__NULLCITY_RS_HOST__' | '__NULLCITY_RS_SECURE__' | '__NULLCITY_EMBEDDED_CLIENT__'>(
   key: K,
   value: (typeof globalThis & {
     __NULLCITY_RS_HOST__?: string;
     __NULLCITY_RS_SECURE__?: boolean;
+    __NULLCITY_EMBEDDED_CLIENT__?: boolean;
   })[K],
 ): void {
   if (value === undefined) {

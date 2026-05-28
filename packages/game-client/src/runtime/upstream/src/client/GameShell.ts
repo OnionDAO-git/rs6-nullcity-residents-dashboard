@@ -166,6 +166,15 @@ export default abstract class GameShell {
         this.alreadyerrored = true;
         const page = `error_game_${message}`;
         globalThis.console.log(page);
+        if (isEmbeddedClient()) {
+            canvas2d.fillStyle = 'black';
+            canvas2d.fillRect(0, 0, canvas.width, canvas.height);
+            canvas2d.fillStyle = '#e8dfcf';
+            canvas2d.font = '18px ui-monospace, SFMono-Regular, monospace';
+            canvas2d.fillText(page, 24, 48);
+            window.dispatchEvent(new CustomEvent('nullcity:game-error', { detail: { message, page } }));
+            return;
+        }
         try {
             window.location.href = new URL(`${page}.ws`, window.location.href).href;
         } catch (_e) {
@@ -398,4 +407,8 @@ export default abstract class GameShell {
         return this.isTouchDevice;
     }
 
+}
+
+function isEmbeddedClient(): boolean {
+    return (globalThis as typeof globalThis & { __NULLCITY_EMBEDDED_CLIENT__?: boolean }).__NULLCITY_EMBEDDED_CLIENT__ === true;
 }
