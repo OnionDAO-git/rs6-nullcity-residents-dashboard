@@ -2343,6 +2343,7 @@
 <nav class="topbar">
   <button class="brand" onclick={() => debugNav('/')}>Null City Ops</button>
   <div class="navlinks">
+    <a class="main-dashboard-link" href="/" aria-label="Back to main dashboard">Main Dashboard</a>
     <button class:active={route === '/'} onclick={() => debugNav('/')}>Overview</button>
     <button class:active={route.startsWith('/residents')} onclick={() => debugNav('/residents')}>Residents</button>
     <button class:active={route.startsWith('/observe')} onclick={() => debugNav('/observe')}>Observe</button>

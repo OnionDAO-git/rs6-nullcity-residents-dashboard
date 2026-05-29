@@ -164,6 +164,29 @@ main {
   letter-spacing: 1.5px;
 }
 
+.main-dashboard-link {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--text-0);
+  background: var(--ground-0);
+  border: 1px solid var(--ground-5);
+  border-bottom: 2px solid var(--s-green);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.3px;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.main-dashboard-link:hover,
+.main-dashboard-link:focus-visible {
+  border-color: var(--ground-7);
+  outline: none;
+}
+
 .event-menu {
   position: relative;
 }
@@ -2527,7 +2550,8 @@ pre {
   }
 
   .navlinks button,
-  .event-menu summary {
+  .event-menu summary,
+  .main-dashboard-link {
     height: 32px;
     min-height: 32px;
     padding-inline: 9px;
