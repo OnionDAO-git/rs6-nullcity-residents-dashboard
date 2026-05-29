@@ -74,4 +74,20 @@ describe('serveDashboardWeb', () => {
       expect(await response.text()).toContain('/debug');
     });
   });
+
+  test('public event pages link to dashboard-served debug routes', async () => {
+    const publicRoot = path.resolve(import.meta.dir, '../public');
+    const [indexHtml, patronHtml] = await Promise.all([
+      fs.readFile(path.join(publicRoot, 'index.html'), 'utf8'),
+      fs.readFile(path.join(publicRoot, 'patron/index.html'), 'utf8'),
+    ]);
+
+    expect(indexHtml).toContain('href="/debug/wall/"');
+    expect(indexHtml).toContain('href="/debug/inbox/"');
+    expect(indexHtml).toContain('href="/debug/patron/"');
+    expect(indexHtml).toContain('href="/debug/library/"');
+    expect(indexHtml).toContain('href="/debug/graveyard/"');
+    expect(patronHtml).toContain("'/debug/inbox/?human='");
+    expect(patronHtml).toContain("'/debug/library/'");
+  });
 });

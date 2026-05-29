@@ -450,7 +450,7 @@
                 const linkRow = document.createElement('div');
                 linkRow.className = 'link-row';
                 const link = document.createElement('a');
-                const inboxHref = '/inbox/?human=' + encodeURIComponent(patronHandle);
+                const inboxHref = '/debug/inbox/?human=' + encodeURIComponent(patronHandle);
                 link.href = inboxHref;
                 link.textContent = 'Open your inbox →';
                 linkRow.appendChild(link);
@@ -550,7 +550,7 @@
                 const linkRow = document.createElement('div');
                 linkRow.className = 'link-row';
                 const link = document.createElement('a');
-                link.href = '/inbox/?human=' + encodeURIComponent(patronHandle);
+                link.href = '/debug/inbox/?human=' + encodeURIComponent(patronHandle);
                 link.textContent = letters.length > 3
                     ? 'Read all ' + letters.length + ' letters →'
                     : 'Read your letters →';
@@ -639,7 +639,7 @@
                 const linkRow = document.createElement('div');
                 linkRow.className = 'link-row';
                 const link = document.createElement('a');
-                link.href = '/library/';
+                link.href = '/debug/library/';
                 link.textContent = 'View all in the Library →';
                 linkRow.appendChild(link);
                 card.appendChild(linkRow);
