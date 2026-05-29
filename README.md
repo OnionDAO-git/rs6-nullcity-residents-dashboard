@@ -2,6 +2,8 @@
 
 Bun, Svelte 5, and TypeScript implementation of the resident operations dashboard described in `SPEC.md`.
 
+This repo owns all human-facing Null City UI. `../rs6-nullcity-server` should stay focused on runtime, controller, resident intelligence, logs, data, CLI tools, and JSON/control APIs.
+
 The attendee dashboard is served from `/`. The previous resident operations dashboard is preserved under `/debug`, including its legacy static pages under `/debug/index.html`, `/debug/wall`, `/debug/inbox`, `/debug/patron`, `/debug/graveyard`, and `/debug/library`.
 
 ## Run
