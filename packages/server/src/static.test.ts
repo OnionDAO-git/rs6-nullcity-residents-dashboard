@@ -106,6 +106,7 @@ describe('serveDashboardWeb', () => {
       const html = await fs.readFile(path.join(publicRoot, page), 'utf8');
       expect(html).toContain('href="/"');
       expect(html).toContain('Main Dashboard');
+      expect(html).toContain('.dashboard-link {\n            position: absolute;');
     }
   });
 });

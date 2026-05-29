@@ -33,6 +33,7 @@
             color: var(--night-soft);
             font-variant: small-caps;
             letter-spacing: 0.12em;
+            position: relative;
         }
         header::after {
             content: "";
@@ -58,18 +59,22 @@
             letter-spacing: 0;
         }
         .dashboard-link {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
             display: inline-block;
-            margin-top: 0.65rem;
+            padding: 0.34rem 0.55rem;
             color: rgba(245, 236, 214, 0.72);
             font-size: 0.76rem;
             font-variant: small-caps;
             letter-spacing: 0.1em;
             text-decoration: none;
-            border-bottom: 1px solid rgba(245, 236, 214, 0.32);
+            border: 1px solid rgba(245, 236, 214, 0.22);
+            background: rgba(26, 18, 10, 0.38);
         }
         .dashboard-link:hover {
             color: #fff4d6;
-            border-bottom-color: rgba(245, 236, 214, 0.75);
+            border-color: rgba(245, 236, 214, 0.75);
         }
         main {
             max-width: 56rem;
