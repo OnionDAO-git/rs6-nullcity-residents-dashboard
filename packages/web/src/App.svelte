@@ -10,7 +10,7 @@
   import { compactJson, timeAgo } from './lib/format';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
 
   type CitySession = {
@@ -72,6 +72,7 @@
     cityUserId: '',
   };
 
+  const browserOrigin = window.location.origin;
   let browserPath = window.location.pathname;
   let route = toRouteForShell(browserPath);
   let loading = false;
@@ -249,13 +250,13 @@
     { label: 'Profile', path: '/profile', match: '/profile', glyph: 'PF' },
   ];
 
-  const embassyPages = [
-    { label: 'Embassy Index', path: debugPath('/index.html') },
-    { label: 'Wall', path: debugPath('/wall/') },
-    { label: 'Inbox', path: debugPath('/inbox/') },
-    { label: 'Patron', path: debugPath('/patron/') },
-    { label: 'Graveyard', path: debugPath('/graveyard/') },
-    { label: 'Library', path: debugPath('/library/') },
+  $: embassyPages = [
+    { label: 'Embassy Index', path: publicEventPath('/index.html', browserOrigin) },
+    { label: 'Wall', path: publicEventPath('/wall/', browserOrigin) },
+    { label: 'Inbox', path: publicEventPath('/inbox/', browserOrigin) },
+    { label: 'Patron', path: publicEventPath('/patron/', browserOrigin) },
+    { label: 'Graveyard', path: publicEventPath('/graveyard/', browserOrigin) },
+    { label: 'Library', path: publicEventPath('/library/', browserOrigin) },
   ];
 
   $: isDebugRoute = isDebugPath(browserPath);

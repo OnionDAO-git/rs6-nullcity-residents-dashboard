@@ -6,6 +6,7 @@ import {
   isDebugInternalRoute,
   isDebugPath,
   observeResidentDebugRoute,
+  publicEventPath,
   residentDebugRoute,
   residentRuntimeApiPath,
   toDebugInternalRoute,
@@ -31,6 +32,12 @@ describe('dashboard route helpers', () => {
     expect(debugPath('/residents')).toBe('/debug/residents');
     expect(debugPath('/debug/logs')).toBe('/debug/logs');
     expect(cityPath('embassy')).toBe('/embassy');
+  });
+
+  test('points public event pages at the dashboard server during Vite dev', () => {
+    expect(publicEventPath('/wall/', 'http://127.0.0.1:5174')).toBe('http://127.0.0.1:8787/debug/wall');
+    expect(publicEventPath('/inbox/', 'http://localhost:5174')).toBe('http://localhost:8787/debug/inbox');
+    expect(publicEventPath('/library/', 'http://127.0.0.1:8787')).toBe('/debug/library');
   });
 
   test('identifies old operations routes that should be prefixed while inside debug', () => {

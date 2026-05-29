@@ -40,6 +40,22 @@ export function debugPath(route: string): string {
   return `${DEBUG_PREFIX}${normalized}`;
 }
 
+export function publicEventPath(route: string, origin?: string): string {
+  const path = debugPath(route);
+  if (!origin) return path;
+  try {
+    const url = new URL(origin);
+    if (url.port !== '5174') return path;
+    url.port = '8787';
+    url.pathname = path;
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return path;
+  }
+}
+
 export function cityPath(route: string): string {
   return normalizePath(route);
 }
