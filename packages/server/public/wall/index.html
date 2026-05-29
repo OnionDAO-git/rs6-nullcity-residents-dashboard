@@ -78,6 +78,20 @@
             font-size: 1rem;
             letter-spacing: 0.04em;
         }
+        .dashboard-link {
+            display: inline-block;
+            margin-top: 0.6rem;
+            color: var(--ink-fade);
+            font-size: 0.76rem;
+            font-variant: small-caps;
+            letter-spacing: 0.12em;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(245, 236, 214, 0.28);
+        }
+        .dashboard-link:hover {
+            color: var(--ink);
+            border-bottom-color: rgba(245, 236, 214, 0.72);
+        }
 
         /* Two-column layout: roster sidebar on the left, letters on the right */
         main {
@@ -356,6 +370,7 @@
     <header>
         <h1>Null City Embassy</h1>
         <div class="subtitle">letters between residents and their patrons</div>
+        <a class="dashboard-link" href="/">Main Dashboard</a>
     </header>
     <main>
         <aside class="roster" id="roster">

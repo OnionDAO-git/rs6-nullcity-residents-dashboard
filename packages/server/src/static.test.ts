@@ -90,4 +90,22 @@ describe('serveDashboardWeb', () => {
     expect(patronHtml).toContain("'/debug/inbox/?human='");
     expect(patronHtml).toContain("'/debug/library/'");
   });
+
+  test('public event pages offer a link back to the main dashboard', async () => {
+    const publicRoot = path.resolve(import.meta.dir, '../public');
+    const pages = [
+      'index.html',
+      'wall/index.html',
+      'inbox/index.html',
+      'patron/index.html',
+      'library/index.html',
+      'graveyard/index.html',
+    ];
+
+    for (const page of pages) {
+      const html = await fs.readFile(path.join(publicRoot, page), 'utf8');
+      expect(html).toContain('href="/"');
+      expect(html).toContain('Main Dashboard');
+    }
+  });
 });

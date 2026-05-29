@@ -61,6 +61,20 @@
             letter-spacing: 0;
             font-size: 1rem;
         }
+        .dashboard-link {
+            display: inline-block;
+            margin-top: 0.65rem;
+            color: rgba(245, 236, 214, 0.72);
+            font-size: 0.76rem;
+            font-variant: small-caps;
+            letter-spacing: 0.1em;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(245, 236, 214, 0.32);
+        }
+        .dashboard-link:hover {
+            color: #fff4d6;
+            border-bottom-color: rgba(245, 236, 214, 0.75);
+        }
         main {
             max-width: 44rem;
             margin: 0 auto;
@@ -212,6 +226,7 @@
     <header>
         <h1>Null City Embassy — Inbox</h1>
         <span class="who" id="who">…</span>
+        <a class="dashboard-link" href="/">Main Dashboard</a>
     </header>
     <main>
         <div id="content" class="empty">Loading letters…</div>
