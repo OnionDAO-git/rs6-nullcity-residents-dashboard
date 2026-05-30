@@ -27,9 +27,11 @@
     residentProofRollup,
     residentPrimaryWarning,
     residentStackSummary,
+    residentTriageSummary,
     type ResidentLoopFact,
     type ResidentProofRollup,
     type ResidentGuestTrailPulse,
+    type ResidentTriageSummary,
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
@@ -203,6 +205,7 @@
   let cityResidentEconomyGpEvidence: ResidentEconomyGpEvidence | undefined;
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
+  let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
   let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
     lowAp: 0,
@@ -416,6 +419,11 @@
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
   $: cityResidentProofRollup = residentProofRollup(cityResidents, row => ({
+    benchmark: residentBenchmarkLabel(row),
+    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
+    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
+  }));
+  $: cityResidentTriage = residentTriageSummary(cityResidents, row => ({
     benchmark: residentBenchmarkLabel(row),
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
@@ -3171,6 +3179,8 @@
     </section>
   {/if}
 
+  {@render ResidentTriageStrip({ limit: 4 })}
+
   <section class="city-entry-grid">
     {#each cityEntries as entry (entry.path)}
       <button class={`city-entry tone-${entry.tone}`} onclick={() => cityNav(entry.path)}>
@@ -3943,6 +3953,7 @@
     <p class="kicker">Residents</p>
     <h1>Directory</h1>
   </section>
+  {@render ResidentTriageStrip({ limit: 7 })}
   <section class="city-dashboard-grid">
     <div class="city-panel span-2">
       <div class="panel-title">Live Residents</div>
@@ -3961,6 +3972,37 @@
           <div class="city-empty-state"><strong>No city resident records</strong><span>Live operations data is still available from the dashboard snapshot.</span></div>
         {/each}
       </div>
+    </div>
+  </section>
+{/snippet}
+
+{#snippet ResidentTriageStrip({ limit }: { limit: number })}
+  <section class={`city-panel resident-triage-strip tone-${cityResidentTriage.tone}`}>
+    <div class="row">
+      <div>
+        <div class="panel-title">Resident Triage</div>
+        <strong>{cityResidentTriage.headline}</strong>
+        <small>{cityResidentTriage.detail}</small>
+      </div>
+      <span class={`tag ${cityResidentTriage.tone}`}>{cityResidentTriage.urgentResidents}/{cityResidentTriage.totalResidents}</span>
+    </div>
+    <div class="resident-triage-grid">
+      {#each cityResidentTriage.buckets.slice(0, limit) as bucket (bucket.key)}
+        <article class={`resident-triage-bucket tone-${bucket.count > 0 ? bucket.tone : 'ok'}`}>
+          <div class="resident-triage-bucket-head">
+            <span class={`tag ${bucket.count > 0 ? bucket.tone : 'ok'}`}>{bucket.count}</span>
+            <strong>{bucket.label}</strong>
+          </div>
+          <small>{bucket.detail}</small>
+          <div class="story-evidence-list resident-triage-residents" aria-label={`${bucket.label} residents`}>
+            {#each bucket.residents as name}
+              <button class="resident-triage-link" onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(name))}`)}>{residentDisplayName(name)}</button>
+            {:else}
+              <span>clear</span>
+            {/each}
+          </div>
+        </article>
+      {/each}
     </div>
   </section>
 {/snippet}

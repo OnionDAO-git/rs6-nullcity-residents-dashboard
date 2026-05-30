@@ -45,6 +45,25 @@ export interface ResidentProofRollup {
   online: number;
 }
 
+export interface ResidentTriageBucket {
+  key: 'offline' | 'attention' | 'quiet' | 'plan' | 'gp' | 'story' | 'benchmark';
+  label: string;
+  tone: 'ok' | 'warn' | 'fail';
+  count: number;
+  residents: string[];
+  detail: string;
+}
+
+export interface ResidentTriageSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  headline: string;
+  detail: string;
+  urgentResidents: number;
+  totalResidents: number;
+  onlineResidents: number;
+  buckets: ResidentTriageBucket[];
+}
+
 export interface ResidentGuestTrailPulse {
   online: number;
   lowAp: number;
@@ -521,6 +540,99 @@ export function residentProofRollup(
   };
 }
 
+export function residentTriageSummary(
+  rows: ResidentDashboardRow[],
+  resolveSignals: (row: ResidentDashboardRow) => ResidentProofPulseSignals = () => ({}),
+): ResidentTriageSummary {
+  if (rows.length === 0) {
+    return {
+      tone: 'warn',
+      headline: 'No resident roster loaded',
+      detail: 'Waiting for live controller or dashboard read-model data.',
+      urgentResidents: 0,
+      totalResidents: 0,
+      onlineResidents: 0,
+      buckets: [
+        emptyTriageBucket('offline', 'Offline', 'fail', 'No resident snapshots are available yet.'),
+        emptyTriageBucket('attention', 'Low AP', 'warn', 'No AP balances are available yet.'),
+        emptyTriageBucket('quiet', 'Quiet loop', 'warn', 'No loop cadence is available yet.'),
+        emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
+        emptyTriageBucket('gp', 'Missing GP proof', 'warn', 'No coin-995 proof is available yet.'),
+        emptyTriageBucket('story', 'Thin story', 'warn', 'No Library or Storyteller evidence is available yet.'),
+        emptyTriageBucket('benchmark', 'Capability warning', 'warn', 'No capability benchmark signal is loaded yet.'),
+      ],
+    };
+  }
+
+  const offlineRows = rows.filter(row => !row.online);
+  const lowApRows = rows.filter(row => row.online && residentNeedsAp(row));
+  const quietRows = rows.filter(row => {
+    if (!row.online) return false;
+    const checkpoints = residentLoopCheckpoints(row);
+    const action = checkpoints.find(checkpoint => checkpoint.key === 'action');
+    const speech = checkpoints.find(checkpoint => checkpoint.key === 'speech');
+    return action?.tone === 'warn' || speech?.tone === 'warn' || feedTone(row) === 'warn';
+  });
+  const missingPlanRows = rows.filter(row => row.online && !row.thinking?.activePlan?.trim());
+  const missingGpRows = rows.filter(row => {
+    if (!row.online) return false;
+    const signals = resolveSignals(row);
+    return residentCoinEvidenceAmount(row) <= 0 && signals.economyGp?.tone !== 'ok';
+  });
+  const thinStoryRows = rows.filter(row => {
+    if (!row.online) return false;
+    const signals = resolveSignals(row);
+    const storyCheckpoint = residentLoopCheckpoints(row).find(checkpoint => checkpoint.key === 'story');
+    return storyCheckpoint?.tone === 'warn' && signals.storyteller?.tone !== 'ok';
+  });
+  const benchmarkRows = rows.filter(row => {
+    if (!row.online) return false;
+    const signal = resolveSignals(row).benchmark;
+    return signal !== undefined && signal.tone !== 'ok';
+  });
+
+  const buckets: ResidentTriageBucket[] = [
+    makeTriageBucket('offline', 'Offline', 'fail', offlineRows, 'Login or AP top-up may be required before new action proof appears.'),
+    makeTriageBucket('attention', 'Low AP', 'warn', lowApRows, 'Residents at or below the AP safety floor need support soon.'),
+    makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
+    makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
+    makeTriageBucket('gp', 'Missing GP proof', 'warn', missingGpRows, 'Do not claim GP purchasing power until coin-995 or economy evidence appears.'),
+    makeTriageBucket('story', 'Thin story', 'warn', thinStoryRows, 'Library or Storyteller evidence is not fresh enough to explain the resident.'),
+    makeTriageBucket('benchmark', 'Capability warning', 'warn', benchmarkRows, 'Latest capability benchmark signal is stale, failed, or missing confidence.'),
+  ];
+
+  const urgentNames = new Set<string>([
+    ...offlineRows,
+    ...lowApRows,
+    ...quietRows,
+    ...missingPlanRows,
+    ...missingGpRows,
+    ...thinStoryRows,
+    ...benchmarkRows,
+  ].map(row => row.name));
+
+  const urgentResidents = urgentNames.size;
+  const onlineResidents = rows.filter(row => row.online).length;
+  const tone: ResidentTriageSummary['tone'] =
+    offlineRows.length > 0 ? 'fail' : urgentResidents > 0 ? 'warn' : 'ok';
+  const activeBuckets = buckets.filter(bucket => bucket.count > 0);
+  const detail = activeBuckets.length
+    ? activeBuckets.slice(0, 3).map(bucket => `${bucket.label}: ${bucket.count}`).join(' · ')
+    : 'All visible residents have AP, cadence, plan, GP/story proof, and capability signals.';
+
+  return {
+    tone,
+    headline: urgentResidents > 0
+      ? `${urgentResidents.toLocaleString()}/${rows.length.toLocaleString()} residents need operator attention`
+      : `${onlineResidents.toLocaleString()}/${rows.length.toLocaleString()} residents look steady`,
+    detail,
+    urgentResidents,
+    totalResidents: rows.length,
+    onlineResidents,
+    buckets,
+  };
+}
+
 function modelParts(row: ResidentDashboardRow): { value: string; detail?: string } {
   const profile = row.stack?.model || row.stack?.brain || row.stack?.body;
   const value =
@@ -646,6 +758,37 @@ function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPu
       optional: signals.benchmark === undefined,
     },
   ];
+}
+
+function emptyTriageBucket(
+  key: ResidentTriageBucket['key'],
+  label: string,
+  tone: ResidentTriageBucket['tone'],
+  detail: string,
+): ResidentTriageBucket {
+  return { key, label, tone, count: 0, residents: [], detail };
+}
+
+function makeTriageBucket(
+  key: ResidentTriageBucket['key'],
+  label: string,
+  tone: ResidentTriageBucket['tone'],
+  rows: ResidentDashboardRow[],
+  detail: string,
+): ResidentTriageBucket {
+  const sorted = [...rows].sort((a, b) => {
+    const attentionDelta = (a.attention ?? Number.MAX_SAFE_INTEGER) - (b.attention ?? Number.MAX_SAFE_INTEGER);
+    if (attentionDelta !== 0) return attentionDelta;
+    return a.name.localeCompare(b.name);
+  });
+  return {
+    key,
+    label,
+    tone: rows.length > 0 ? tone : 'ok',
+    count: rows.length,
+    residents: sorted.slice(0, 5).map(row => row.name),
+    detail: rows.length > 0 ? detail : 'No residents in this bucket right now.',
+  };
 }
 
 function tickFreshness(row: ResidentDashboardRow, eventTick: number | undefined, staleGap: number): string {

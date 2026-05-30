@@ -16,6 +16,7 @@ import {
   residentProofRollup,
   residentPrimaryWarning,
   residentStackSummary,
+  residentTriageSummary,
 } from './resident-loop';
 
 function row(input: Partial<ResidentDashboardRow> & { name?: string } = {}): ResidentDashboardRow {
@@ -398,6 +399,157 @@ describe('resident loop helpers', () => {
       fail: 0,
       online: 2,
     });
+  });
+
+  test('builds operator triage buckets for quiet, low AP, missing plan, GP, story, and benchmark gaps', () => {
+    const rows = [
+      row({
+        name: 'res:healthy',
+        attention: 75,
+        thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+          feed: {
+            attached: true,
+            tick: 100,
+            ageMs: 4000,
+            nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 4,
+            latestEventKind: 'say',
+            latestEventText: 'I can fund AP from coin 995.',
+          },
+        },
+        storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+      }),
+      row({
+        name: 'res:low',
+        attention: 1,
+        thinking: { mode: 'idle', activePlan: '' },
+        body: {
+          controlHeld: true,
+          feed: {
+            attached: true,
+            tick: 200,
+            ageMs: 180000,
+            nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+            events: 0,
+            availableActions: 1,
+          },
+        },
+      }),
+      row({ name: 'res:offline', online: false }),
+    ];
+
+    const triage = residentTriageSummary(rows, row =>
+      row.name === 'res:low'
+        ? { benchmark: { tone: 'fail', summary: 'combat failed', detail: 'death loop' } }
+        : {},
+    );
+
+    expect(triage).toEqual({
+      tone: 'fail',
+      headline: '2/3 residents need operator attention',
+      detail: 'Offline: 1 · Low AP: 1 · Quiet loop: 1',
+      urgentResidents: 2,
+      totalResidents: 3,
+      onlineResidents: 2,
+      buckets: [
+        {
+          key: 'offline',
+          label: 'Offline',
+          tone: 'fail',
+          count: 1,
+          residents: ['res:offline'],
+          detail: 'Login or AP top-up may be required before new action proof appears.',
+        },
+        {
+          key: 'attention',
+          label: 'Low AP',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'Residents at or below the AP safety floor need support soon.',
+        },
+        {
+          key: 'quiet',
+          label: 'Quiet loop',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'Action, speech, or feed cadence is stale enough to deserve an operator glance.',
+        },
+        {
+          key: 'plan',
+          label: 'Missing plan',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'Thinking has not published a current plan for these residents.',
+        },
+        {
+          key: 'gp',
+          label: 'Missing GP proof',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'Do not claim GP purchasing power until coin-995 or economy evidence appears.',
+        },
+        {
+          key: 'story',
+          label: 'Thin story',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'Library or Storyteller evidence is not fresh enough to explain the resident.',
+        },
+        {
+          key: 'benchmark',
+          label: 'Capability warning',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'Latest capability benchmark signal is stale, failed, or missing confidence.',
+        },
+      ],
+    });
+  });
+
+  test('keeps resident triage steady when economy and storyteller evidence cover missing live snapshots', () => {
+    const triage = residentTriageSummary([
+      row({
+        name: 'res:covered',
+        attention: 50,
+        thinking: { mode: 'executing', activePlan: 'Trade coin 995 for AP' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'body', tick: 44 },
+          feed: {
+            attached: true,
+            tick: 44,
+            ageMs: 4000,
+            nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 5,
+            latestEventKind: 'say',
+            latestEventText: 'The exchange completed.',
+          },
+        },
+        storyArc: { phase: 'progress', latestEventKind: 'city_ap_gp_exchange', latestEventTick: 44 },
+      }),
+    ], () => ({
+      economyGp: { tone: 'ok', summary: 'recent GP exchange', detail: 'city_ap_gp_exchange burned real coin 995' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited this resident' },
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+    }));
+
+    expect(triage.tone).toBe('ok');
+    expect(triage.headline).toBe('1/1 residents look steady');
+    expect(triage.urgentResidents).toBe(0);
+    expect(triage.detail).toBe('All visible residents have AP, cadence, plan, GP/story proof, and capability signals.');
+    expect(triage.buckets.every(bucket => bucket.count === 0 && bucket.tone === 'ok')).toBe(true);
   });
 
   test('returns syncing rollup when no online residents are visible', () => {
