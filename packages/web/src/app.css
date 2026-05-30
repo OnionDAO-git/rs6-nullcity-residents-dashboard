@@ -2470,6 +2470,28 @@ pre {
   margin-top: 12px;
 }
 
+.city-loop-pulse-grid .resident-loop-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.city-loop-pulse-grid .resident-loop-grid span {
+  padding: 10px;
+}
+
+.city-loop-pulse-grid .resident-loop-grid span.ok {
+  border-color: rgba(78, 174, 110, 0.45);
+}
+
+.city-loop-pulse-grid .resident-loop-grid span.warn {
+  border-color: rgba(240, 184, 76, 0.48);
+}
+
+.city-loop-pulse-grid .resident-loop-grid span.fail {
+  border-color: rgba(212, 112, 122, 0.55);
+}
+
 .resident-loop-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -2513,6 +2535,23 @@ pre {
 
 .city-empty-state.subtle {
   padding-bottom: 0;
+}
+
+.resident-sync-state {
+  padding: 14px;
+  background: var(--ground-2);
+  border: 1px dashed var(--ground-5);
+}
+
+.resident-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.resident-sync-actions button {
+  min-height: 32px;
 }
 
 .city-link-button {

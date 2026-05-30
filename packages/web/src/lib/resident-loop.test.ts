@@ -3,6 +3,8 @@ import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import {
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
+  residentGuestTrailFacts,
+  residentGuestTrailPulse,
   residentIntelligenceFacts,
   residentIntentFacts,
   residentLoopCheckpoints,
@@ -299,5 +301,108 @@ describe('resident loop helpers', () => {
       summary: '0/7 loop proofs live',
       detail: 'offline · AP, Plan, Action',
     });
+  });
+
+  test('builds guest trail facts from aggregate resident loop evidence', () => {
+    expect(residentGuestTrailFacts({
+      online: 4,
+      lowAp: 1,
+      planPublished: 3,
+      recentAction: 2,
+      recentSpeech: 1,
+      storyEvidence: 2,
+      observedGp: 995,
+    })).toEqual([
+      { label: 'AP', value: '3/4 stable', detail: '1 low AP', tone: 'warn' },
+      { label: 'GP evidence', value: '995 GP', detail: 'coin-995 observed', tone: 'ok' },
+      { label: 'Plan', value: '3/4 live', detail: 'current goals residents are pursuing', tone: 'ok' },
+      { label: 'Action', value: '2/4 recent', detail: 'latest visible action', tone: 'ok' },
+      { label: 'Speech', value: '1/4 recent', detail: 'latest public say/feed line', tone: 'ok' },
+      { label: 'Story', value: '2/4 grounded', detail: 'Library or Storyteller evidence', tone: 'ok' },
+    ]);
+  });
+
+  test('builds guest trail pulse from online resident evidence only', () => {
+    expect(residentGuestTrailPulse([
+      row({
+        online: true,
+        attention: 20,
+        thinking: { mode: 'executing', activePlan: 'Gather coin 995' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 12 },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 17 }] } },
+          feed: {
+            attached: true,
+            tick: 12,
+            ageMs: 1000,
+            nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 3,
+            latestEventKind: 'say',
+            latestEventText: 'Found some coin.',
+          },
+        },
+        storyArc: { phase: 'progress', latestEventKind: 'coin_pickup', latestEventTick: 12 },
+      }),
+      row({
+        name: 'res:offline',
+        online: false,
+        attention: 0,
+        thinking: { mode: 'executing', activePlan: 'This should not inflate the public denominator' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'move_to', result: 'success', source: 'thinking', tick: 12 },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 999 }] } },
+        },
+        storyArc: { phase: 'progress', latestEventKind: 'offline_event', latestEventTick: 12 },
+      }),
+    ])).toEqual({
+      online: 1,
+      lowAp: 0,
+      planPublished: 1,
+      recentAction: 1,
+      recentSpeech: 1,
+      storyEvidence: 1,
+      observedGp: 17,
+    });
+  });
+
+  test('marks guest trail facts as syncing while resident data is unavailable', () => {
+    expect(residentGuestTrailFacts({
+      online: 0,
+      lowAp: 0,
+      planPublished: 0,
+      recentAction: 0,
+      recentSpeech: 0,
+      storyEvidence: 0,
+      observedGp: 0,
+    })).toEqual([
+      { label: 'AP', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
+      { label: 'GP evidence', value: '0 GP', detail: 'no coin-995 evidence yet', tone: 'warn' },
+      { label: 'Plan', value: '0 live', detail: 'current goals residents are pursuing', tone: 'warn' },
+      { label: 'Action', value: '0 recent', detail: 'latest visible action', tone: 'warn' },
+      { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
+      { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
+    ]);
+  });
+
+  test('clamps guest trail facts so bad upstream counts never render negative proof', () => {
+    expect(residentGuestTrailFacts({
+      online: -2,
+      lowAp: -1,
+      planPublished: -4,
+      recentAction: -5,
+      recentSpeech: -6,
+      storyEvidence: -7,
+      observedGp: -995,
+    })).toEqual([
+      { label: 'AP', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
+      { label: 'GP evidence', value: '0 GP', detail: 'no coin-995 evidence yet', tone: 'warn' },
+      { label: 'Plan', value: '0 live', detail: 'current goals residents are pursuing', tone: 'warn' },
+      { label: 'Action', value: '0 recent', detail: 'latest visible action', tone: 'warn' },
+      { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
+      { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
+    ]);
   });
 });

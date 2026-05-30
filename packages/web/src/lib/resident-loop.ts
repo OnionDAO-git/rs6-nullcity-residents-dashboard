@@ -35,6 +35,16 @@ export interface ResidentProofPulse {
   detail: string;
 }
 
+export interface ResidentGuestTrailPulse {
+  online: number;
+  lowAp: number;
+  planPublished: number;
+  recentAction: number;
+  recentSpeech: number;
+  storyEvidence: number;
+  observedGp: number;
+}
+
 export interface ResidentProofPulseSignals {
   benchmark?: ResidentBenchmarkSignal;
   goalContract?: { tone: 'ok' | 'warn'; summary: string };
@@ -52,6 +62,34 @@ const ACTION_STALE_TICK_GAP = 180;
 const SPEECH_STALE_TICK_GAP = 300;
 const STORY_STALE_TICK_GAP = 1200;
 const GP_ITEM_ID = 995;
+
+export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentGuestTrailPulse {
+  const pulse: ResidentGuestTrailPulse = {
+    online: 0,
+    lowAp: 0,
+    planPublished: 0,
+    recentAction: 0,
+    recentSpeech: 0,
+    storyEvidence: 0,
+    observedGp: 0,
+  };
+
+  for (const row of rows) {
+    if (!row.online) continue;
+    const signal = residentLoopSignal(row);
+    const checkpoints = residentLoopCheckpoints(row);
+    const actionCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'action');
+    pulse.online += 1;
+    if (residentNeedsAp(row)) pulse.lowAp += 1;
+    if (signal.plan !== '-' && signal.plan !== 'No active plan published') pulse.planPublished += 1;
+    if (actionCheckpoint?.tone === 'ok') pulse.recentAction += 1;
+    if (signal.speech !== '-') pulse.recentSpeech += 1;
+    if (signal.story !== '-') pulse.storyEvidence += 1;
+    pulse.observedGp += residentCoinEvidenceAmount(row);
+  }
+
+  return pulse;
+}
 
 export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLoopFact[] {
   const module = activeModule(row);
@@ -169,6 +207,51 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
       value: storyValue,
       detail: signals.storyteller?.summary || (row.storyArc ? ['Library evidence', storyFreshness].filter(Boolean).join(' | ') : 'no Library or Storyteller evidence yet'),
       tone: signals.storyteller?.tone || (row.storyArc ? 'ok' : 'warn'),
+    },
+  ];
+}
+
+export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): ResidentLoopFact[] {
+  const online = Math.max(0, pulse.online);
+  const denominator = online > 0 ? `/${online}` : '';
+  const stableAp = Math.max(0, online - Math.max(0, pulse.lowAp));
+
+  return [
+    {
+      label: 'AP',
+      value: online > 0 ? `${stableAp}${denominator} stable` : 'syncing',
+      detail: online > 0 ? `${Math.max(0, pulse.lowAp)} low AP` : 'waiting for live resident roster',
+      tone: pulse.lowAp > 0 || online === 0 ? 'warn' : 'ok',
+    },
+    {
+      label: 'GP evidence',
+      value: `${Math.max(0, pulse.observedGp).toLocaleString()} GP`,
+      detail: pulse.observedGp > 0 ? 'coin-995 observed' : 'no coin-995 evidence yet',
+      tone: pulse.observedGp > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Plan',
+      value: `${Math.max(0, pulse.planPublished)}${denominator} live`,
+      detail: 'current goals residents are pursuing',
+      tone: pulse.planPublished > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Action',
+      value: `${Math.max(0, pulse.recentAction)}${denominator} recent`,
+      detail: 'latest visible action',
+      tone: pulse.recentAction > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Speech',
+      value: `${Math.max(0, pulse.recentSpeech)}${denominator} recent`,
+      detail: 'latest public say/feed line',
+      tone: pulse.recentSpeech > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Story',
+      value: `${Math.max(0, pulse.storyEvidence)}${denominator} grounded`,
+      detail: 'Library or Storyteller evidence',
+      tone: pulse.storyEvidence > 0 ? 'ok' : 'warn',
     },
   ];
 }

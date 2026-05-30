@@ -13,7 +13,8 @@
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
-    residentCoinEvidenceAmount,
+    residentGuestTrailFacts,
+    residentGuestTrailPulse,
     residentIntelligenceFacts,
     residentIntentFacts,
     residentLoopCheckpoints,
@@ -25,6 +26,7 @@
     residentPrimaryWarning,
     residentStackSummary,
     type ResidentLoopFact,
+    type ResidentGuestTrailPulse,
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
@@ -68,15 +70,6 @@
     path: string;
     match: string;
     glyph: string;
-  };
-
-  type CityLoopPulse = {
-    online: number;
-    lowAp: number;
-    planPublished: number;
-    recentSpeech: number;
-    storyEvidence: number;
-    observedGp: number;
   };
 
   type BeforeInstallPromptEvent = Event & {
@@ -204,10 +197,11 @@
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
   let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
   let cityResidentProofPulse = residentProofPulse(undefined);
-  let cityLoopPulse: CityLoopPulse = {
+  let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
     lowAp: 0,
     planPublished: 0,
+    recentAction: 0,
     recentSpeech: 0,
     storyEvidence: 0,
     observedGp: 0,
@@ -412,7 +406,7 @@
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
-  $: cityLoopPulse = buildCityLoopPulse(cityResidents);
+  $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
   $: cityProfileEconomy = buildProfileEconomySummary({
     apBalance: citySession.ap,
     gpBalance: citySession.gp,
@@ -946,25 +940,48 @@
     ];
   }
 
-  function buildCityLoopPulse(rows: ResidentDashboardRow[]): CityLoopPulse {
-    const pulse: CityLoopPulse = {
-      online: 0,
-      lowAp: 0,
-      planPublished: 0,
-      recentSpeech: 0,
-      storyEvidence: 0,
-      observedGp: 0,
-    };
-    for (const row of rows) {
-      const signal = residentLoopSignal(row);
-      if (row.online) pulse.online += 1;
-      if (residentNeedsAp(row)) pulse.lowAp += 1;
-      if (signal.plan !== '-' && signal.plan !== 'No active plan published') pulse.planPublished += 1;
-      if (signal.speech !== '-') pulse.recentSpeech += 1;
-      if (signal.story !== '-') pulse.storyEvidence += 1;
-      pulse.observedGp += residentCoinEvidenceAmount(row);
+  function residentRosterHasLiveHints(): boolean {
+    const heartbeat = cityEconomyHeartbeat.heartbeat;
+    return Boolean(
+      gatewayStatus?.connected ||
+      overview?.controller.available ||
+      (overview?.controller.residentsWithRuntime || 0) > 0 ||
+      (heartbeat?.residentCount || 0) > 0 ||
+      cityEconomyHeartbeat.available ||
+      cityLiveEconomy.available ||
+      cityDataError,
+    );
+  }
+
+  function residentRosterEmptyTitle(): string {
+    return residentRosterHasLiveHints() ? 'Resident roster is syncing' : 'No public residents reported';
+  }
+
+  function residentRosterEmptyDetail(): string {
+    const heartbeat = cityEconomyHeartbeat.heartbeat;
+    if (cityDataError) return `${cityDataError}. Story and ops views may still have live resident evidence.`;
+    if (heartbeat?.residentCount) {
+      return `${heartbeat.activeResidentCount.toLocaleString()} / ${heartbeat.residentCount.toLocaleString()} residents are visible through the economy heartbeat while the public roster catches up.`;
     }
-    return pulse;
+    if (gatewayStatus?.connected || overview?.controller.available) return 'Gateway/controller is connected; the public roster may still be catching up.';
+    if (cityEconomyHeartbeat.available || cityLiveEconomy.available) return 'Controller bridge data is present while the public resident roster catches up.';
+    return 'Residents appear here after the public dashboard snapshot reports them.';
+  }
+
+  function residentProfileSnapshotUnavailable(): boolean {
+    return cityResidents.length === 0 && residentRosterHasLiveHints();
+  }
+
+  function residentMissingTitle(): string {
+    return residentProfileSnapshotUnavailable() ? 'Live snapshot unavailable for this resident' : 'Resident not found in public city data';
+  }
+
+  function residentMissingDetail(): string {
+    if (residentProfileSnapshotUnavailable()) {
+      if (cityDataError) return `${cityDataError}. The resident may still be in ops/debug data while the public city row catches up.`;
+      return 'The resident may still be in ops/debug data while the public city row catches up.';
+    }
+    return 'Check the directory or ops roster for the current resident id.';
   }
 
   function residentLoopLine(signal: string, limit = 78): string {
@@ -3289,13 +3306,12 @@
         <div class="panel-title">Resident Activity</div>
         <button onclick={() => cityNav('/residents')}>Directory</button>
       </div>
-      <div class="city-resident-profile-grid city-loop-pulse-grid">
-        <span><small>Online</small><strong>{cityLoopPulse.online}</strong></span>
-        <span><small>Low AP</small><strong>{cityLoopPulse.lowAp}</strong></span>
-        <span><small>Plan Live</small><strong>{cityLoopPulse.planPublished}</strong></span>
-        <span><small>Recent Speech</small><strong>{cityLoopPulse.recentSpeech}</strong></span>
-        <span><small>Story Evidence</small><strong>{cityLoopPulse.storyEvidence}</strong></span>
-        <span><small>Observed GP</small><strong>{cityLoopPulse.observedGp.toLocaleString()}</strong></span>
+      <div class="city-loop-pulse-grid">
+        {@render ResidentLoopFactGrid({ facts: residentGuestTrailFacts(cityLoopPulse) })}
+      </div>
+      <div class="city-empty-state subtle">
+        <strong>Follow the visible loop: AP, GP, plan, action, speech, and story.</strong>
+        <span>AP is the resident life force. GP is only trusted when coin-995 evidence appears in the live RuneScape snapshot.</span>
       </div>
       {@render CityResidentList({ rows: cityFeaturedResidents })}
     </div>
@@ -3991,7 +4007,16 @@
       </div>
     </section>
   {:else}
-    <section class="city-panel"><div class="empty">Resident not found in public city data</div></section>
+    <section class="city-panel">
+      <div class="city-empty-state resident-sync-state">
+        <strong>{residentMissingTitle()}</strong>
+        <span>{residentMissingDetail()}</span>
+        <div class="resident-sync-actions">
+          <button onclick={() => cityNav('/story')}>Story</button>
+          <button onclick={() => debugNav('/residents')}>Ops Roster</button>
+        </div>
+      </div>
+    </section>
   {/if}
 {/snippet}
 
@@ -4642,7 +4667,14 @@
         <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}
-      <div class="empty">No public residents reported</div>
+      <div class="city-empty-state resident-sync-state">
+        <strong>{residentRosterEmptyTitle()}</strong>
+        <span>{residentRosterEmptyDetail()}</span>
+        <div class="resident-sync-actions">
+          <button onclick={() => cityNav('/story')}>Story</button>
+          <button onclick={() => debugNav('/residents')}>Ops Roster</button>
+        </div>
+      </div>
     {/each}
   </div>
 {/snippet}
