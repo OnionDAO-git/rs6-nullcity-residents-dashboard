@@ -11,7 +11,7 @@
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
   import { summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
-  import { residentEconomyGpEvidence, type ResidentEconomyGpEvidence } from './lib/resident-economy-evidence';
+  import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, type ResidentEconomyGpEvidence } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
     residentGuestTrailFacts,
@@ -673,12 +673,15 @@
       cityProposals = proposalsPayload.proposals;
     }
     if (activeRoute === '/residents' || cityResidentId) {
-      const [directoryPayload, benchmarkPayload] = await Promise.all([
+      const liveEconomyResidentLimit = Math.max(25, (overview?.residents || residents).length);
+      const [directoryPayload, benchmarkPayload, liveEconomyPayload] = await Promise.all([
         cityLoad(cityApi.residents(), { residents: [] }),
         cityLoad(api.benchmarks(200), []),
+        cityLoad(cityApi.nullcityEconomyLive({ limit: 20, residentLimit: liveEconomyResidentLimit }), { available: false, error: 'not_configured' }),
       ]);
       cityDirectoryResidents = directoryPayload.residents;
       cityBenchmarkRuns = benchmarkPayload;
+      cityLiveEconomy = liveEconomyPayload;
     } else if (activeRoute !== '/') {
       cityBenchmarkRuns = [];
     }
@@ -4626,9 +4629,10 @@
       {@const speechCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'speech')}
       {@const storyCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'story')}
       {@const benchmark = residentBenchmarkLabel(row)}
-      {@const warning = residentPrimaryWarning(row, benchmark)}
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
-      {@const pulse = residentProofPulse(row, { benchmark, storyteller: storySignal })}
+      {@const economyGp = residentLiveEconomyGpEvidence(cityLiveEconomy, row.name)}
+      {@const warning = residentPrimaryWarning(row, benchmark, { economyGp })}
+      {@const pulse = residentProofPulse(row, { benchmark, economyGp, storyteller: storySignal })}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>

@@ -1,9 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentEconomy } from './api';
-import { residentEconomyGpEvidence } from './resident-economy-evidence';
+import type { NullCityLiveEconomyBridgeResponse, NullCityLiveEconomySnapshot } from './city-api';
+import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence } from './resident-economy-evidence';
 
 function economy(recentEvents: ResidentEconomy['recentEvents']): ResidentEconomy {
   return { ap: 42, activeGoals: [], recentEvents };
+}
+
+function liveEconomy(overrides: Partial<NullCityLiveEconomySnapshot>): NullCityLiveEconomyBridgeResponse {
+  return {
+    available: true,
+    snapshot: {
+      asOf: '2026-05-30T22:40:00.000Z',
+      window: { since: '2026-05-30T22:25:00.000Z', windowMs: 900000 },
+      city: { residentCount: 1, activeResidentCount: 1, attentionTotal: 42, attentionDelta: 0, gpNetDelta: 0 },
+      countsByKind: {},
+      topResidentsByAttention: [],
+      residents: [],
+      recentEvents: [],
+      pendingProposals: [],
+      ...overrides,
+    },
+  };
 }
 
 describe('resident economy evidence', () => {
@@ -49,5 +67,59 @@ describe('resident economy evidence', () => {
         note: 'patron support',
       },
     ]))).toBeUndefined();
+  });
+
+  test('matches live-economy GP events to public resident slugs', () => {
+    expect(residentLiveEconomyGpEvidence(liveEconomy({
+      recentEvents: [
+        {
+          id: 'live-1',
+          ts: '2026-05-30T22:31:00.000Z',
+          kind: 'gp_observed',
+          residentName: 'res:agent',
+          note: 'observed 1821 GP in item 995',
+        },
+      ],
+    }), 'agent')).toEqual({
+      tone: 'ok',
+      summary: 'Recent economy GP evidence is available.',
+      detail: 'gp_observed: observed 1821 GP in item 995',
+    });
+  });
+
+  test('uses live-economy resident GP deltas when event details aged out of the window', () => {
+    expect(residentLiveEconomyGpEvidence(liveEconomy({
+      residents: [
+        {
+          residentName: 'res:agent',
+          attentionBalance: 50116,
+          gpNetDelta: -6,
+          eventCount: 8,
+          windowEventCount: 0,
+          activeInWindow: false,
+          online: true,
+        },
+      ],
+    }), 'res:agent')).toEqual({
+      tone: 'ok',
+      summary: 'Recent economy GP evidence is available.',
+      detail: 'live_economy: GP net delta -6 across 8 economy events',
+    });
+  });
+
+  test('does not invent live-economy GP proof from AP-only residents', () => {
+    expect(residentLiveEconomyGpEvidence(liveEconomy({
+      residents: [
+        {
+          residentName: 'res:agent',
+          attentionBalance: 50116,
+          gpNetDelta: 0,
+          eventCount: 3,
+          windowEventCount: 0,
+          activeInWindow: false,
+          online: true,
+        },
+      ],
+    }), 'res:agent')).toBeUndefined();
   });
 });
