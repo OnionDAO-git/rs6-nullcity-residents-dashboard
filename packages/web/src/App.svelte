@@ -3,7 +3,7 @@
   import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { createDomCanvasAdapter, createForkedRuntimeLifecycleAdapter, createGameClient, createHttpSessionTicketAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
-  import { api, routeTo, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
+  import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
@@ -29,6 +29,7 @@
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
   import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
+  import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -158,6 +159,7 @@
   let cityDirectoryResidents: ResidentReadModel[] = [];
   let cityResidentReadModel: ResidentReadModel | undefined;
   let cityResidentPosts: ResidentPost[] = [];
+  let cityResidentEconomy: ResidentEconomy | undefined;
   let cityLibraryLives: LibrarySoulLife[] = [];
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityStoryRunId = '';
@@ -188,6 +190,7 @@
   let cityResidentStoryEvents: ResidentStoryEvent[] = [];
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
+  let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
   let cityLoopPulse: CityLoopPulse = {
     online: 0,
     lowAp: 0,
@@ -356,6 +359,7 @@
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
+  $: cityResidentGoalContract = residentGoalContractSignal(cityResidentEconomy);
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
   $: cityPrintStorySignal = printStoryDigestSignal({
@@ -646,15 +650,18 @@
     }
     if (cityResidentId) {
       const cityResidentApiId = cityResident?.name || cityResidentId;
-      const [residentPayload, postsPayload] = await Promise.all([
+      const [residentPayload, postsPayload, economyPayload] = await Promise.all([
         cityLoad(cityApi.resident(cityResidentApiId), undefined),
         cityLoad(cityApi.residentPosts(cityResidentApiId), { posts: [] }),
+        cityLoad(api.residentEconomy(cityResidentApiId), undefined),
       ]);
       cityResidentReadModel = residentPayload?.resident;
       cityResidentPosts = postsPayload.posts;
+      cityResidentEconomy = economyPayload;
     } else {
       cityResidentReadModel = undefined;
       cityResidentPosts = [];
+      cityResidentEconomy = undefined;
     }
     if (activeRoute === '/inbox' || cityInboxThreadId) {
       cityInboxThreads = (await cityLoad(cityApi.inbox(), { threads: [] })).threads;
@@ -3723,6 +3730,9 @@
             <span><small>Recent action</small><strong>{residentActionLabel(cityResident)}</strong></span>
           </div>
           <div class="city-copy-block">
+            <span class={`tag ${cityResidentGoalContract.tone}`}>{cityResidentGoalContract.tone}</span>
+            <strong>Goal contract: {cityResidentGoalContract.summary}</strong>
+            <p>{cityResidentGoalContract.detail}</p>
             <strong>Recent speech: {residentSpeechLabel(cityResident)}</strong>
             <p>Library strategy: {residentLibraryStrategyLabel(cityResident)}</p>
           </div>
