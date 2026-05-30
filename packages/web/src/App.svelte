@@ -23,6 +23,7 @@
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
+  import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
 
@@ -154,6 +155,11 @@
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
   let cityPrintInsights = printQueueInsights([], [], []);
+  let cityReleaseReadiness: ReleaseReadinessSummary = buildReleaseReadiness({
+    residents: [],
+    storyDigests: [],
+    printInsights: cityPrintInsights,
+  });
   let cityResidentStoryEvents: ResidentStoryEvent[] = [];
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
@@ -327,6 +333,11 @@
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityResidents = overview?.residents || residents;
+  $: cityReleaseReadiness = buildReleaseReadiness({
+    residents: cityResidents,
+    storyDigests: cityStoryDigests,
+    printInsights: cityPrintInsights,
+  });
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
@@ -876,6 +887,12 @@
     if (!signal || signal === '-') return '-';
     if (signal.length <= limit) return signal;
     return `${signal.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+  }
+
+  function readinessStatusTone(status: ReleaseReadinessStatus): 'ok' | 'warn' | 'fail' {
+    if (status === 'ready') return 'ok';
+    if (status === 'blocked') return 'fail';
+    return 'warn';
   }
 
   function cityNavActive(item: CityNavItem): boolean {
@@ -2995,6 +3012,42 @@
         <small>{entry.detail}</small>
       </button>
     {/each}
+  </section>
+
+  <section class={`city-panel city-readiness-panel tone-${readinessStatusTone(cityReleaseReadiness.status)}`}>
+    <div class="row">
+      <div>
+        <div class="panel-title">Operator Readiness</div>
+        <strong>{cityReleaseReadiness.headline}</strong>
+        <small>{cityReleaseReadiness.detail}</small>
+      </div>
+      <span class={`tag ${readinessStatusTone(cityReleaseReadiness.status)}`}>{cityReleaseReadiness.status}</span>
+    </div>
+    <div class="city-resident-profile-grid city-readiness-metrics">
+      <span><small>Residents</small><strong>{cityReleaseReadiness.metrics.onlineResidents}/{cityReleaseReadiness.metrics.residents}</strong></span>
+      <span><small>Plans</small><strong>{cityReleaseReadiness.metrics.activePlans}</strong></span>
+      <span><small>Low AP</small><strong>{cityReleaseReadiness.metrics.lowApResidents}</strong></span>
+      <span><small>Observed GP</small><strong>{cityReleaseReadiness.metrics.observedGp.toLocaleString()}</strong></span>
+      <span><small>Story Age</small><strong>{cityReleaseReadiness.metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${cityReleaseReadiness.metrics.latestStorytellerAgeMinutes}m`}</strong></span>
+    </div>
+    <div class="city-record-list compact">
+      {#each cityReleaseReadiness.checks as check (check.id)}
+        <article>
+          <span class={`tag ${check.tone}`}>{check.tone}</span>
+          <div>
+            <strong>{check.label}: {check.value}</strong>
+            <small>{check.detail}</small>
+          </div>
+        </article>
+      {/each}
+    </div>
+    {#if cityReleaseReadiness.nextActions.length}
+      <div class="story-evidence-list city-readiness-actions" aria-label="Next operator actions">
+        {#each cityReleaseReadiness.nextActions.slice(0, 3) as action}
+          <span>{action}</span>
+        {/each}
+      </div>
+    {/if}
   </section>
 
   <section class="city-dashboard-grid">

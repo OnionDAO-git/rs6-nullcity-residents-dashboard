@@ -1831,11 +1831,46 @@ pre {
 .tone-mauve { border-left-color: var(--s-mauve); }
 .city-entry.tone-amber,
 .tone-amber { border-left-color: var(--s-amber); }
+.tone-ok { border-left-color: var(--s-green); }
+.tone-warn { border-left-color: var(--s-amber); }
+.tone-fail { border-left-color: var(--s-rose); }
 
 .city-panel {
   min-width: 0;
   padding: 18px;
   border-left: 3px solid var(--s-bone);
+}
+
+.city-readiness-panel {
+  margin-bottom: 18px;
+}
+
+.city-readiness-panel .row {
+  align-items: start;
+}
+
+.city-readiness-panel .row strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.city-readiness-panel .row small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.city-readiness-metrics {
+  margin-top: 14px;
+}
+
+.city-readiness-actions {
+  margin-top: 12px;
 }
 
 .city-panel.span-2 {
