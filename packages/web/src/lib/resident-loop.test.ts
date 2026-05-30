@@ -93,11 +93,12 @@ describe('resident loop helpers', () => {
 
   test('builds resident loop checkpoints with tone and details for operator triage', () => {
     expect(residentLoopCheckpoints(row({
-      thinking: { mode: 'executing', activePlan: 'Earn GP to fund AP' },
+      thinking: { mode: 'executing', activePlan: 'Earn GP to fund AP', lastInferenceCause: 'goal:ap-gp' },
       body: {
         controlHeld: true,
         feed: {
           attached: true,
+          tick: 2048,
           ageMs: 5000,
           nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
           events: 1,
@@ -105,14 +106,14 @@ describe('resident loop helpers', () => {
           latestEventKind: 'say',
           latestEventText: 'Trading once I have item 995.',
         },
-        lastAction: { kind: 'trade_with', result: 'success', source: 'thinking', cause: 'goal:ap-gp' },
+        lastAction: { kind: 'trade_with', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 2048 },
       },
       storyArc: { phase: 'progress', latestEventKind: 'city_attention_credit', latestEventTick: 2048 },
     }))).toEqual([
-      { key: 'plan', label: 'Plan', value: 'Earn GP to fund AP', detail: 'live thinking plan', tone: 'ok' },
-      { key: 'action', label: 'Action', value: 'trade_with', detail: 'success | thinking | goal:ap-gp', tone: 'ok' },
-      { key: 'speech', label: 'Speech', value: 'Trading once I have item 995.', detail: 'live speech event', tone: 'ok' },
-      { key: 'story', label: 'Story', value: 'city_attention_credit @ 2048', detail: 'latest Library/Storyteller signal', tone: 'ok' },
+      { key: 'plan', label: 'Plan', value: 'Earn GP to fund AP', detail: 'mode executing | cause goal:ap-gp', tone: 'ok' },
+      { key: 'action', label: 'Action', value: 'trade_with', detail: 'success | thinking | goal:ap-gp | tick 2048 (current)', tone: 'ok' },
+      { key: 'speech', label: 'Speech', value: 'Trading once I have item 995.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
+      { key: 'story', label: 'Story', value: 'city_attention_credit @ 2048', detail: 'latest Library/Storyteller signal | tick 2048 (current)', tone: 'ok' },
     ]);
   });
 
@@ -126,6 +127,31 @@ describe('resident loop helpers', () => {
       { key: 'action', label: 'Action', value: '-', detail: '-', tone: 'warn' },
       { key: 'speech', label: 'Speech', value: '-', detail: 'no recent speech in feed', tone: 'warn' },
       { key: 'story', label: 'Story', value: '-', detail: 'no current story signal', tone: 'warn' },
+    ]);
+  });
+
+  test('marks stale action/speech/story checkpoints when tick gaps drift', () => {
+    expect(residentLoopCheckpoints(row({
+      thinking: { mode: 'executing', activePlan: 'Reach the market' },
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          tick: 2200,
+          ageMs: 2000,
+          nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+          events: 0,
+          availableActions: 6,
+        },
+        lastAction: { kind: 'move_to', result: 'success', source: 'thinking', tick: 1700 },
+      },
+      lastEvent: { kind: 'say', text: 'On my way.', tick: 1800 },
+      storyArc: { phase: 'progress', latestEventKind: 'city_attention_credit', latestEventTick: 400 },
+    }))).toEqual([
+      { key: 'plan', label: 'Plan', value: 'Reach the market', detail: 'mode executing', tone: 'ok' },
+      { key: 'action', label: 'Action', value: 'move_to', detail: 'success | thinking | tick 1700 (500 behind, stale)', tone: 'warn' },
+      { key: 'speech', label: 'Speech', value: 'On my way.', detail: 'latest say event | tick 1800 (400 behind, stale)', tone: 'warn' },
+      { key: 'story', label: 'Story', value: 'city_attention_credit @ 400', detail: 'latest Library/Storyteller signal | tick 400 (1800 behind, stale)', tone: 'warn' },
     ]);
   });
 

@@ -43,6 +43,9 @@ export interface ResidentProofPulseSignals {
 
 const LOW_AP_THRESHOLD = 10;
 const STALE_FEED_MS = 120_000;
+const ACTION_STALE_TICK_GAP = 180;
+const SPEECH_STALE_TICK_GAP = 300;
+const STORY_STALE_TICK_GAP = 1200;
 const GP_ITEM_ID = 995;
 
 export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLoopFact[] {
@@ -193,7 +196,7 @@ export function residentCoinEvidenceAmount(row: ResidentDashboardRow): number {
 
 export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSignal {
   const story = row.storyArc;
-  const speech = recentSpeech(row);
+  const speech = recentSpeechSignal(row).text;
   const storyLabel =
     story?.summary ||
     (story?.latestEventKind && story.latestEventTick !== undefined
@@ -211,39 +214,51 @@ export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSigna
 
 export function residentLoopCheckpoints(row: ResidentDashboardRow): ResidentLoopCheckpoint[] {
   const signal = residentLoopSignal(row);
+  const speech = recentSpeechSignal(row);
   const planLive = Boolean(row.thinking?.activePlan?.trim());
-  const speechLive = signal.speech !== '-';
+  const speechLive = speech.text !== '-';
   const storyLive = signal.story !== '-';
   const actionLive = signal.action !== '-';
+  const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
+  const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
+  const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
+  const actionDetailParts = [actionDetail(row), actionFreshness].filter(Boolean);
+  const speechDetailPrefix = speech.source === 'feed' ? 'live speech in feed' : speech.source === 'event' ? 'latest say event' : '';
+  const speechDetailParts = [speechDetailPrefix, speechFreshness].filter(Boolean);
+  const storyDetailParts = ['latest Library/Storyteller signal', storyFreshness].filter(Boolean);
+  const planDetailParts = [
+    row.thinking?.mode ? `mode ${row.thinking.mode}` : '',
+    row.thinking?.lastInferenceCause ? `cause ${row.thinking.lastInferenceCause}` : '',
+  ].filter(Boolean);
 
   return [
     {
       key: 'plan',
       label: 'Plan',
       value: planLive ? signal.plan : '-',
-      detail: planLive ? 'live thinking plan' : 'no active plan published yet',
+      detail: planLive ? (planDetailParts.join(' | ') || 'live thinking plan') : 'no active plan published yet',
       tone: planLive ? 'ok' : 'warn',
     },
     {
       key: 'action',
       label: 'Action',
       value: actionLive ? signal.action : '-',
-      detail: actionLive ? actionDetail(row) : '-',
-      tone: actionLive ? 'ok' : 'warn',
+      detail: actionLive ? actionDetailParts.join(' | ') : '-',
+      tone: actionLive && !isTickStale(actionFreshness) ? 'ok' : 'warn',
     },
     {
       key: 'speech',
       label: 'Speech',
-      value: speechLive ? signal.speech : '-',
-      detail: speechLive ? 'live speech event' : 'no recent speech in feed',
-      tone: speechLive ? 'ok' : 'warn',
+      value: speechLive ? speech.text : '-',
+      detail: speechLive ? speechDetailParts.join(' | ') : 'no recent speech in feed',
+      tone: speechLive && !isTickStale(speechFreshness) ? 'ok' : 'warn',
     },
     {
       key: 'story',
       label: 'Story',
       value: storyLive ? signal.story : '-',
-      detail: storyLive ? 'latest Library/Storyteller signal' : 'no current story signal',
-      tone: storyLive ? 'ok' : 'warn',
+      detail: storyLive ? storyDetailParts.join(' | ') : 'no current story signal',
+      tone: storyLive && !isTickStale(storyFreshness) ? 'ok' : 'warn',
     },
   ];
 }
@@ -264,7 +279,7 @@ export function residentProofPulse(
     { label: 'AP', ok: !residentNeedsAp(row) },
     { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
     { label: 'Action', ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) },
-    { label: 'Speech', ok: recentSpeech(row) !== '-' },
+    { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
     { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 },
     {
       label: 'Goal contract',
@@ -380,15 +395,36 @@ function coin995Amount(row: ResidentDashboardRow): number {
   return 0;
 }
 
-function recentSpeech(row: ResidentDashboardRow): string {
+function recentSpeechSignal(row: ResidentDashboardRow): { text: string; source: 'feed' | 'event' | 'none'; tick?: number } {
   const feed = row.feed || row.body?.feed;
   if (feed?.latestEventKind === 'say' && typeof feed.latestEventText === 'string' && feed.latestEventText.trim().length > 0) {
-    return feed.latestEventText.trim();
+    return {
+      text: feed.latestEventText.trim(),
+      source: 'feed',
+      ...(feed.tick === undefined ? {} : { tick: feed.tick }),
+    };
   }
   if (row.lastEvent?.kind === 'say' && typeof row.lastEvent.text === 'string' && row.lastEvent.text.trim().length > 0) {
-    return row.lastEvent.text.trim();
+    return {
+      text: row.lastEvent.text.trim(),
+      source: 'event',
+      ...(row.lastEvent.tick === undefined ? {} : { tick: row.lastEvent.tick }),
+    };
   }
-  return '-';
+  return { text: '-', source: 'none' };
+}
+
+function tickFreshness(row: ResidentDashboardRow, eventTick: number | undefined, staleGap: number): string {
+  const liveTick = row.feed?.tick ?? row.body?.feed?.tick;
+  if (eventTick === undefined) return 'tick unknown';
+  if (liveTick === undefined) return `tick ${eventTick}`;
+  const delta = Math.max(0, liveTick - eventTick);
+  if (delta === 0) return `tick ${eventTick} (current)`;
+  return `tick ${eventTick} (${delta} behind${delta > staleGap ? ', stale' : ''})`;
+}
+
+function isTickStale(label: string): boolean {
+  return label.includes('stale');
 }
 
 function inventoryCoinAmount(value: unknown): number {

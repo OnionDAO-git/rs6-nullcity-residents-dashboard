@@ -3860,6 +3860,9 @@
         </div>
         <div class="city-panel span-2">
           <div class="panel-title">Current Loop Checkpoints</div>
+          <div class="city-empty-state subtle">
+            <span>Checkpoint details include feed-relative tick freshness so stale signals are explicit.</span>
+          </div>
           <div class="city-record-list">
             {#each residentLoopCheckpoints(cityResident) as checkpoint (checkpoint.key)}
               <article>
