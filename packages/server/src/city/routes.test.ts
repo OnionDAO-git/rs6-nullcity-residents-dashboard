@@ -441,6 +441,121 @@ describe('routeCityApi points and souls', () => {
     expect(await response.json()).toEqual({ available: false, error: 'not_configured' });
   });
 
+  test('public economy heartbeat route proxies the controller liveness payload', async () => {
+    const services = testServices(null, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        liveEconomy: async () => {
+          throw new Error('not called');
+        },
+        economyHeartbeat: async () => ({
+          asOf: '2026-05-30T18:52:00.000Z',
+          controllerUptimeSec: 372,
+          residentCount: 25,
+          activeResidentCount: 23,
+          economyEventCount: 28,
+          lastEconomyEventTs: '2026-05-30T18:51:10.000Z',
+          lastEconomyEventKind: 'ap_gp_exchange',
+          lastDigestBuiltAt: '2026-05-30T18:50:00.000Z',
+          degradedFlags: [],
+        }),
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(new Request('http://city.test/api/nullcity/economy/heartbeat'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      heartbeat: {
+        residentCount: 25,
+        activeResidentCount: 23,
+        economyEventCount: 28,
+        degradedFlags: [],
+      },
+    });
+  });
+
+  test('public economy heartbeat route degrades when the control bridge is not configured', async () => {
+    const services = testServices(null);
+
+    const response = await route(new Request('http://city.test/api/nullcity/economy/heartbeat'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false, error: 'not_configured' });
+  });
+
+  test('admin economy listings route proxies controller NCRI listings', async () => {
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        liveEconomy: async () => {
+          throw new Error('not called');
+        },
+        economyListings: async () => ({
+          asOf: '2026-05-30T18:52:00.000Z',
+          listings: [
+            {
+              ncriId: 'ncri-1',
+              itemId: 4151,
+              displayName: 'Abyssal Whip of the City',
+              owner: 'user:buyer',
+              sourceResidentName: 'res:hans',
+              approvalStatus: 'approved',
+              redemptionStatus: 'available',
+              createdAt: '2026-05-30T18:40:00.000Z',
+              updatedAt: '2026-05-30T18:45:00.000Z',
+              listed: true,
+            },
+          ],
+        }),
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(authedRequest('/api/admin/nullcity/economy/listings'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      asOf: '2026-05-30T18:52:00.000Z',
+      listings: [
+        {
+          ncriId: 'ncri-1',
+          owner: 'user:buyer',
+          sourceResidentName: 'res:hans',
+          listed: true,
+        },
+      ],
+    });
+  });
+
+  test('admin economy listings route requires admin auth before exposing owners', async () => {
+    const services = testServices(null, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        economyListings: async () => {
+          throw new Error('not called');
+        },
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(new Request('http://city.test/api/admin/nullcity/economy/listings'), services);
+
+    expect(response.status).toBe(401);
+  });
+
   test('admin AP-for-GP exchange route proxies to the Null City controller', async () => {
     const calls: Array<{ resident: string; body: unknown }> = [];
     const services = testServices(adminUser, undefined, {

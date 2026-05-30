@@ -222,6 +222,44 @@ export interface NullCityLiveEconomyBridgeResponse {
   error?: string;
 }
 
+export interface NullCityEconomyHeartbeat {
+  asOf: string;
+  controllerUptimeSec: number;
+  residentCount: number;
+  activeResidentCount: number;
+  economyEventCount: number;
+  lastEconomyEventTs?: string;
+  lastEconomyEventKind?: string;
+  lastDigestBuiltAt?: string;
+  degradedFlags: string[];
+}
+
+export interface NullCityEconomyHeartbeatBridgeResponse {
+  available: boolean;
+  heartbeat?: NullCityEconomyHeartbeat;
+  error?: string;
+}
+
+export interface NullCityEconomyListing {
+  ncriId: string;
+  itemId: number;
+  displayName: string;
+  owner: string;
+  sourceResidentName?: string;
+  approvalStatus: 'approved';
+  redemptionStatus: 'available';
+  createdAt: string;
+  updatedAt: string;
+  listed: true;
+}
+
+export interface NullCityEconomyListingsBridgeResponse {
+  available: boolean;
+  asOf?: string;
+  listings: NullCityEconomyListing[];
+  error?: string;
+}
+
 export type NullCityApGpExchangeStatus = 'complete' | 'failed_gp' | 'failed_ap' | 'failed_unknown';
 
 export interface NullCityApGpExchangeRequest {
@@ -560,6 +598,8 @@ export const cityApi = {
   adminNullcityNcri: () => request<NullCityNcriBridgeResponse>('/api/admin/nullcity/ncri'),
   nullcityEconomyLive: (options?: { since?: string; limit?: number; residentLimit?: number }) =>
     request<NullCityLiveEconomyBridgeResponse>(`/api/nullcity/economy/live${liveEconomyQuery(options)}`),
+  nullcityEconomyHeartbeat: () => request<NullCityEconomyHeartbeatBridgeResponse>('/api/nullcity/economy/heartbeat'),
+  adminNullcityEconomyListings: () => request<NullCityEconomyListingsBridgeResponse>('/api/admin/nullcity/economy/listings'),
   exchangeNullcityApForGp: (residentId: string, body: NullCityApGpExchangeRequest) =>
     request<NullCityApGpExchangeBridgeResponse>(
       `/api/admin/nullcity/residents/${encodeURIComponent(residentId)}/ap-gp-exchanges`,

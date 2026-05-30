@@ -112,6 +112,23 @@ export async function routeCityApi(
       return jsonResponse({ available: true, records: await context.nullcityControl.listNcri() });
     }
 
+    if (method === 'GET' && pathname === '/api/admin/nullcity/economy/listings') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.nullcityControl?.economyListings) {
+        return jsonResponse({ available: false, listings: [], error: 'not_configured' });
+      }
+      try {
+        const response = await context.nullcityControl.economyListings();
+        return jsonResponse({ available: true, asOf: response.asOf, listings: response.listings });
+      } catch (error) {
+        if (error instanceof NullCityControlError) {
+          return jsonResponse({ available: false, listings: [], error: error.message });
+        }
+        throw error;
+      }
+    }
+
     if (method === 'GET' && pathname === '/api/nullcity/economy/live') {
       if (!context.nullcityControl?.liveEconomy) return jsonResponse({ available: false, error: 'not_configured' });
       try {
@@ -122,6 +139,19 @@ export async function routeCityApi(
             limit: positiveInteger(url.searchParams.get('limit')),
             residentLimit: positiveInteger(url.searchParams.get('residentLimit')),
           }),
+        });
+      } catch (error) {
+        if (error instanceof NullCityControlError) return jsonResponse({ available: false, error: error.message });
+        throw error;
+      }
+    }
+
+    if (method === 'GET' && pathname === '/api/nullcity/economy/heartbeat') {
+      if (!context.nullcityControl?.economyHeartbeat) return jsonResponse({ available: false, error: 'not_configured' });
+      try {
+        return jsonResponse({
+          available: true,
+          heartbeat: await context.nullcityControl.economyHeartbeat(),
         });
       } catch (error) {
         if (error instanceof NullCityControlError) return jsonResponse({ available: false, error: error.message });

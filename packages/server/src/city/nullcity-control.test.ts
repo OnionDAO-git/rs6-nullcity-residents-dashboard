@@ -161,6 +161,100 @@ describe('createNullCityControlClient', () => {
     expect(snapshot.pendingProposals[0]).toMatchObject({ residentName: 'res:lantern', apFunded: 80 });
   });
 
+  test('fetches the controller economy heartbeat with bearer auth', async () => {
+    const calls: Array<{ url: string; authorization: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return new Response(
+        JSON.stringify({
+          asOf: '2026-05-30T18:52:00.000Z',
+          controllerUptimeSec: 372,
+          residentCount: 25,
+          activeResidentCount: 23,
+          economyEventCount: 28,
+          lastEconomyEventTs: '2026-05-30T18:51:10.000Z',
+          lastEconomyEventKind: 'ap_gp_exchange',
+          lastDigestBuiltAt: '2026-05-30T18:50:00.000Z',
+          degradedFlags: [],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const heartbeat = await client.economyHeartbeat!();
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/economy/heartbeat',
+        authorization: 'Bearer city-token',
+      },
+    ]);
+    expect(heartbeat).toMatchObject({
+      residentCount: 25,
+      activeResidentCount: 23,
+      economyEventCount: 28,
+      degradedFlags: [],
+    });
+  });
+
+  test('fetches the controller NCRI economy listings with bearer auth', async () => {
+    const calls: Array<{ url: string; authorization: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return new Response(
+        JSON.stringify({
+          asOf: '2026-05-30T18:52:00.000Z',
+          listings: [
+            {
+              ncriId: 'ncri-1',
+              itemId: 4151,
+              displayName: 'Abyssal Whip of the City',
+              owner: 'user:buyer',
+              sourceResidentName: 'res:hans',
+              approvalStatus: 'approved',
+              redemptionStatus: 'available',
+              createdAt: '2026-05-30T18:40:00.000Z',
+              updatedAt: '2026-05-30T18:45:00.000Z',
+              listed: true,
+            },
+          ],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const response = await client.economyListings!();
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/economy/listings',
+        authorization: 'Bearer city-token',
+      },
+    ]);
+    expect(response.listings[0]).toMatchObject({
+      ncriId: 'ncri-1',
+      displayName: 'Abyssal Whip of the City',
+      sourceResidentName: 'res:hans',
+      listed: true,
+    });
+  });
+
   test('posts AP-for-GP exchanges to the controller resident route', async () => {
     const calls: Array<{ url: string; method: string; authorization: string | null; body: unknown }> = [];
     globalThis.fetch = (async (input, init) => {
@@ -315,6 +409,42 @@ describe('createNullCityControlClient', () => {
       name: 'NullCityControlError',
       status: 502,
       message: 'invalid_live_economy',
+    });
+  });
+
+  test('rejects malformed economy heartbeat payloads before the UI can render them', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ residentCount: 'many' }), {
+        headers: { 'content-type': 'application/json' },
+      })) as unknown as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    await expect(client.economyHeartbeat!()).rejects.toMatchObject({
+      name: 'NullCityControlError',
+      status: 502,
+      message: 'invalid_economy_heartbeat',
+    });
+  });
+
+  test('rejects malformed economy listing payloads before the UI can render them', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ listings: [{ ncriId: 'ncri-1' }] }), {
+        headers: { 'content-type': 'application/json' },
+      })) as unknown as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    await expect(client.economyListings!()).rejects.toMatchObject({
+      name: 'NullCityControlError',
+      status: 502,
+      message: 'invalid_economy_listings',
     });
   });
 

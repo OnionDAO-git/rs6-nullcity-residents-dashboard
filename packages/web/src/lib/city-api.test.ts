@@ -136,6 +136,41 @@ describe('cityApi', () => {
     expect(calls).toEqual(['/api/nullcity/economy/live?limit=5&residentLimit=3']);
   });
 
+  test('calls the public Null City economy heartbeat endpoint', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = (async input => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ available: true, heartbeat: { residentCount: 25 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    await cityApi.nullcityEconomyHeartbeat();
+
+    expect(calls).toEqual(['/api/nullcity/economy/heartbeat']);
+  });
+
+  test('calls the admin Null City economy listings endpoint', async () => {
+    const calls: Array<{ path: string; method: string }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+      });
+      return new Response(JSON.stringify({ available: true, asOf: '2026-05-30T18:52:00.000Z', listings: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    await cityApi.adminNullcityEconomyListings();
+
+    expect(calls).toEqual([
+      { path: '/api/admin/nullcity/economy/listings', method: 'GET' },
+    ]);
+  });
+
   test('calls the admin AP-for-GP exchange endpoint', async () => {
     const calls: Array<{ path: string; method: string; body: unknown; csrf: string | null }> = [];
     globalThis.fetch = (async (input, init) => {

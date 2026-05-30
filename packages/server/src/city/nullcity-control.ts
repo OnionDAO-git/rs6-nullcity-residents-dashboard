@@ -97,6 +97,36 @@ export interface NullCityLiveEconomySnapshot {
   pendingProposals: NullCityLiveEconomyProposal[];
 }
 
+export interface NullCityEconomyHeartbeat {
+  asOf: string;
+  controllerUptimeSec: number;
+  residentCount: number;
+  activeResidentCount: number;
+  economyEventCount: number;
+  lastEconomyEventTs?: string;
+  lastEconomyEventKind?: string;
+  lastDigestBuiltAt?: string;
+  degradedFlags: string[];
+}
+
+export interface NullCityEconomyListing {
+  ncriId: string;
+  itemId: number;
+  displayName: string;
+  owner: string;
+  sourceResidentName?: string;
+  approvalStatus: 'approved';
+  redemptionStatus: 'available';
+  createdAt: string;
+  updatedAt: string;
+  listed: true;
+}
+
+export interface NullCityEconomyListingsResponse {
+  asOf: string;
+  listings: NullCityEconomyListing[];
+}
+
 export interface NullCityApGpExchangeRequest {
   idempotencyKey: string;
   apAmount: number;
@@ -138,6 +168,8 @@ export interface NullCityControlClient {
   listProposals(): Promise<NullCitySoulProposal[]>;
   listNcri(): Promise<NullCityNcriRecord[]>;
   liveEconomy?(query?: NullCityLiveEconomyQuery): Promise<NullCityLiveEconomySnapshot>;
+  economyHeartbeat?(): Promise<NullCityEconomyHeartbeat>;
+  economyListings?(): Promise<NullCityEconomyListingsResponse>;
   exchangeApForGp?(resident: string, body: NullCityApGpExchangeRequest): Promise<NullCityApGpExchangeRecord>;
   approveProposal(id: string, adminNotes?: string): Promise<unknown>;
   rejectProposal(id: string, adminNotes?: string): Promise<unknown>;
@@ -209,6 +241,8 @@ export function createNullCityControlClient(options: NullCityControlClientOption
     listProposals: async () => parseProposalList(await request<unknown>('/proposals')),
     listNcri: async () => parseNcriList(await request<unknown>('/ncri')),
     liveEconomy: async query => parseLiveEconomy(await request<unknown>(`/economy/live${queryString(query)}`)),
+    economyHeartbeat: async () => parseEconomyHeartbeat(await request<unknown>('/economy/heartbeat')),
+    economyListings: async () => parseEconomyListings(await request<unknown>('/economy/listings')),
     exchangeApForGp: async (resident, body) =>
       parseApGpExchange(await request<unknown>(`/residents/${encodeURIComponent(resident)}/ap-gp-exchanges`, {
         method: 'POST',
@@ -263,6 +297,20 @@ function parseNcriList(payload: unknown): NullCityNcriRecord[] {
 function parseLiveEconomy(payload: unknown): NullCityLiveEconomySnapshot {
   if (!isLiveEconomySnapshot(payload)) {
     throw new NullCityControlError('invalid_live_economy', 502);
+  }
+  return payload;
+}
+
+function parseEconomyHeartbeat(payload: unknown): NullCityEconomyHeartbeat {
+  if (!isEconomyHeartbeat(payload)) {
+    throw new NullCityControlError('invalid_economy_heartbeat', 502);
+  }
+  return payload;
+}
+
+function parseEconomyListings(payload: unknown): NullCityEconomyListingsResponse {
+  if (!isEconomyListingsResponse(payload)) {
+    throw new NullCityControlError('invalid_economy_listings', 502);
   }
   return payload;
 }
@@ -363,6 +411,38 @@ function isLiveEconomyProposal(value: unknown): value is NullCityLiveEconomyProp
     typeof record.apFunded === 'number' &&
     typeof record.apThreshold === 'number' &&
     typeof record.status === 'string';
+}
+
+function isEconomyHeartbeat(value: unknown): value is NullCityEconomyHeartbeat {
+  const record = asRecord(value);
+  return typeof record.asOf === 'string' &&
+    typeof record.controllerUptimeSec === 'number' &&
+    typeof record.residentCount === 'number' &&
+    typeof record.activeResidentCount === 'number' &&
+    typeof record.economyEventCount === 'number' &&
+    Array.isArray(record.degradedFlags) &&
+    record.degradedFlags.every(flag => typeof flag === 'string');
+}
+
+function isEconomyListingsResponse(value: unknown): value is NullCityEconomyListingsResponse {
+  const record = asRecord(value);
+  return typeof record.asOf === 'string' &&
+    Array.isArray(record.listings) &&
+    record.listings.every(isEconomyListing);
+}
+
+function isEconomyListing(value: unknown): value is NullCityEconomyListing {
+  const record = asRecord(value);
+  return typeof record.ncriId === 'string' &&
+    typeof record.itemId === 'number' &&
+    Number.isFinite(record.itemId) &&
+    typeof record.displayName === 'string' &&
+    typeof record.owner === 'string' &&
+    record.approvalStatus === 'approved' &&
+    record.redemptionStatus === 'available' &&
+    typeof record.createdAt === 'string' &&
+    typeof record.updatedAt === 'string' &&
+    record.listed === true;
 }
 
 function isApGpExchangeRecord(value: unknown): value is NullCityApGpExchangeRecord {

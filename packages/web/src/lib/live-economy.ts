@@ -1,4 +1,4 @@
-import type { NullCityLiveEconomyBridgeResponse } from './city-api';
+import type { NullCityEconomyHeartbeatBridgeResponse, NullCityEconomyListingsBridgeResponse, NullCityLiveEconomyBridgeResponse } from './city-api';
 
 export interface LiveEconomySummary {
   tone: 'ok' | 'warn' | 'fail';
@@ -6,6 +6,19 @@ export interface LiveEconomySummary {
   detail: string;
   eventLabel: string;
   proposalLabel: string;
+}
+
+export interface EconomyHeartbeatSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  headline: string;
+  detail: string;
+  degradedLabel: string;
+}
+
+export interface EconomyListingsSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  headline: string;
+  detail: string;
 }
 
 export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse | undefined): LiveEconomySummary {
@@ -34,6 +47,49 @@ export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse
     detail: `${snapshot.city.activeResidentCount.toLocaleString()} active in economy window · AP Δ ${signed(snapshot.city.attentionDelta)} · GP Δ ${signed(snapshot.city.gpNetDelta)}`,
     eventLabel: `${apGpEvents.toLocaleString()} AP/GP events`,
     proposalLabel: pendingFunding === 1 ? '1 Soul funding' : `${pendingFunding.toLocaleString()} Souls funding`,
+  };
+}
+
+export function summarizeEconomyHeartbeat(response: NullCityEconomyHeartbeatBridgeResponse | undefined): EconomyHeartbeatSummary {
+  if (!response?.available || !response.heartbeat) {
+    return {
+      tone: 'warn',
+      headline: 'Economy heartbeat unavailable',
+      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN to show controller liveness.',
+      degradedLabel: 'bridge',
+    };
+  }
+
+  const heartbeat = response.heartbeat;
+  const tone: EconomyHeartbeatSummary['tone'] = heartbeat.degradedFlags.length > 0
+    ? heartbeat.activeResidentCount > 0 ? 'warn' : 'fail'
+    : 'ok';
+  const lastKind = heartbeat.lastEconomyEventKind ? heartbeat.lastEconomyEventKind.replace(/_/g, ' ') : 'none';
+  return {
+    tone,
+    headline: `${heartbeat.activeResidentCount.toLocaleString()} / ${heartbeat.residentCount.toLocaleString()} residents active`,
+    detail: `${heartbeat.economyEventCount.toLocaleString()} economy events · last ${lastKind}`,
+    degradedLabel: heartbeat.degradedFlags.length ? heartbeat.degradedFlags.join(', ') : 'healthy',
+  };
+}
+
+export function summarizeEconomyListings(response: NullCityEconomyListingsBridgeResponse | undefined): EconomyListingsSummary {
+  if (!response?.available) {
+    return {
+      tone: 'warn',
+      headline: 'NCRI listings unavailable',
+      detail: 'Admin session and Null City control bridge are required.',
+    };
+  }
+
+  const count = response.listings.length;
+  const latest = response.listings[0];
+  return {
+    tone: count > 0 ? 'ok' : 'warn',
+    headline: count === 1 ? '1 NCRI listed' : `${count.toLocaleString()} NCRIs listed`,
+    detail: latest
+      ? `Latest: ${latest.displayName} from ${latest.sourceResidentName || latest.owner}`
+      : 'No approved, available NCRIs are listed for AP/GP trades yet.',
   };
 }
 

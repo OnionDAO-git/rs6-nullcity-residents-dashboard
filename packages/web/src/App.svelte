@@ -6,10 +6,10 @@
   import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
-  import { summarizeLiveEconomy, type LiveEconomySummary } from './lib/live-economy';
+  import { summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
@@ -187,7 +187,11 @@
   });
   let cityEconomyProofs: EconomyProofSummary = buildEconomyProofSummary([]);
   let cityLiveEconomy: NullCityLiveEconomyBridgeResponse = { available: false, error: 'not_loaded' };
+  let cityEconomyHeartbeat: NullCityEconomyHeartbeatBridgeResponse = { available: false, error: 'not_loaded' };
+  let cityEconomyListings: NullCityEconomyListingsBridgeResponse = { available: false, listings: [], error: 'not_loaded' };
   let cityLiveEconomySummary: LiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
+  let cityEconomyHeartbeatSummary: EconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
+  let cityEconomyListingsSummary: EconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
   let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
     authenticated: false,
     onlineResidents: [],
@@ -393,6 +397,8 @@
   });
   $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
   $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
+  $: cityEconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
+  $: cityEconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
     gateway: gatewayStatus,
@@ -617,18 +623,20 @@
       return;
     }
     if (activeRoute === '/') {
-      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload] = await Promise.all([
+      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload, heartbeatPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
         citySession.authenticated ? cityLoad(cityApi.prints(), { requests: [] }) : Promise.resolve({ requests: [] }),
         citySession.authenticated ? cityLoad(cityApi.inbox(), { threads: [] }) : Promise.resolve({ threads: [] }),
         cityLoad(api.benchmarks(200), []),
         cityLoad(cityApi.nullcityEconomyLive({ limit: 8, residentLimit: 6 }), { available: false, error: 'not_configured' }),
+        cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
       ]);
       cityProposals = proposalsPayload.proposals;
       cityPrintRequests = printsPayload.requests;
       cityInboxThreads = inboxPayload.threads;
       cityBenchmarkRuns = benchmarkPayload;
       cityLiveEconomy = liveEconomyPayload;
+      cityEconomyHeartbeat = heartbeatPayload;
     }
     if (activeRoute === '/profile') {
       const [profilePayload, ledgerPayload] = await Promise.all([
@@ -707,7 +715,7 @@
       citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
     }
     if (activeRoute.startsWith('/admin')) {
-      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, ncriPayload, printsPayload, ledgerPayload] = await Promise.all([
+      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, ncriPayload, printsPayload, ledgerPayload, heartbeatPayload, listingsPayload] = await Promise.all([
         cityLoad(cityApi.adminPrinters(), { printers: [] }),
         cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
         cityLoad(cityApi.proposals(), { proposals: [] }),
@@ -715,6 +723,8 @@
         cityLoad(cityApi.adminNullcityNcri(), { available: false, records: [], error: 'not_configured' }),
         cityLoad(cityApi.prints(), { requests: [] }),
         cityLoad(cityApi.ledger(), { entries: [] }),
+        cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
+        cityLoad(cityApi.adminNullcityEconomyListings(), { available: false, listings: [], error: 'not_configured' }),
       ]);
       cityPrinters = printersPayload.printers;
       cityPrintQueue = queuePayload.queue;
@@ -725,6 +735,8 @@
       cityNullcityNcriRecords = ncriPayload.records;
       cityPrintRequests = printsPayload.requests;
       cityLedger = ledgerPayload.entries;
+      cityEconomyHeartbeat = heartbeatPayload;
+      cityEconomyListings = listingsPayload;
     }
     if (activeRoute === '/library') {
       cityLibraryLives = (await cityLoad(cityApi.library(), { lives: [] })).lives;
@@ -3235,13 +3247,15 @@
         <strong>{cityLiveEconomySummary.headline}</strong>
         <small>{cityLiveEconomySummary.detail}</small>
       </div>
-      <span class={`tag ${cityLiveEconomySummary.tone}`}>{cityLiveEconomy.available ? 'live' : 'bridge'}</span>
+      <span class={`tag ${cityEconomyHeartbeatSummary.tone}`}>{cityEconomyHeartbeat.available ? 'heartbeat' : 'bridge'}</span>
     </div>
     <div class="city-resident-profile-grid">
       <span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>
       <span><small>Soul Queue</small><strong>{cityLiveEconomySummary.proposalLabel}</strong></span>
       <span><small>Window</small><strong>{cityLiveEconomy.snapshot ? `${Math.round(cityLiveEconomy.snapshot.window.windowMs / 60000)}m` : '-'}</strong></span>
       <span><small>Top AP</small><strong>{cityLiveEconomy.snapshot?.topResidentsByAttention[0]?.residentName || '-'}</strong></span>
+      <span><small>Active</small><strong>{cityEconomyHeartbeat.heartbeat ? `${cityEconomyHeartbeat.heartbeat.activeResidentCount}/${cityEconomyHeartbeat.heartbeat.residentCount}` : '-'}</strong></span>
+      <span><small>Controller</small><strong>{cityEconomyHeartbeatSummary.degradedLabel}</strong></span>
     </div>
     {#if cityLiveEconomy.snapshot}
       <div class="city-record-list compact">
@@ -4405,6 +4419,45 @@
       </section>
     {:else if route === '/admin/economy'}
       <section class="city-dashboard-grid">
+        <div class={`city-panel tone-${cityEconomyHeartbeatSummary.tone}`}>
+          <div class="row">
+            <div>
+              <div class="panel-title">City Heartbeat</div>
+              <strong>{cityEconomyHeartbeatSummary.headline}</strong>
+              <small>{cityEconomyHeartbeatSummary.detail}</small>
+            </div>
+            <span class={`tag ${cityEconomyHeartbeatSummary.tone}`}>{cityEconomyHeartbeatSummary.degradedLabel}</span>
+          </div>
+          <div class="city-resident-profile-grid">
+            <span><small>Events</small><strong>{cityEconomyHeartbeat.heartbeat?.economyEventCount?.toLocaleString() || '-'}</strong></span>
+            <span><small>Uptime</small><strong>{cityEconomyHeartbeat.heartbeat ? `${Math.round(cityEconomyHeartbeat.heartbeat.controllerUptimeSec / 60)}m` : '-'}</strong></span>
+            <span><small>Last Event</small><strong>{cityEconomyHeartbeat.heartbeat?.lastEconomyEventKind?.replace(/_/g, ' ') || '-'}</strong></span>
+            <span><small>Digest</small><strong>{cityEconomyHeartbeat.heartbeat?.lastDigestBuiltAt ? `${timeAgo(cityEconomyHeartbeat.heartbeat.lastDigestBuiltAt)} ago` : '-'}</strong></span>
+          </div>
+        </div>
+        <div class={`city-panel tone-${cityEconomyListingsSummary.tone}`}>
+          <div class="row">
+            <div>
+              <div class="panel-title">Listed NCRIs</div>
+              <strong>{cityEconomyListingsSummary.headline}</strong>
+              <small>{cityEconomyListingsSummary.detail}</small>
+            </div>
+            <span class={`tag ${cityEconomyListingsSummary.tone}`}>{cityEconomyListings.available ? 'listed' : 'bridge'}</span>
+          </div>
+          <div class="city-record-list compact">
+            {#each cityEconomyListings.listings.slice(0, 4) as listing (listing.ncriId)}
+              <article>
+                <span class="tag ok">coin {listing.itemId}</span>
+                <div>
+                  <strong>{listing.displayName}</strong>
+                  <small>{listing.sourceResidentName || listing.owner} · updated {timeAgo(listing.updatedAt)} ago</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No available NCRI listings</strong><span>Approved, unredeemed resident items appear here once the controller lists them.</span></div>
+            {/each}
+          </div>
+        </div>
         <div class="city-panel">
           <div class="panel-title">Grant Points</div>
           <div class="city-form-grid single">
