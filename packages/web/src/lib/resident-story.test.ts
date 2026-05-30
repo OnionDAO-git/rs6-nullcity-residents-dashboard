@@ -160,6 +160,28 @@ describe('residentStoryDigestSignal', () => {
     expect(signal.summary).toContain('freshness is unknown');
     expect(signal.detail).toContain('invalid-ts');
   });
+
+  test('warns when latest event timestamp is ahead of local time', () => {
+    const signal = residentStoryDigestSignal(
+      resident('res:hans'),
+      [digest({
+        topEvents: [{
+          ref: 'future-ts',
+          kind: 'city_ap_gp_exchange',
+          residentName: 'res:hans',
+          ts: '2026-05-30T04:45:00.000Z',
+          note: 'future event',
+          importance: 'medium',
+          evidenceLabels: ['gp=1'],
+        }],
+      })],
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    );
+
+    expect(signal.tone).toBe('warn');
+    expect(signal.summary).toContain('ahead of local time');
+    expect(signal.detail).toContain('future-ts');
+  });
 });
 
 describe('storytellerDigestStatus', () => {
@@ -194,6 +216,13 @@ describe('storytellerDigestStatus', () => {
     expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-30T04:10:00.000Z'))).toMatchObject({
       label: 'ready',
       tone: 'ok',
+    });
+    expect(storytellerDigestStatus(
+      digest({ dispatch: { ...baseDispatch, generatedAt: '2026-05-30T05:00:00.000Z' } }),
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    )).toMatchObject({
+      label: 'review',
+      tone: 'warn',
     });
     expect(storytellerDigestStatus(
       digest({

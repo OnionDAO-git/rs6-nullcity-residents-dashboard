@@ -2,6 +2,7 @@ import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary, StorytellerDigestEventSummary } from './api';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 export interface ResidentStoryEvent {
   digest: StorytellerDigestSummary;
@@ -75,12 +76,19 @@ export function residentStoryDigestSignal(
       detail: 'Run or review digest generation to capture resident-specific evidence.',
     };
   }
-  const ts = eventTs(latest.event, latest.digest);
+  const ts = parseTimestamp(latest.event.ts);
   if (ts <= 0) {
     return {
       tone: 'warn',
       summary: 'Storyteller evidence exists, but event freshness is unknown.',
       detail: `Latest event has no valid timestamp (${latest.event.ref || latest.event.kind}).`,
+    };
+  }
+  if (ts - nowMs > FUTURE_SKEW_MS) {
+    return {
+      tone: 'warn',
+      summary: 'Storyteller evidence exists, but latest event timestamp is ahead of local time.',
+      detail: `Latest event appears ${(Math.round((ts - nowMs) / 60000))}m in the future (${latest.event.ref || latest.event.kind}).`,
     };
   }
 
@@ -138,6 +146,13 @@ export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs 
   }
 
   const timestamp = digestTs(digest);
+  if (timestamp > nowMs + FUTURE_SKEW_MS) {
+    return {
+      label: 'review',
+      tone: 'warn',
+      summary: 'Dispatch timestamp is ahead of local time; verify clock sync before trusting canon freshness.',
+    };
+  }
   if (timestamp > 0 && nowMs - timestamp > DAY_MS) {
     return {
       label: 'stale',
@@ -210,16 +225,12 @@ function eventVerb(kind: string): string {
 
 function eventTs(event: StorytellerDigestEventSummary, digest: StorytellerDigestSummary): number {
   const stamp = event.ts || digest.builtAt || digest.windowEnd || digest.windowStart;
-  if (!stamp) return 0;
-  const ts = Date.parse(stamp);
-  return Number.isFinite(ts) ? ts : 0;
+  return parseTimestamp(stamp);
 }
 
 function digestTs(digest: StorytellerDigestSummary): number {
   const stamp = digest.dispatch?.generatedAt || digest.builtAt || digest.windowEnd || digest.windowStart;
-  if (!stamp) return 0;
-  const ts = Date.parse(stamp);
-  return Number.isFinite(ts) ? ts : 0;
+  return parseTimestamp(stamp);
 }
 
 function hasDispatchWarnings(digest: StorytellerDigestSummary): boolean {
@@ -229,4 +240,10 @@ function hasDispatchWarnings(digest: StorytellerDigestSummary): boolean {
   if (Array.isArray(dispatch.reviewReasons) && dispatch.reviewReasons.length > 0) return true;
   if ((typeof dispatch.eventRefCount === 'number' && dispatch.eventRefCount === 0) && digest.topEventCount > 0) return true;
   return false;
+}
+
+function parseTimestamp(stamp: string | undefined): number {
+  if (!stamp) return 0;
+  const ts = Date.parse(stamp);
+  return Number.isFinite(ts) ? ts : 0;
 }
