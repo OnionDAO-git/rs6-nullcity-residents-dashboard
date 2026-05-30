@@ -8,6 +8,8 @@ import {
   residentLoopSummaryLine,
   residentNeedsAp,
   residentOperatorWarnings,
+  residentPrimaryWarning,
+  residentStackSummary,
 } from './resident-loop';
 
 function row(input: Partial<ResidentDashboardRow> & { name?: string } = {}): ResidentDashboardRow {
@@ -106,6 +108,29 @@ describe('resident loop helpers', () => {
       { tone: 'warn', summary: 'Library strategy evidence is still thin for this resident.', detail: 'Run Storyteller/digest or wait for progress evidence.' },
       { tone: 'fail', summary: 'Latest benchmark failed on combat-prayer-10m.', detail: 'death loop' },
     ]);
+  });
+
+  test('builds stack summary from model/endpoint and SPARK module', () => {
+    expect(residentStackSummary(row({
+      stack: {
+        model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: [] },
+      },
+    }))).toBe('openrouter/haiku | onion.runescape.standard@0.3.0');
+
+    expect(residentStackSummary(row())).toBe('model/endpoint unavailable | SPARK unavailable');
+  });
+
+  test('returns the first operator warning as a compact triage signal', () => {
+    expect(residentPrimaryWarning(row({
+      attention: 1,
+      feed: { attached: true, ageMs: 5000, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 0 },
+    }))).toEqual({
+      tone: 'warn',
+      summary: 'AP low (1); top-up may be needed soon.',
+      detail: 'Attention is the resident life-force.',
+    });
   });
 
   test('returns one positive operator warning when resident evidence is healthy', () => {

@@ -17,6 +17,8 @@
     residentLoopSummaryLine,
     residentNeedsAp,
     residentOperatorWarnings,
+    residentPrimaryWarning,
+    residentStackSummary,
     type ResidentLoopFact,
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
@@ -4399,16 +4401,22 @@
   <div class="city-resident-list">
     {#each rows as row (row.name)}
       {@const signal = residentLoopSignal(row)}
+      {@const benchmark = residentBenchmarkLabel(row)}
+      {@const warning = residentPrimaryWarning(row, benchmark)}
+      {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
         <small>
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
         </small>
+        <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
         <small class="city-resident-loop-line">Plan: {residentLoopLine(signal.plan, 72)}</small>
         <small class="city-resident-loop-line">Action: {residentLoopLine(signal.action, 60)}</small>
         <small class="city-resident-loop-line">Speech: {residentLoopLine(signal.speech, 72)}</small>
         <small class="city-resident-loop-line">Story: {residentLoopLine(signal.story, 72)}</small>
+        <small class="city-resident-loop-line">Capability: {residentLoopLine(warning.summary, 76)}</small>
+        <small class="city-resident-loop-line">Storyteller: {residentLoopLine(storySignal.summary, 76)}</small>
         <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}

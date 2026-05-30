@@ -90,6 +90,26 @@ export function residentLoopSummaryLine(row: ResidentDashboardRow): string {
   return `${model} · ${module} · ${action} · ${ap} · ${gp}`;
 }
 
+export function residentStackSummary(row: ResidentDashboardRow): string {
+  const model = modelParts(row);
+  const module = activeModule(row);
+  const modelLabel = model.value !== '-' ? model.value : 'model/endpoint unavailable';
+  const moduleLabel = module ? `${module.id}${module.version ? `@${module.version}` : ''}` : 'SPARK unavailable';
+  return `${modelLabel} | ${moduleLabel}`;
+}
+
+export function residentPrimaryWarning(
+  row: ResidentDashboardRow | undefined,
+  benchmarkSignal?: ResidentBenchmarkSignal,
+): ResidentOperatorWarning {
+  const warning = residentOperatorWarnings(row, benchmarkSignal)[0];
+  return warning || {
+    tone: 'warn',
+    summary: 'No operator warning available.',
+    detail: 'Resident warnings are not yet populated.',
+  };
+}
+
 export function residentOperatorWarnings(
   row: ResidentDashboardRow | undefined,
   benchmarkSignal?: ResidentBenchmarkSignal,
