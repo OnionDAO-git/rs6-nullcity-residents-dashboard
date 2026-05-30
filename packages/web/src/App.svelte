@@ -10,7 +10,7 @@
   import { compactJson, timeAgo } from './lib/format';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
-  import { residentGoldEvidenceLabel, residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
+  import { residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, residentOperatorWarnings, type ResidentLoopFact } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
@@ -2006,21 +2006,6 @@
     return row.storyArc?.summary || residentStoryArcDetail(row) || row.storyArc?.phase || '-';
   }
 
-  function residentCapabilityWarnings(row: ResidentDashboardRow | undefined): string[] {
-    if (!row) return ['No live resident snapshot yet.'];
-    const warnings: string[] = [];
-    const benchmarkSignal = residentBenchmarkSignal(latestBenchmarkForResident(cityBenchmarkRuns, row.name));
-    if (!row.online) warnings.push('Resident is offline in the live controller snapshot.');
-    if (residentNeedsAp(row)) warnings.push(`AP low (${row.attention ?? 0}); top-up may be needed soon.`);
-    if (!row.feed) warnings.push('No live feed attached; latest action/speech may be stale.');
-    if (row.feed?.ageMs !== undefined && row.feed.ageMs > 120000) warnings.push(`Feed stale (${Math.round(row.feed.ageMs / 1000)}s old).`);
-    if (residentGoldEvidenceLabel(row).value === 'not observed') warnings.push('No coin-995 GP evidence in current snapshot.');
-    if (!row.thinking?.activePlan) warnings.push('No active plan published by thinking module.');
-    if (!row.storyArc?.summary && !row.storyArc?.latestEventKind) warnings.push('Library strategy evidence is still thin for this resident.');
-    if (benchmarkSignal.tone !== 'ok') warnings.push(benchmarkSignal.summary);
-    return warnings.length ? warnings : ['No immediate AP/feed/strategy warnings detected.'];
-  }
-
   function residentBenchmarkLabel(row: ResidentDashboardRow | undefined): { tone: 'ok' | 'warn' | 'fail'; summary: string; detail: string } {
     if (!row) return residentBenchmarkSignal(undefined);
     return residentBenchmarkSignal(latestBenchmarkForResident(cityBenchmarkRuns, row.name));
@@ -3469,19 +3454,12 @@
         <div class="city-panel">
           <div class="panel-title">Capability Warnings</div>
           <div class="city-record-list">
-            <article>
-              <span class={`tag ${cityResidentBenchmarkStatus.tone}`}>{cityResidentBenchmarkStatus.tone}</span>
-              <div>
-                <strong>{cityResidentBenchmarkStatus.summary}</strong>
-                <small>{cityResidentBenchmarkStatus.detail}</small>
-              </div>
-            </article>
-            {#each residentCapabilityWarnings(cityResident) as warning, index (warning + index)}
+            {#each residentOperatorWarnings(cityResident, cityResidentBenchmarkStatus) as warning, index (warning.summary + index)}
               <article>
-                <span class={warning.startsWith('No immediate') ? 'tag ok' : 'tag warn'}>{warning.startsWith('No immediate') ? 'ok' : 'warn'}</span>
+                <span class={`tag ${warning.tone}`}>{warning.tone}</span>
                 <div>
-                  <strong>{warning}</strong>
-                  <small>AP/GP, feed freshness, and live plan signals</small>
+                  <strong>{warning.summary}</strong>
+                  <small>{warning.detail}</small>
                 </div>
               </article>
             {/each}

@@ -1,10 +1,17 @@
 import type { ResidentDashboardRow, SparkModuleSummary } from '@nullcity-dashboard/shared';
+import type { ResidentBenchmarkSignal } from './resident-benchmark';
 
 export interface ResidentLoopFact {
   label: string;
   value: string;
   detail?: string | undefined;
   tone?: 'ok' | 'warn' | 'fail' | undefined;
+}
+
+export interface ResidentOperatorWarning {
+  tone: 'ok' | 'warn' | 'fail';
+  summary: string;
+  detail: string;
 }
 
 const LOW_AP_THRESHOLD = 10;
@@ -31,6 +38,11 @@ export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLo
       label: 'SPARK',
       value: module ? `${module.id}${module.version ? `@${module.version}` : ''}` : '-',
       detail: module?.source || '-',
+    },
+    {
+      label: 'Goal',
+      value: residentGoalLabel(row),
+      detail: residentGoalDetail(row),
     },
     {
       label: 'Thinking',
@@ -71,6 +83,47 @@ export function residentLoopSummaryLine(row: ResidentDashboardRow): string {
   return `${model} · ${module} · ${action} · ${ap} · ${gp}`;
 }
 
+export function residentOperatorWarnings(
+  row: ResidentDashboardRow | undefined,
+  benchmarkSignal?: ResidentBenchmarkSignal,
+): ResidentOperatorWarning[] {
+  if (!row) {
+    return [{ tone: 'warn', summary: 'No live resident snapshot yet.', detail: 'Wait for the controller or city read model to publish this resident.' }];
+  }
+
+  const warnings: ResidentOperatorWarning[] = [];
+  const feed = row.feed || row.body?.feed;
+  if (!row.online) {
+    warnings.push({ tone: 'fail', summary: 'Resident is offline in the live controller snapshot.', detail: 'Login or top up AP before expecting new actions.' });
+  }
+  if (residentNeedsAp(row)) {
+    warnings.push({ tone: 'warn', summary: `AP low (${row.attention ?? 0}); top-up may be needed soon.`, detail: 'Attention is the resident life-force.' });
+  }
+  if (!feed) {
+    warnings.push({ tone: 'warn', summary: 'No live feed attached; latest action/speech may be stale.', detail: 'Start spectator or wait for the gateway feed.' });
+  } else if (feed.ageMs !== undefined && feed.ageMs > STALE_FEED_MS) {
+    warnings.push({ tone: 'warn', summary: `Feed stale (${Math.round(feed.ageMs / 1000)}s old).`, detail: 'Live action/speech may lag the controller.' });
+  }
+  if (residentGoldEvidenceLabel(row).value === 'not observed') {
+    warnings.push({ tone: 'warn', summary: 'No coin-995 GP evidence in current snapshot.', detail: 'Do not imply this resident can pay GP yet.' });
+  }
+  if (!row.thinking?.activePlan) {
+    warnings.push({ tone: 'warn', summary: 'No active plan published by thinking module.', detail: 'Goal pursuit may be opaque from the dashboard.' });
+  }
+  if (!row.storyArc?.summary && !row.storyArc?.latestEventKind) {
+    warnings.push({ tone: 'warn', summary: 'Library strategy evidence is still thin for this resident.', detail: 'Run Storyteller/digest or wait for progress evidence.' });
+  }
+  if (benchmarkSignal && benchmarkSignal.tone !== 'ok') {
+    warnings.push({ tone: benchmarkSignal.tone, summary: benchmarkSignal.summary, detail: benchmarkSignal.detail });
+  }
+
+  return warnings.length ? warnings : [{
+    tone: 'ok',
+    summary: 'No immediate AP/feed/strategy warnings detected.',
+    detail: 'Resident has current AP, GP, plan, feed, story, and benchmark signals.',
+  }];
+}
+
 export function residentNeedsAp(row: ResidentDashboardRow): boolean {
   return typeof row.attention === 'number' && row.attention <= LOW_AP_THRESHOLD;
 }
@@ -101,6 +154,17 @@ function modelParts(row: ResidentDashboardRow): { value: string; detail?: string
 
 function activeModule(row: ResidentDashboardRow): SparkModuleSummary | undefined {
   return row.stack?.activeModule || row.spark?.activeModule || row.stack?.configuredModules?.[0] || row.spark?.modules?.[0];
+}
+
+function residentGoalLabel(row: ResidentDashboardRow): string {
+  return row.thinking?.activePlan || row.stack?.soulTitle || row.stack?.soulId || row.storyArc?.summary || '-';
+}
+
+function residentGoalDetail(row: ResidentDashboardRow): string {
+  if (row.thinking?.activePlan) return 'plan';
+  if (row.stack?.soulTitle || row.stack?.soulId) return 'soul';
+  if (row.storyArc?.summary) return 'library';
+  return '-';
 }
 
 function actionDetail(row: ResidentDashboardRow): string {
