@@ -14,6 +14,7 @@
   import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { printQueueInsights } from './lib/print-queue-insights';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
 
@@ -132,6 +133,7 @@
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
+  let cityPrintInsights = printQueueInsights([], [], []);
   let cityResidentStoryEvents: ResidentStoryEvent[] = [];
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
@@ -294,6 +296,7 @@
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
+  $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityResidents = overview?.residents || residents;
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
@@ -570,6 +573,9 @@
       citySelectedThread = cityInboxThreadId ? await cityLoad(cityApi.inboxThread(cityInboxThreadId), undefined) : undefined;
     }
     if (activeRoute === '/prints' || activeRoute === '/prints/new' || cityPrintId) {
+      if (citySession.admin) {
+        cityPrintQueue = (await cityLoad(cityApi.adminPrintQueue(), { queue: [] })).queue;
+      }
       cityPrintRequests = (await cityLoad(cityApi.prints(), { requests: [] })).requests;
       citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
     }
@@ -649,6 +655,8 @@
       activeRoute === '/profile' ||
       activeRoute === '/inbox' ||
       activeRoute.startsWith('/inbox/') ||
+      activeRoute === '/prints' ||
+      activeRoute.startsWith('/prints/') ||
       activeRoute.startsWith('/residents/') ||
       activeRoute.startsWith('/admin');
   }
@@ -801,7 +809,10 @@
         path: '/prints',
         tone: 'amber',
         metric: `${activePrints.toLocaleString()} active`,
-        detail: 'GP burn and printer queue status',
+        detail:
+          cityPrintInsights.ncriTrades.pending > 0
+            ? `${cityPrintInsights.ncriTrades.pending.toLocaleString()} NCRI trade${cityPrintInsights.ncriTrades.pending === 1 ? '' : 's'} pending`
+            : 'GP burn and printer queue status',
       },
     ];
   }
@@ -3682,7 +3693,45 @@
         <div class="city-queue-meter">
           <span style={`--queue-fill: ${Math.min(100, activePrintCount() * 20)}%`}></span>
         </div>
-        <div class="city-empty-state"><strong>{activePrintCount()} active</strong><span>Admin printer assignment appears in queue admin.</span></div>
+        <div class="city-resident-profile-grid">
+          <span><small>Active</small><strong>{cityPrintInsights.activeRequests}</strong></span>
+          <span><small>Awaiting GP</small><strong>{cityPrintInsights.awaitingPayment}</strong></span>
+          <span><small>Paid no queue</small><strong>{cityPrintInsights.paidWithoutQueue}</strong></span>
+          <span><small>Printing</small><strong>{cityPrintInsights.printing}</strong></span>
+        </div>
+        <div class="city-record-list compact">
+          {#each cityPrintInsights.warnings as warning, index (`${warning}:${index}`)}
+            <article>
+              <span class={`tag ${warning.startsWith('No queue') ? 'ok' : 'warn'}`}>{warning.startsWith('No queue') ? 'ok' : 'warn'}</span>
+              <div>
+                <strong>{warning}</strong>
+                <small>Queue signal derived from print request and queue records.</small>
+              </div>
+            </article>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">NCRI Signals</div>
+        <div class="city-resident-profile-grid">
+          <span><small>Pending</small><strong>{cityPrintInsights.ncriTrades.pending}</strong></span>
+          <span><small>Accepted</small><strong>{cityPrintInsights.ncriTrades.accepted}</strong></span>
+          <span><small>Failed</small><strong>{cityPrintInsights.ncriTrades.failed}</strong></span>
+          <span><small>Recent</small><strong>{cityPrintInsights.ncriTrades.recent.length}</strong></span>
+        </div>
+        <div class="city-record-list compact">
+          {#each cityPrintInsights.ncriTrades.recent as signal (signal.id)}
+            <article>
+              <span class={`tag ${residentTradeTone(signal.status)}`}>{signal.status}</span>
+              <div>
+                <strong>{signal.requestedItem}</strong>
+                <small>{signal.residentId} · {timeAgo(signal.updatedAt)}</small>
+              </div>
+            </article>
+          {:else}
+            <div class="city-empty-state"><strong>No NCRI trade prompts</strong><span>NCRI-related AP/GP exchange requests appear here once issued.</span></div>
+          {/each}
+        </div>
       </div>
     </section>
   {/if}
