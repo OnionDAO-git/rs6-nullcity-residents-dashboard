@@ -9,7 +9,7 @@
   import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
-  import { residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
+  import { residentGoldEvidenceLabel, residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -1835,6 +1835,66 @@
     return parts.join(' | ');
   }
 
+  function residentActiveModule(row: ResidentDashboardRow | undefined) {
+    return row?.stack?.activeModule || row?.spark?.activeModule || row?.stack?.configuredModules?.[0] || row?.spark?.modules?.[0];
+  }
+
+  function residentModelProfileLabel(row: ResidentDashboardRow | undefined): string {
+    const profile = row?.stack?.model || row?.stack?.brain || row?.stack?.body;
+    return profile?.model || stringField(row?.thinking?.latestInference, 'model') || '-';
+  }
+
+  function residentEndpointLabel(row: ResidentDashboardRow | undefined): string {
+    const profile = row?.stack?.model || row?.stack?.brain || row?.stack?.body;
+    return profile?.endpoint || stringField(row?.thinking?.latestInference, 'endpoint') || stringField(row?.thinking?.latestInference, 'provider') || '-';
+  }
+
+  function residentSparkLabel(row: ResidentDashboardRow | undefined): string {
+    const module = residentActiveModule(row);
+    return module ? `${module.id}${module.version ? `@${module.version}` : ''}` : '-';
+  }
+
+  function residentSparkDetail(row: ResidentDashboardRow | undefined): string {
+    const module = residentActiveModule(row);
+    return module?.source || '-';
+  }
+
+  function residentPlanLabel(row: ResidentDashboardRow | undefined): string {
+    return row?.thinking?.activePlan || 'No active plan published';
+  }
+
+  function residentActionLabel(row: ResidentDashboardRow | undefined): string {
+    if (!row) return '-';
+    const action = row.body?.lastAction;
+    if (!action) return row.lastEvent?.kind || '-';
+    return [action.kind, action.result, action.source].filter(Boolean).join(' | ') || '-';
+  }
+
+  function residentSpeechLabel(row: ResidentDashboardRow | undefined): string {
+    if (!row) return '-';
+    if (row.feed?.latestEventKind === 'say' && row.feed.latestEventText) return row.feed.latestEventText;
+    if (row.lastEvent?.kind === 'say' && row.lastEvent.text) return row.lastEvent.text;
+    return cityResidentPosts[0]?.body || row.lastEvent?.text || '-';
+  }
+
+  function residentLibraryStrategyLabel(row: ResidentDashboardRow | undefined): string {
+    if (!row) return '-';
+    return row.storyArc?.summary || residentStoryArcDetail(row) || row.storyArc?.phase || '-';
+  }
+
+  function residentCapabilityWarnings(row: ResidentDashboardRow | undefined): string[] {
+    if (!row) return ['No live resident snapshot yet.'];
+    const warnings: string[] = [];
+    if (!row.online) warnings.push('Resident is offline in the live controller snapshot.');
+    if (residentNeedsAp(row)) warnings.push(`AP low (${row.attention ?? 0}); top-up may be needed soon.`);
+    if (!row.feed) warnings.push('No live feed attached; latest action/speech may be stale.');
+    if (row.feed?.ageMs !== undefined && row.feed.ageMs > 120000) warnings.push(`Feed stale (${Math.round(row.feed.ageMs / 1000)}s old).`);
+    if (residentGoldEvidenceLabel(row).value === 'not observed') warnings.push('No coin-995 GP evidence in current snapshot.');
+    if (!row.thinking?.activePlan) warnings.push('No active plan published by thinking module.');
+    if (!row.storyArc?.summary && !row.storyArc?.latestEventKind) warnings.push('Library strategy evidence is still thin for this resident.');
+    return warnings.length ? warnings : ['No immediate AP/feed/strategy warnings detected.'];
+  }
+
   function residentHealthTone(row: ResidentDashboardRow): string {
     const status = residentHealthSummary(row).status;
     if (status === 'stuck') return 'fail';
@@ -3161,6 +3221,38 @@
           <div class="city-empty-state subtle">
             <strong>{residentLoopSummaryLine(cityResident)}</strong>
             <span>GP is shown only when coin-995 inventory evidence appears in the live dashboard snapshot.</span>
+          </div>
+        </div>
+        <div class="city-panel span-2">
+          <div class="panel-title">Model + Goal Contract</div>
+          <div class="city-resident-profile-grid">
+            <span><small>Model profile</small><strong>{residentModelProfileLabel(cityResident)}</strong></span>
+            <span><small>Endpoint</small><strong>{residentEndpointLabel(cityResident)}</strong></span>
+            <span><small>SPARK module</small><strong>{residentSparkLabel(cityResident)}</strong></span>
+            <span><small>Module source</small><strong>{residentSparkDetail(cityResident)}</strong></span>
+            <span><small>Current plan</small><strong>{residentPlanLabel(cityResident)}</strong></span>
+            <span><small>Recent action</small><strong>{residentActionLabel(cityResident)}</strong></span>
+          </div>
+          <div class="city-copy-block">
+            <strong>Recent speech: {residentSpeechLabel(cityResident)}</strong>
+            <p>Library strategy: {residentLibraryStrategyLabel(cityResident)}</p>
+          </div>
+        </div>
+        <div class="city-panel span-2">
+          <EconomyPanel resident={cityResident.name} refreshMs={10000} />
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Capability Warnings</div>
+          <div class="city-record-list">
+            {#each residentCapabilityWarnings(cityResident) as warning, index (warning + index)}
+              <article>
+                <span class={warning.startsWith('No immediate') ? 'tag ok' : 'tag warn'}>{warning.startsWith('No immediate') ? 'ok' : 'warn'}</span>
+                <div>
+                  <strong>{warning}</strong>
+                  <small>AP/GP, feed freshness, and live plan signals</small>
+                </div>
+              </article>
+            {/each}
           </div>
         </div>
       {/if}
