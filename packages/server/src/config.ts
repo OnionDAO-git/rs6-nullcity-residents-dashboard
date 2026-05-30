@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 const repoRoot = path.resolve(import.meta.dir, '../../../..');
-const serverRoot = process.env.NULLCITY_SERVER_ROOT || path.join(repoRoot, 'nullcity-server');
+const serverRoot = process.env.NULLCITY_SERVER_ROOT || defaultServerRoot(repoRoot);
 const defaultGatewayUrl = 'ws://127.0.0.1:43595';
 const defaultGatewayToken = 'nullcity-local-dev';
 
@@ -39,6 +39,10 @@ export function dashboardDataRoots(root: string): Pick<
 }
 
 const dataRoots = dashboardDataRoots(serverRoot);
+
+export function defaultServerRoot(root: string): string {
+  return path.join(root, 'rs6-nullcity-server');
+}
 
 export const config: DashboardConfig = {
   host: process.env.DASHBOARD_HOST || '127.0.0.1',

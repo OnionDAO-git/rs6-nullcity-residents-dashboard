@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
-import { dashboardDataRoots, normalizeRsClientHost, parseRsClientHost } from './config';
+import { dashboardDataRoots, defaultServerRoot, normalizeRsClientHost, parseRsClientHost } from './config';
+
+describe('defaultServerRoot', () => {
+  test('points at the sibling rs6-nullcity-server checkout used by the weekend automation', () => {
+    expect(defaultServerRoot('/tmp/oniondao')).toBe(path.join('/tmp/oniondao', 'rs6-nullcity-server'));
+  });
+});
 
 describe('dashboardDataRoots', () => {
   test('defaults to controller-discoverable rs6 server data directories', () => {
