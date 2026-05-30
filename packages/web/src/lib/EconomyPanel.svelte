@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { api, type ResidentEconomy, type EconomyEvent, type ActiveGoal } from './api';
+  import { summarizeNcriEvents } from './economy-insights';
   import { timeAgo } from './format';
 
   interface Props {
@@ -17,6 +18,7 @@
   let error = $state('');
   let lastFetchedResident = '';
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  const ncriSummary = $derived(summarizeNcriEvents(economy?.recentEvents ?? []));
 
   async function load(showSpinner = false): Promise<void> {
     if (!resident) return;
@@ -67,6 +69,13 @@
     if ((event.apDelta ?? 0) > 0 || (event.gpDelta ?? 0) > 0) return 'tag ok';
     return 'tag';
   }
+
+  function ncriToneClass(): string {
+    if (!ncriSummary) return 'tag';
+    if (ncriSummary.redemptionCount > 0) return 'tag ok';
+    if (ncriSummary.saleCount > 0) return 'tag warn';
+    return 'tag';
+  }
 </script>
 
 <section class="panel economy-panel" data-testid="economy-panel">
@@ -106,6 +115,30 @@
     {:else}
       <div class="empty">No economy events yet</div>
     {/each}
+  </div>
+
+  <div class="panel-subtitle">NCRI signals</div>
+  <div class="event-list economy-events">
+    {#if ncriSummary}
+      <div class="event-row">
+        <span class={ncriToneClass()}>ncri</span>
+        <span>
+          <strong>{ncriSummary.saleCount} sale{ncriSummary.saleCount === 1 ? '' : 's'} · {ncriSummary.redemptionCount} redemption{ncriSummary.redemptionCount === 1 ? '' : 's'}</strong>
+          <small>{formatDelta(ncriSummary.netApDelta)} AP · {formatDelta(ncriSummary.netGpDelta)} GP · {ncriSummary.eventCount} event{ncriSummary.eventCount === 1 ? '' : 's'}</small>
+        </span>
+      </div>
+      {#if ncriSummary.recentNcriIds.length}
+        <div class="event-row">
+          <span class="tag">ids</span>
+          <span>
+            <strong>{ncriSummary.recentNcriIds.join(', ')}</strong>
+            <small>most recent NCRI ids from resident economy events</small>
+          </span>
+        </div>
+      {/if}
+    {:else}
+      <div class="empty">No NCRI events in this recent window</div>
+    {/if}
   </div>
 
   <div class="panel-subtitle">Active goals</div>
