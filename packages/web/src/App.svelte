@@ -3729,6 +3729,9 @@
           <span><small>Awaiting GP</small><strong>{cityPrintInsights.awaitingPayment}</strong></span>
           <span><small>Paid no queue</small><strong>{cityPrintInsights.paidWithoutQueue}</strong></span>
           <span><small>Printing</small><strong>{cityPrintInsights.printing}</strong></span>
+          <span><small>Unassigned</small><strong>{cityPrintInsights.queueHealth.unassignedActive}</strong></span>
+          <span><small>Queue failed</small><strong>{cityPrintInsights.queueHealth.failed}</strong></span>
+          <span><small>Orphaned</small><strong>{cityPrintInsights.queueHealth.orphaned}</strong></span>
         </div>
         <div class="city-record-list compact">
           {#each cityPrintInsights.warnings as warning, index (`${warning}:${index}`)}
@@ -3738,6 +3741,16 @@
                 <strong>{warning}</strong>
                 <small>Queue signal derived from print request and queue records.</small>
               </div>
+            </article>
+          {/each}
+          {#each cityPrintInsights.queueHealth.blockers as blocker (blocker.id)}
+            <article>
+              <span class="tag warn">{blocker.status}</span>
+              <div>
+                <strong>{blocker.reason}</strong>
+                <small>{blocker.printRequestId} · {blocker.printerId || 'no printer'} · {timeAgo(blocker.updatedAt)}</small>
+              </div>
+              <button onclick={() => cityNav(`/prints/${encodeURIComponent(blocker.printRequestId)}`)}>Open</button>
             </article>
           {/each}
         </div>
@@ -3867,6 +3880,28 @@
               </article>
             {:else}
               <div class="city-empty-state"><strong>No queue entries</strong><span>Paid and approved print jobs will appear here.</span></div>
+            {/each}
+          </div>
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Queue Diagnostics</div>
+          <div class="city-resident-profile-grid">
+            <span><small>Unassigned</small><strong>{cityPrintInsights.queueHealth.unassignedActive}</strong></span>
+            <span><small>Failed</small><strong>{cityPrintInsights.queueHealth.failed}</strong></span>
+            <span><small>Orphaned</small><strong>{cityPrintInsights.queueHealth.orphaned}</strong></span>
+            <span><small>Printing</small><strong>{cityPrintInsights.printing}</strong></span>
+          </div>
+          <div class="city-record-list compact">
+            {#each cityPrintInsights.queueHealth.blockers as blocker (blocker.id)}
+              <article>
+                <span class="tag warn">{blocker.status}</span>
+                <div>
+                  <strong>{blocker.reason}</strong>
+                  <small>{blocker.printRequestId} · {blocker.printerId || 'no printer'} · {timeAgo(blocker.updatedAt)}</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No queue blockers</strong><span>Queue assignment and request linkage look healthy.</span></div>
             {/each}
           </div>
         </div>
