@@ -23,6 +23,7 @@
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, isProtectedCityRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
+  import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -157,6 +158,7 @@
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
   let cityPrintInsights = printQueueInsights([], [], []);
+  let cityPrintResidentSignals: PrintResidentSignal[] = [];
   let cityReleaseReadiness: ReleaseReadinessSummary = buildReleaseReadiness({
     residents: [],
     storyDigests: [],
@@ -339,6 +341,7 @@
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
+  $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
   $: cityResidents = overview?.residents || residents;
   $: cityReleaseReadiness = buildReleaseReadiness({
     residents: cityResidents,
@@ -2111,6 +2114,32 @@
   function residentLibraryStrategyLabel(row: ResidentDashboardRow | undefined): string {
     if (!row) return '-';
     return row.storyArc?.summary || residentStoryArcDetail(row) || row.storyArc?.phase || '-';
+  }
+
+  function printResidentSignalTone(signal: PrintResidentSignal): 'ok' | 'warn' {
+    if (!signal.resident) return 'warn';
+    return residentNeedsAp(signal.resident) ? 'warn' : 'ok';
+  }
+
+  function printResidentSignalLabel(signal: PrintResidentSignal): string {
+    const row = signal.resident;
+    const id = row?.name || signal.residentId;
+    const apLabel = row?.attention === undefined ? 'AP unknown' : `${row.attention} AP`;
+    const planLabel = residentPlanLabel(row);
+    return `${residentDisplayName(id)} · ${apLabel} · ${planLabel}`;
+  }
+
+  function printResidentSignalDetail(signal: PrintResidentSignal): string {
+    const row = signal.resident;
+    const stack = [residentModelProfileLabel(row), residentEndpointLabel(row), residentSparkLabel(row)]
+      .filter(value => value && value !== '-')
+      .join(' | ');
+    const activity = [residentActionLabel(row), residentSpeechLabel(row)]
+      .filter(value => value && value !== '-')
+      .join(' · ');
+    const sourceLabel = signal.sources.map(source => source === 'ncri_trade' ? 'ncri trade' : 'registry').join(' + ') || 'ncri';
+    const ageLabel = signal.latestAt ? timeAgo(signal.latestAt) : 'undated';
+    return [sourceLabel, stack || 'model/endpoint/SPARK unavailable', activity || 'no recent action/speech', ageLabel].join(' · ');
   }
 
   function residentBenchmarkLabel(row: ResidentDashboardRow | undefined): { tone: 'ok' | 'warn' | 'fail'; summary: string; detail: string } {
@@ -3969,6 +3998,20 @@
             {/each}
           </div>
         {/if}
+        <div class="city-record-list compact">
+          {#each cityPrintResidentSignals as signal (signal.residentId)}
+            <article>
+              <span class={`tag ${printResidentSignalTone(signal)}`}>{printResidentSignalTone(signal)}</span>
+              <div>
+                <strong>{printResidentSignalLabel(signal)}</strong>
+                <small>{printResidentSignalDetail(signal)}</small>
+              </div>
+              <button onclick={() => cityNav(`/residents/${encodeURIComponent(signal.resident?.name || signal.residentId)}`)}>Resident</button>
+            </article>
+          {:else}
+            <div class="city-empty-state"><strong>No resident print loop signals</strong><span>NCRI registry owners and NCRI trade residents will appear here with AP/model/SPARK context.</span></div>
+          {/each}
+        </div>
         <div class="city-record-list compact">
           {#each cityPrintInsights.ncriTrades.recent as signal (signal.id)}
             <article>
