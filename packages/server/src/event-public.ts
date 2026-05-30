@@ -49,19 +49,22 @@ async function routeWall(url: URL, context: PublicRouteContext): Promise<Respons
     readGraveyardEntries(context.config.memoryRoot),
     readFactionStockpiles(context.config.memoryRoot),
   ]);
+  const publicLetters = recentLetters.filter(letter => !isSyntheticLetter(letter));
   return jsonResponse({
-    recentLetters,
-    letters: recentLetters,
-    residents: library.map(entry => ({
-      slug: entry.slug,
-      displayName: entry.displayName,
-      alive: entry.currentState !== 'deceased',
-      factionId: entry.factionId,
-      factionDisplayName: entry.factionDisplayName,
-      factionColor: entry.factionColor,
-      activeGoal: entry.currentWants[0],
-      arcPhase: entry.arcPhase,
-    })),
+    recentLetters: publicLetters,
+    letters: publicLetters,
+    residents: library
+      .filter(entry => !isSyntheticSlug(entry.slug))
+      .map(entry => ({
+        slug: entry.slug,
+        displayName: entry.displayName,
+        alive: entry.currentState !== 'deceased',
+        factionId: entry.factionId,
+        factionDisplayName: entry.factionDisplayName,
+        factionColor: entry.factionColor,
+        activeGoal: entry.currentWants[0],
+        arcPhase: entry.arcPhase,
+      })),
     factionStockpiles: stockpiles,
     deathsToday: graveyard.filter(entry => isToday(entry.diedAt)).length,
     asOf: new Date().toISOString(),
@@ -416,6 +419,11 @@ function isToday(iso: string): boolean {
 
 function isSyntheticSlug(slug: string): boolean {
   return /^res-(qa-|bench-|test-|tmp-|synthetic-)/i.test(residentSlug(slug));
+}
+
+function isSyntheticLetter(letter: unknown): boolean {
+  const senderResident = stringField(asRecord(letter), 'senderResident');
+  return senderResident ? isSyntheticSlug(senderResident) : false;
 }
 
 interface LibraryEntry {

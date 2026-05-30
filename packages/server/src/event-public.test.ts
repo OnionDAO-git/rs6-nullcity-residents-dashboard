@@ -106,6 +106,49 @@ describe('routePublicEventApi', () => {
     });
   });
 
+  test('omits QA and synthetic residents from the public wall snapshot', async () => {
+    await withPublicApi(async ({ config, runtime }) => {
+      await fs.mkdir(path.join(config.memoryRoot, 'data', 'letters', 'bob-onion'), { recursive: true });
+      await fs.writeFile(
+        path.join(config.memoryRoot, 'data', 'letters', 'bob-onion', 'inbox.jsonl'),
+        `${JSON.stringify({
+          kind: 'broadcast',
+          recipient: 'bob@onion',
+          senderResident: 'res:qa-angler',
+          subject: '[Broadcast] On the passing of res:qa-angler',
+          body: '',
+          dispatchedAt: '2026-05-27T12:03:00.000Z',
+          deliveryChannels: ['web-inbox'],
+        })}\n`,
+      );
+      await fs.mkdir(path.join(config.memoryRoot, 'library', 'res-qa-angler'), { recursive: true });
+      await fs.writeFile(
+        path.join(config.memoryRoot, 'library', 'res-qa-angler', 'portrait.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          residentName: 'QA Angler',
+          currentState: 'living',
+          livesCount: 1,
+          wants: { current: ['catch fixture fish'] },
+          lastUpdated: { ts: '2026-05-27T12:02:00.000Z' },
+        }),
+      );
+
+      const wall = await routePublicEventApi(new Request('http://local/v1/wall/snapshot'), new URL('http://local/v1/wall/snapshot'), {
+        config,
+        runtime,
+      });
+
+      expect(wall?.status).toBe(200);
+      const payload = await wall!.json() as {
+        recentLetters: Array<{ senderResident?: string }>;
+        residents: Array<{ slug: string; displayName: string }>;
+      };
+      expect(payload.recentLetters.map(letter => letter.senderResident)).toEqual(['res:fern']);
+      expect(payload.residents.map(resident => resident.slug)).toEqual(['res-fern']);
+    });
+  });
+
   test('credits daily patron check-ins and persists the dashboard-side ledgers', async () => {
     await withPublicApi(async ({ config, runtime }) => {
       const url = new URL('http://local/v1/patron/checkin?human=alice%40onion');
