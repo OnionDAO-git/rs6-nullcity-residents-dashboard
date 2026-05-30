@@ -37,7 +37,7 @@
   import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
-  import { residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
+  import { residentDetailEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -969,20 +969,21 @@
     return 'Residents appear here after the public dashboard snapshot reports them.';
   }
 
-  function residentProfileSnapshotUnavailable(): boolean {
-    return cityResidents.length === 0 && residentRosterHasLiveHints();
+  function residentMissingState() {
+    return residentDetailEmptyState({
+      loading,
+      residentCount: cityResidents.length,
+      hasLiveHints: residentRosterHasLiveHints(),
+      cityDataError,
+    });
   }
 
   function residentMissingTitle(): string {
-    return residentProfileSnapshotUnavailable() ? 'Live snapshot unavailable for this resident' : 'Resident not found in public city data';
+    return residentMissingState().title;
   }
 
   function residentMissingDetail(): string {
-    if (residentProfileSnapshotUnavailable()) {
-      if (cityDataError) return `${cityDataError}. The resident may still be in ops/debug data while the public city row catches up.`;
-      return 'The resident may still be in ops/debug data while the public city row catches up.';
-    }
-    return 'Check the directory or ops roster for the current resident id.';
+    return residentMissingState().detail;
   }
 
   function residentLoopLine(signal: string, limit = 78): string {
