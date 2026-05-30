@@ -23,6 +23,7 @@
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, isProtectedCityRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
+  import { printResidentProofSignal } from './lib/print-resident-proof';
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
@@ -2116,9 +2117,8 @@
     return row.storyArc?.summary || residentStoryArcDetail(row) || row.storyArc?.phase || '-';
   }
 
-  function printResidentSignalTone(signal: PrintResidentSignal): 'ok' | 'warn' {
-    if (!signal.resident) return 'warn';
-    return residentNeedsAp(signal.resident) ? 'warn' : 'ok';
+  function printResidentSignalTone(signal: PrintResidentSignal): 'ok' | 'warn' | 'fail' {
+    return printResidentProofSignal(signal, cityBenchmarkRuns).tone;
   }
 
   function printResidentSignalLabel(signal: PrintResidentSignal): string {
@@ -2140,6 +2140,10 @@
     const sourceLabel = signal.sources.map(source => source === 'ncri_trade' ? 'ncri trade' : 'registry').join(' + ') || 'ncri';
     const ageLabel = signal.latestAt ? timeAgo(signal.latestAt) : 'undated';
     return [sourceLabel, stack || 'model/endpoint/SPARK unavailable', activity || 'no recent action/speech', ageLabel].join(' · ');
+  }
+
+  function printResidentSignalProof(signal: PrintResidentSignal): { tone: 'ok' | 'warn' | 'fail'; summary: string; detail: string } {
+    return printResidentProofSignal(signal, cityBenchmarkRuns);
   }
 
   function residentBenchmarkLabel(row: ResidentDashboardRow | undefined): { tone: 'ok' | 'warn' | 'fail'; summary: string; detail: string } {
@@ -4005,6 +4009,7 @@
               <div>
                 <strong>{printResidentSignalLabel(signal)}</strong>
                 <small>{printResidentSignalDetail(signal)}</small>
+                <small>{printResidentSignalProof(signal).summary}</small>
               </div>
               <button onclick={() => cityNav(`/residents/${encodeURIComponent(signal.resident?.name || signal.residentId)}`)}>Resident</button>
             </article>
