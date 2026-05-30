@@ -1,4 +1,10 @@
-import type { NullCityEconomyHeartbeatBridgeResponse, NullCityEconomyListingsBridgeResponse, NullCityLiveEconomyBridgeResponse } from './city-api';
+import type {
+  NullCityEconomyHeartbeatBridgeResponse,
+  NullCityEconomyListingsBridgeResponse,
+  NullCityLiveEconomyBridgeResponse,
+  NullCityLiveEconomyEvent,
+  NullCityLiveEconomyResident,
+} from './city-api';
 
 export interface LiveEconomySummary {
   tone: 'ok' | 'warn' | 'fail';
@@ -19,6 +25,19 @@ export interface EconomyListingsSummary {
   tone: 'ok' | 'warn' | 'fail';
   headline: string;
   detail: string;
+}
+
+export interface EconomyEventDisplay {
+  kindLabel: string;
+  title: string;
+  detail: string;
+}
+
+export interface EconomyResidentDisplay {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  status: string;
 }
 
 export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse | undefined): LiveEconomySummary {
@@ -90,6 +109,36 @@ export function summarizeEconomyListings(response: NullCityEconomyListingsBridge
     detail: latest
       ? `Latest: ${latest.displayName} from ${latest.sourceResidentName || latest.owner}`
       : 'No approved, available NCRIs are listed for AP/GP trades yet.',
+  };
+}
+
+export function economyEventDisplay(event: NullCityLiveEconomyEvent): EconomyEventDisplay {
+  const deltas = [
+    event.apDelta !== undefined ? `AP ${signed(event.apDelta)}` : undefined,
+    event.gpDelta !== undefined ? `GP ${signed(event.gpDelta)}` : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+  return {
+    kindLabel: event.kind.replace(/_/g, ' '),
+    title: [event.residentName || 'city', ...deltas].join(' · '),
+    detail: event.cityUserId || event.refId || event.note || 'public',
+  };
+}
+
+export function economyResidentDisplay(resident: NullCityLiveEconomyResident): EconomyResidentDisplay {
+  const tone: EconomyResidentDisplay['tone'] = resident.online && resident.activeInWindow
+    ? 'ok'
+    : resident.online || resident.activeInWindow
+      ? 'warn'
+      : 'warn';
+  const status = resident.online
+    ? resident.activeInWindow ? 'online + active' : 'online'
+    : resident.activeInWindow ? 'active recently' : 'offline';
+  const recentEvents = resident.windowEventCount === 1 ? '1 recent event' : `${resident.windowEventCount.toLocaleString()} recent events`;
+  return {
+    tone,
+    title: resident.residentName,
+    detail: `${resident.attentionBalance.toLocaleString()} AP · GP Δ ${signed(resident.gpNetDelta)} · ${recentEvents}`,
+    status,
   };
 }
 

@@ -77,4 +77,10 @@ describe('dashboard route helpers', () => {
     expect(cityRouteNeedsSnapshot('/story/run-2026-05-30')).toBe(false);
     expect(cityRouteNeedsSnapshot('/residents/res%3Aagent')).toBe(true);
   });
+
+  test('keeps the live economy route public while loading city state', () => {
+    expect(isKnownCityRoute('/economy')).toBe(true);
+    expect(isProtectedCityRoute('/economy')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/economy')).toBe(true);
+  });
 });

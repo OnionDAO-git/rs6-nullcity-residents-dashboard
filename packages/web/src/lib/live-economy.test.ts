@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy } from './live-economy';
+import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy } from './live-economy';
 import type { NullCityEconomyHeartbeatBridgeResponse, NullCityEconomyListingsBridgeResponse, NullCityLiveEconomyBridgeResponse } from './city-api';
 
 describe('summarizeLiveEconomy', () => {
@@ -104,6 +104,63 @@ describe('summarizeEconomyListings', () => {
       tone: 'ok',
       headline: '1 NCRI listed',
       detail: 'Latest: Abyssal Whip of the City from res:hans',
+    });
+  });
+});
+
+describe('economy row display helpers', () => {
+  test('formats AP and GP deltas without dropping zero-value resident context', () => {
+    expect(economyEventDisplay({
+      id: 'evt-1',
+      ts: '2026-05-30T18:00:00.000Z',
+      kind: 'ap_gp_exchange',
+      residentName: 'res:qa-trader',
+      apDelta: 100,
+      gpDelta: -50,
+      cityUserId: '<operator>',
+    })).toEqual({
+      kindLabel: 'ap gp exchange',
+      title: 'res:qa-trader · AP +100 · GP -50',
+      detail: '<operator>',
+    });
+
+    expect(economyEventDisplay({
+      id: 'evt-2',
+      ts: '2026-05-30T18:01:00.000Z',
+      kind: 'gp_observed',
+      residentName: 'res:hans',
+      gpDelta: 0,
+    }).title).toBe('res:hans · GP 0');
+  });
+
+  test('summarizes resident AP, GP, online, and window activity for dense viewer rows', () => {
+    expect(economyResidentDisplay({
+      residentName: 'res:hans',
+      attentionBalance: 4200,
+      gpNetDelta: 25,
+      eventCount: 9,
+      windowEventCount: 3,
+      activeInWindow: true,
+      online: true,
+      lastEventTs: '2026-05-30T18:00:00.000Z',
+    })).toEqual({
+      tone: 'ok',
+      title: 'res:hans',
+      detail: '4,200 AP · GP Δ +25 · 3 recent events',
+      status: 'online + active',
+    });
+
+    expect(economyResidentDisplay({
+      residentName: 'res:quiet',
+      attentionBalance: 0,
+      gpNetDelta: 0,
+      eventCount: 0,
+      windowEventCount: 0,
+      activeInWindow: false,
+      online: false,
+    })).toMatchObject({
+      tone: 'warn',
+      status: 'offline',
     });
   });
 });

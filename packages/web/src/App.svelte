@@ -9,7 +9,7 @@
   import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
-  import { summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
+  import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, type ResidentEconomyGpEvidence } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
@@ -667,6 +667,19 @@
     if (activeRoute === '/') {
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
     }
+    if (activeRoute === '/economy') {
+      const liveEconomyResidentLimit = Math.max(50, (overview?.residents || residents).length);
+      const [liveEconomyPayload, heartbeatPayload, listingsPayload] = await Promise.all([
+        cityLoad(cityApi.nullcityEconomyLive({ limit: 30, residentLimit: liveEconomyResidentLimit }), { available: false, error: 'not_configured' }),
+        cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
+        citySession.admin
+          ? cityLoad(cityApi.adminNullcityEconomyListings(), { available: false, listings: [], error: 'not_configured' })
+          : Promise.resolve({ available: false, listings: [], error: 'admin_only' } as NullCityEconomyListingsBridgeResponse),
+      ]);
+      cityLiveEconomy = liveEconomyPayload;
+      cityEconomyHeartbeat = heartbeatPayload;
+      cityEconomyListings = listingsPayload;
+    }
     if (activeRoute === '/embassy/new') {
       cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
       citySelectedProposal = undefined;
@@ -935,6 +948,15 @@
         tone: 'blue',
         metric: rows.length.toLocaleString(),
         detail: `${lowAp.toLocaleString()} need attention`,
+      },
+      {
+        label: 'AP/GP Economy',
+        path: '/economy',
+        tone: 'teal',
+        metric: cityLiveEconomy.snapshot ? `${cityLiveEconomy.snapshot.city.attentionTotal.toLocaleString()} AP` : cityEconomyHeartbeat.available ? 'heartbeat' : 'bridge',
+        detail: cityLiveEconomy.snapshot
+          ? `${cityLiveEconomy.snapshot.city.activeResidentCount.toLocaleString()} active · GP Δ ${cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString()}`
+          : 'Live point flow and resident economy status',
       },
       {
         label: 'Inbox',
@@ -3082,6 +3104,8 @@
         {@render CityWorld()}
       {:else if route === '/story' || route.startsWith('/story/')}
         {@render CityStory()}
+      {:else if route === '/economy'}
+        {@render CityEconomy()}
       {:else if route === '/embassy' || route === '/embassy/new' || route.startsWith('/embassy/')}
         {@render CityEmbassy()}
       {:else if route === '/residents'}
@@ -3347,6 +3371,146 @@
         {/each}
       </div>
       <button onclick={() => cityNav('/prints')}>Prints</button>
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CityEconomy()}
+  <section class="city-page-head">
+    <p class="kicker">AP / GP Economy</p>
+    <h1>Attention and Gold Flow</h1>
+    <p class="city-lede">Live resident attention, RuneScape coin movement, Soul funding, and NCRI listing signals.</p>
+  </section>
+
+  <section class="city-dashboard-grid">
+    <div class={`city-panel span-2 tone-${cityLiveEconomySummary.tone}`}>
+      <div class="row">
+        <div>
+          <div class="panel-title">City Totals</div>
+          <strong>{cityLiveEconomySummary.headline}</strong>
+          <small>{cityLiveEconomySummary.detail}</small>
+        </div>
+        <span class={`tag ${cityLiveEconomySummary.tone}`}>{cityLiveEconomy.available ? 'live' : 'bridge'}</span>
+      </div>
+      <div class="city-resident-profile-grid">
+        <span><small>Residents</small><strong>{cityLiveEconomy.snapshot?.city.residentCount?.toLocaleString() || cityResidents.length.toLocaleString()}</strong></span>
+        <span><small>Active</small><strong>{cityLiveEconomy.snapshot?.city.activeResidentCount?.toLocaleString() || cityEconomyHeartbeat.heartbeat?.activeResidentCount?.toLocaleString() || '-'}</strong></span>
+        <span><small>AP Total</small><strong>{cityLiveEconomy.snapshot?.city.attentionTotal?.toLocaleString() || '-'}</strong></span>
+        <span><small>AP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.attentionDelta.toLocaleString() : '-'}</strong></span>
+        <span><small>GP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString() : '-'}</strong></span>
+        <span><small>Window</small><strong>{cityLiveEconomy.snapshot ? `${Math.round(cityLiveEconomy.snapshot.window.windowMs / 60000)}m` : '-'}</strong></span>
+      </div>
+    </div>
+
+    <div class={`city-panel tone-${cityEconomyHeartbeatSummary.tone}`}>
+      <div class="row">
+        <div>
+          <div class="panel-title">Controller Heartbeat</div>
+          <strong>{cityEconomyHeartbeatSummary.headline}</strong>
+          <small>{cityEconomyHeartbeatSummary.detail}</small>
+        </div>
+        <span class={`tag ${cityEconomyHeartbeatSummary.tone}`}>{cityEconomyHeartbeatSummary.degradedLabel}</span>
+      </div>
+      <div class="city-resident-profile-grid">
+        <span><small>Events</small><strong>{cityEconomyHeartbeat.heartbeat?.economyEventCount?.toLocaleString() || '-'}</strong></span>
+        <span><small>Uptime</small><strong>{cityEconomyHeartbeat.heartbeat ? `${Math.round(cityEconomyHeartbeat.heartbeat.controllerUptimeSec / 60)}m` : '-'}</strong></span>
+        <span><small>Last Event</small><strong>{cityEconomyHeartbeat.heartbeat?.lastEconomyEventKind?.replace(/_/g, ' ') || '-'}</strong></span>
+        <span><small>Digest</small><strong>{cityEconomyHeartbeat.heartbeat?.lastDigestBuiltAt ? `${timeAgo(cityEconomyHeartbeat.heartbeat.lastDigestBuiltAt)} ago` : '-'}</strong></span>
+      </div>
+    </div>
+
+    <div class="city-panel span-2">
+      <div class="row">
+        <div class="panel-title">Recent Economy Events</div>
+        <span class="tag">{cityLiveEconomySummary.eventLabel}</span>
+      </div>
+      <div class="city-record-list">
+        {#each cityLiveEconomy.snapshot?.recentEvents.slice(0, 10) || [] as event (event.id)}
+          {@const eventRow = economyEventDisplay(event)}
+          <article>
+            <span class="tag ok">{eventRow.kindLabel}</span>
+            <div>
+              <strong>{eventRow.title}</strong>
+              <small>{eventRow.detail} · {timeAgo(event.ts)} ago</small>
+            </div>
+          </article>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No AP/GP events in the live window</strong>
+            <span>Top-ups, AP decay, coin-995 exchange, GP trades, and NCRI events appear here when the bridge reports them.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">Top Residents</div>
+        <button onclick={() => cityNav('/residents')}>Directory</button>
+      </div>
+      <div class="city-record-list compact">
+        {#each cityLiveEconomy.snapshot?.topResidentsByAttention.slice(0, 8) || [] as resident (resident.residentName)}
+          {@const residentRow = economyResidentDisplay(resident)}
+          <article>
+            <span class={`tag ${residentRow.tone}`}>{residentRow.status}</span>
+            <div>
+              <strong>{residentRow.title}</strong>
+              <small>{residentRow.detail}</small>
+            </div>
+          </article>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No resident economy rows loaded</strong>
+            <span>The live economy bridge will show AP balance, coin-995 deltas, and activity by resident.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">Soul Funding</div>
+        <button onclick={() => cityNav('/embassy')}>Embassy</button>
+      </div>
+      <div class="city-card-list compact">
+        {#each cityLiveEconomy.snapshot?.pendingProposals.slice(0, 6) || [] as proposal (proposal.proposalId)}
+          <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.proposalId)}`)}>
+            <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+            <strong>{proposal.residentName}</strong>
+            <small>{proposal.apFunded.toLocaleString()} / {proposal.apThreshold.toLocaleString()} AP · {proposal.goalText}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No Souls are funding in this window</strong>
+            <span>Collective AP threshold progress appears here once proposals enter funding.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">NCRI Listings</div>
+        {#if citySession.admin}
+          <button onclick={() => cityNav('/admin/economy')}>Admin</button>
+        {/if}
+      </div>
+      <div class="city-record-list compact">
+        {#each cityEconomyListings.listings.slice(0, 6) as listing (listing.ncriId)}
+          <article>
+            <span class="tag ok">item {listing.itemId}</span>
+            <div>
+              <strong>{listing.displayName}</strong>
+              <small>{listing.sourceResidentName || listing.owner} · {timeAgo(listing.updatedAt)} ago</small>
+            </div>
+          </article>
+        {:else}
+          <div class="city-empty-state">
+            <strong>{citySession.admin ? 'No NCRIs listed yet' : 'NCRI listings require admin access'}</strong>
+            <span>Approved resident-created RuneScape items appear here when they are listed for AP/GP trade.</span>
+          </div>
+        {/each}
+      </div>
     </div>
   </section>
 {/snippet}
