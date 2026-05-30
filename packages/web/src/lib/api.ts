@@ -137,7 +137,13 @@ export interface StorytellerDispatchSummary {
   needsReview: boolean;
   warningCount: number;
   publicTitle?: string;
+  publicBody?: string;
+  publicBullets: string[];
+  operatorSummary?: string;
+  operatorWarnings: string[];
+  reviewReasons: string[];
   eventRefCount: number;
+  eventRefsUsed: string[];
   estimatedCostUsd?: number | null;
 }
 

@@ -19,7 +19,13 @@ export interface StorytellerDigestSummary {
     needsReview: boolean;
     warningCount: number;
     publicTitle?: string;
+    publicBody?: string;
+    publicBullets: string[];
+    operatorSummary?: string;
+    operatorWarnings: string[];
+    reviewReasons: string[];
     eventRefCount: number;
+    eventRefsUsed: string[];
     estimatedCostUsd?: number | null;
   };
 }
@@ -82,8 +88,14 @@ async function readStorytellerRun(root: string, runId: string): Promise<Storytel
         modelProfile: stringField(dispatchRecord, 'modelProfile'),
         needsReview: Boolean(dispatchRecord.needsReview),
         warningCount: arrayField(dispatchRecord.reviewReasons).length,
-        publicTitle: stringField(dispatchRecord, 'publicTitle'),
+        publicTitle: redactOptionalText(stringField(dispatchRecord, 'publicTitle')),
+        publicBody: redactOptionalText(stringField(dispatchRecord, 'publicBody')),
+        publicBullets: stringArrayField(dispatchRecord.publicBullets).map(redactPublicText),
+        operatorSummary: redactOptionalText(stringField(dispatchRecord, 'operatorSummary')),
+        operatorWarnings: stringArrayField(dispatchRecord.operatorWarnings).map(redactPublicText),
+        reviewReasons: stringArrayField(dispatchRecord.reviewReasons).map(redactPublicText),
         eventRefCount: arrayField(dispatchRecord.eventRefsUsed).length,
+        eventRefsUsed: stringArrayField(dispatchRecord.eventRefsUsed).map(redactPublicText),
         estimatedCostUsd: numberOrNullField(dispatchRecord, 'estimatedCostUsd'),
       }
     : undefined;
@@ -149,6 +161,10 @@ function arrayField(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function stringArrayField(value: unknown): string[] {
+  return arrayField(value).filter((item): item is string => typeof item === 'string');
+}
+
 function evidenceLabels(evidence: Record<string, unknown>): string[] {
   const labels: string[] = [];
   appendItemLabel(labels, evidence.gpItemId ?? evidence.itemId);
@@ -201,6 +217,10 @@ function redactPublicText(value: string): string {
   return value
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[human]')
     .replace(/\b(?:patron|city-user|user):[A-Za-z0-9._:-]+\b/gi, '[human]');
+}
+
+function redactOptionalText(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : redactPublicText(value);
 }
 
 function isPrivateHumanValue(value: string): boolean {

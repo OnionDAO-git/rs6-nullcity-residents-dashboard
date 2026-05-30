@@ -51,8 +51,12 @@ describe('readStorytellerDigestFeed', () => {
         generatedAt: '2026-05-30T00:03:00.000Z',
         modelProfile: 'openrouter:haiku',
         needsReview: true,
+        operatorWarnings: ['Do not broadcast patron:james yet.'],
         reviewReasons: ['missing_ref'],
         publicTitle: 'Night in Lumbridge',
+        publicBody: 'Alice traded GP with patron:james and wrote to demo@onion.test.',
+        publicBullets: ['Alice traded 200 GP with patron:james.', 'Bob finished a bounded goal for demo@onion.test.'],
+        operatorSummary: 'Dispatch needs a human review from patron:james.',
         eventRefsUsed: ['e2', 'e3'],
         estimatedCostUsd: 0.07,
       }),
@@ -65,6 +69,15 @@ describe('readStorytellerDigestFeed', () => {
     expect(feed.items[0]?.residentCount).toBe(2);
     expect(feed.items[0]?.dispatch?.dispatchId).toBe('dispatch-b');
     expect(feed.items[0]?.dispatch?.warningCount).toBe(1);
+    expect(feed.items[0]?.dispatch?.publicTitle).toBe('Night in Lumbridge');
+    expect(feed.items[0]?.dispatch?.publicBody).toBe('Alice traded GP with [human] and wrote to [human].');
+    expect(feed.items[0]?.dispatch?.publicBullets).toEqual(['Alice traded 200 GP with [human].', 'Bob finished a bounded goal for [human].']);
+    expect(feed.items[0]?.dispatch?.operatorSummary).toBe('Dispatch needs a human review from [human].');
+    expect(feed.items[0]?.dispatch?.operatorWarnings).toEqual(['Do not broadcast [human] yet.']);
+    expect(feed.items[0]?.dispatch?.reviewReasons).toEqual(['missing_ref']);
+    expect(feed.items[0]?.dispatch?.eventRefsUsed).toEqual(['e2', 'e3']);
+    expect(JSON.stringify(feed.items[0]?.dispatch)).not.toContain('patron:james');
+    expect(JSON.stringify(feed.items[0]?.dispatch)).not.toContain('demo@onion.test');
     expect(feed.items[1]?.runId).toBe('run-a');
     expect(feed.items[1]?.summary).toBe('Operator summary A');
   });

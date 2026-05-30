@@ -2904,7 +2904,7 @@
       {#if cityStoryDigests[0]}
         <div class="city-copy-block">
           <strong>{cityStoryDigests[0].dispatch?.publicTitle || cityStoryDigests[0].digestId}</strong>
-          <p>{cityStoryDigests[0].summary || 'Digest captured. Open the feed for event and review details.'}</p>
+          <p>{cityStoryDigests[0].dispatch?.publicBody || cityStoryDigests[0].summary || 'Digest captured. Open the feed for event and review details.'}</p>
         </div>
         <div class="city-resident-profile-grid">
           <span><small>Run</small><strong>{cityStoryDigests[0].runId}</strong></span>
@@ -3038,14 +3038,57 @@
           <span><small>Residents</small><strong>{cityStoryDigest.residentCount}</strong></span>
           <span><small>Model</small><strong>{cityStoryDigest.dispatch?.modelProfile || 'dry-run'}</strong></span>
           <span><small>Cost</small><strong>{cityStoryDigest.dispatch?.estimatedCostUsd === undefined ? '-' : cityStoryDigest.dispatch.estimatedCostUsd === null ? 'local/free' : `$${cityStoryDigest.dispatch.estimatedCostUsd.toFixed(3)}`}</strong></span>
+          <span><small>Refs Used</small><strong>{cityStoryDigest.dispatch?.eventRefCount ?? 0}</strong></span>
+          <span><small>Warnings</small><strong>{(cityStoryDigest.dispatch?.operatorWarnings.length ?? 0) + (cityStoryDigest.dispatch?.reviewReasons.length ?? 0)}</strong></span>
         </div>
         <div class="city-copy-block">
           <strong>{cityStoryDigest.dispatch?.publicTitle || 'No model dispatch title yet'}</strong>
-          <p>{cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>
+          <p>{cityStoryDigest.dispatch?.publicBody || cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>
         </div>
+        {#if cityStoryDigest.dispatch?.publicBullets.length}
+          <div class="city-record-list compact">
+            {#each cityStoryDigest.dispatch.publicBullets as bullet}
+              <article class="story-event-card">
+                <span class="tag ok">dispatch</span>
+                <div class="story-event-copy">
+                  <strong>{bullet}</strong>
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
+        {#if cityStoryDigest.dispatch?.operatorSummary}
+          <div class="notice">{cityStoryDigest.dispatch.operatorSummary}</div>
+        {/if}
         {@render CityStoryEvents({ events: cityStoryDigest.topEvents })}
         {#if cityStoryDigest.dispatch?.needsReview}
           <div class="notice">Dispatch flagged for review before public broadcast.</div>
+        {/if}
+        {#if cityStoryDigest.dispatch && (cityStoryDigest.dispatch.operatorWarnings.length || cityStoryDigest.dispatch.reviewReasons.length || cityStoryDigest.dispatch.eventRefsUsed.length)}
+          <div class="city-review-block">
+            <div class="panel-title">Review Evidence</div>
+            {#if cityStoryDigest.dispatch.operatorWarnings.length}
+              <div class="story-evidence-list" aria-label="Operator warnings">
+                {#each cityStoryDigest.dispatch.operatorWarnings as warning}
+                  <span>{warning}</span>
+                {/each}
+              </div>
+            {/if}
+            {#if cityStoryDigest.dispatch.reviewReasons.length}
+              <div class="story-evidence-list" aria-label="Review reasons">
+                {#each cityStoryDigest.dispatch.reviewReasons as reason}
+                  <span>{reason}</span>
+                {/each}
+              </div>
+            {/if}
+            {#if cityStoryDigest.dispatch.eventRefsUsed.length}
+              <div class="story-evidence-list" aria-label="Event refs used">
+                {#each cityStoryDigest.dispatch.eventRefsUsed as ref}
+                  <span>{ref}</span>
+                {/each}
+              </div>
+            {/if}
+          </div>
         {/if}
       {:else}
         <div class="city-empty-state">
