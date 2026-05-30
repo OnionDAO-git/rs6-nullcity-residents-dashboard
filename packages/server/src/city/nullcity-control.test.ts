@@ -80,6 +80,55 @@ describe('createNullCityControlClient', () => {
     ]);
   });
 
+  test('lists controller NCRI records with bearer auth', async () => {
+    const calls: Array<{ url: string; method: string; authorization: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        method: init?.method || 'GET',
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return new Response(
+        JSON.stringify([
+          {
+            schemaVersion: 1,
+            id: 'ncri-1',
+            itemId: 4151,
+            displayName: 'Abyssal Whip of the City',
+            lore: 'Forged for the weekend sprint.',
+            owner: 'user:alice',
+            approvalStatus: 'approved',
+            redemptionStatus: 'available',
+            createdAt: '2026-05-30T07:00:00.000Z',
+            updatedAt: '2026-05-30T07:01:00.000Z',
+          },
+        ]),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const records = await client.listNcri();
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/ncri',
+        method: 'GET',
+        authorization: 'Bearer city-token',
+      },
+    ]);
+    expect(records[0]).toMatchObject({
+      id: 'ncri-1',
+      displayName: 'Abyssal Whip of the City',
+      approvalStatus: 'approved',
+      redemptionStatus: 'available',
+    });
+  });
+
   test('rejects malformed proposal lists before the UI can render them', async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ proposals: [{ id: 'proposal-1' }] }), {
@@ -95,6 +144,24 @@ describe('createNullCityControlClient', () => {
       name: 'NullCityControlError',
       status: 502,
       message: 'invalid_proposal_list',
+    });
+  });
+
+  test('rejects malformed NCRI lists before the UI can render them', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ ncri: [{ id: 'ncri-1' }] }), {
+        headers: { 'content-type': 'application/json' },
+      })) as unknown as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    await expect(client.listNcri()).rejects.toMatchObject({
+      name: 'NullCityControlError',
+      status: 502,
+      message: 'invalid_ncri_list',
     });
   });
 

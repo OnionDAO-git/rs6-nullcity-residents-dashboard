@@ -139,6 +139,33 @@ export interface NullCityProposalBridgeResponse {
   error?: string;
 }
 
+export type NullCityNcriApprovalStatus = 'pending' | 'approved';
+export type NullCityNcriRedemptionStatus = 'available' | 'redeemed';
+
+export interface NullCityNcriRecord {
+  schemaVersion: 1;
+  id: string;
+  itemId: number;
+  displayName: string;
+  lore: string;
+  propertyTags?: string[];
+  printable?: boolean;
+  printAssetRef?: string;
+  owner: string;
+  approvalStatus: NullCityNcriApprovalStatus;
+  redemptionStatus: NullCityNcriRedemptionStatus;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+  redeemedAt?: string;
+}
+
+export interface NullCityNcriBridgeResponse {
+  available: boolean;
+  records: NullCityNcriRecord[];
+  error?: string;
+}
+
 export interface SoulProposalInput {
   residentName?: string;
   displayName: string;
@@ -422,6 +449,7 @@ export const cityApi = {
     ),
 
   adminNullcityProposals: () => request<NullCityProposalBridgeResponse>('/api/admin/nullcity/proposals'),
+  adminNullcityNcri: () => request<NullCityNcriBridgeResponse>('/api/admin/nullcity/ncri'),
   approveNullcityProposal: (id: string, adminNotes?: string) =>
     request<unknown>(`/api/admin/nullcity/proposals/${encodeURIComponent(id)}/approve`, { method: 'POST', body: jsonBody({ adminNotes }) }),
   rejectNullcityProposal: (id: string, adminNotes?: string) =>

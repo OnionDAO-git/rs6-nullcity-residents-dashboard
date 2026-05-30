@@ -20,8 +20,30 @@ export interface NullCitySoulProposal {
   bornAt?: string;
 }
 
+export type NullCityNcriApprovalStatus = 'pending' | 'approved';
+export type NullCityNcriRedemptionStatus = 'available' | 'redeemed';
+
+export interface NullCityNcriRecord {
+  schemaVersion: 1;
+  id: string;
+  itemId: number;
+  displayName: string;
+  lore: string;
+  propertyTags?: string[];
+  printable?: boolean;
+  printAssetRef?: string;
+  owner: string;
+  approvalStatus: NullCityNcriApprovalStatus;
+  redemptionStatus: NullCityNcriRedemptionStatus;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+  redeemedAt?: string;
+}
+
 export interface NullCityControlClient {
   listProposals(): Promise<NullCitySoulProposal[]>;
+  listNcri(): Promise<NullCityNcriRecord[]>;
   approveProposal(id: string, adminNotes?: string): Promise<unknown>;
   rejectProposal(id: string, adminNotes?: string): Promise<unknown>;
   birthProposal(id: string): Promise<unknown>;
@@ -86,6 +108,7 @@ export function createNullCityControlClient(options: NullCityControlClientOption
 
   return {
     listProposals: async () => parseProposalList(await request<unknown>('/proposals')),
+    listNcri: async () => parseNcriList(await request<unknown>('/ncri')),
     approveProposal: (id, adminNotes) =>
       request(`/proposals/${encodeURIComponent(id)}/approve`, {
         method: 'POST',
@@ -124,9 +147,22 @@ function parseProposalList(payload: unknown): NullCitySoulProposal[] {
   return proposals;
 }
 
+function parseNcriList(payload: unknown): NullCityNcriRecord[] {
+  const records = Array.isArray(payload) ? payload : asNcriEnvelope(payload);
+  if (!Array.isArray(records) || !records.every(isNcriRecord)) {
+    throw new NullCityControlError('invalid_ncri_list', 502);
+  }
+  return records;
+}
+
 function asProposalEnvelope(payload: unknown): unknown[] | undefined {
   const record = asRecord(payload);
   return Array.isArray(record.proposals) ? record.proposals : undefined;
+}
+
+function asNcriEnvelope(payload: unknown): unknown[] | undefined {
+  const record = asRecord(payload);
+  return Array.isArray(record.records) ? record.records : undefined;
 }
 
 function isSoulProposal(value: unknown): value is NullCitySoulProposal {
@@ -144,6 +180,21 @@ function isSoulProposal(value: unknown): value is NullCitySoulProposal {
     typeof record.updatedAt === 'string';
 }
 
+function isNcriRecord(value: unknown): value is NullCityNcriRecord {
+  const record = asRecord(value);
+  return record.schemaVersion === 1 &&
+    typeof record.id === 'string' &&
+    typeof record.itemId === 'number' &&
+    Number.isFinite(record.itemId) &&
+    typeof record.displayName === 'string' &&
+    typeof record.lore === 'string' &&
+    typeof record.owner === 'string' &&
+    isNcriApprovalStatus(record.approvalStatus) &&
+    isNcriRedemptionStatus(record.redemptionStatus) &&
+    typeof record.createdAt === 'string' &&
+    typeof record.updatedAt === 'string';
+}
+
 function isProposalStatus(value: unknown): value is NullCityProposalStatus {
   return value === 'proposed' ||
     value === 'funding' ||
@@ -151,6 +202,14 @@ function isProposalStatus(value: unknown): value is NullCityProposalStatus {
     value === 'approved' ||
     value === 'rejected' ||
     value === 'born';
+}
+
+function isNcriApprovalStatus(value: unknown): value is NullCityNcriApprovalStatus {
+  return value === 'pending' || value === 'approved';
+}
+
+function isNcriRedemptionStatus(value: unknown): value is NullCityNcriRedemptionStatus {
+  return value === 'available' || value === 'redeemed';
 }
 
 async function readPayload(response: Response): Promise<unknown> {

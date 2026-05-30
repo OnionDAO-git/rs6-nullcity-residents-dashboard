@@ -105,6 +105,13 @@ export async function routeCityApi(
       return jsonResponse({ available: true, proposals: await context.nullcityControl.listProposals() });
     }
 
+    if (method === 'GET' && pathname === '/api/admin/nullcity/ncri') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.nullcityControl) return jsonResponse({ available: false, records: [], error: 'not_configured' });
+      return jsonResponse({ available: true, records: await context.nullcityControl.listNcri() });
+    }
+
     const nullcityProposalAction = pathname.match(/^\/api\/admin\/nullcity\/proposals\/([^/]+)\/(approve|reject|birth)$/);
     if (nullcityProposalAction && method === 'POST') {
       const auth = await requireAdmin(request, url, context);

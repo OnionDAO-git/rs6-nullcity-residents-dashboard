@@ -221,6 +221,7 @@ describe('routeCityApi points and souls', () => {
             updatedAt: '2026-05-30T07:01:00.000Z',
           },
         ],
+        listNcri: async () => [],
         approveProposal: async () => {
           throw new Error('not called');
         },
@@ -247,6 +248,7 @@ describe('routeCityApi points and souls', () => {
     const services = testServices(adminUser, undefined, {
       nullcityControl: {
         listProposals: async () => [],
+        listNcri: async () => [],
         approveProposal: async (id, adminNotes) => {
           calls.push(`approve:${id}:${adminNotes}`);
           return { id, status: 'approved' };
@@ -277,6 +279,7 @@ describe('routeCityApi points and souls', () => {
     const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
       nullcityControl: {
         listProposals: async () => [],
+        listNcri: async () => [],
         approveProposal: async () => ({ ok: true }),
         rejectProposal: async () => ({ ok: true }),
         birthProposal: async () => ({ ok: true }),
@@ -293,6 +296,7 @@ describe('routeCityApi points and souls', () => {
       csrfEnabled: true,
       nullcityControl: {
         listProposals: async () => [],
+        listNcri: async () => [],
         approveProposal: async () => ({ ok: true }),
         rejectProposal: async () => ({ ok: true }),
         birthProposal: async () => ({ ok: true }),
@@ -318,6 +322,7 @@ describe('routeCityApi points and souls', () => {
     const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
       nullcityControl: {
         listProposals: async () => [],
+        listNcri: async () => [],
         approveProposal: async () => ({}),
         rejectProposal: async () => ({}),
         birthProposal: async () => ({}),
@@ -336,6 +341,70 @@ describe('routeCityApi points and souls', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ available: false, proposals: [], error: 'not_configured' });
+  });
+
+  test('admin can inspect controller-backed NCRI records when the Null City control bridge is configured', async () => {
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [
+          {
+            schemaVersion: 1,
+            id: 'ncri-1',
+            itemId: 4151,
+            displayName: 'Abyssal Whip of the City',
+            lore: 'Forged for the weekend sprint.',
+            owner: 'user:alice',
+            approvalStatus: 'approved',
+            redemptionStatus: 'available',
+            createdAt: '2026-05-30T07:00:00.000Z',
+            updatedAt: '2026-05-30T07:01:00.000Z',
+          },
+        ],
+        approveProposal: async () => {
+          throw new Error('not called');
+        },
+        rejectProposal: async () => {
+          throw new Error('not called');
+        },
+        birthProposal: async () => {
+          throw new Error('not called');
+        },
+      },
+    });
+
+    const response = await route(authedRequest('/api/admin/nullcity/ncri'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      records: [{ id: 'ncri-1', itemId: 4151, displayName: 'Abyssal Whip of the City' }],
+    });
+  });
+
+  test('controller-backed NCRI list degrades when the control bridge is not configured', async () => {
+    const services = testServices(adminUser);
+
+    const response = await route(authedRequest('/api/admin/nullcity/ncri'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false, records: [], error: 'not_configured' });
+  });
+
+  test('non-admin users cannot access controller-backed NCRI list', async () => {
+    const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(authedRequest('/api/admin/nullcity/ncri'), services);
+
+    expect(response.status).toBe(403);
   });
 });
 

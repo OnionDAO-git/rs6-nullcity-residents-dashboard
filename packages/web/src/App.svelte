@@ -6,7 +6,7 @@
   import { api, routeTo, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
@@ -138,6 +138,7 @@
   let cityNullcityBridgeAvailable = false;
   let cityNullcityBridgeError = '';
   let cityNullcityProposals: NullCitySoulProposal[] = [];
+  let cityNullcityNcriRecords: NullCityNcriRecord[] = [];
   let cityProposalQuote: SoulQuote | undefined;
   let cityInboxThreads: InboxThread[] = [];
   let citySelectedThread: InboxThreadDetail | undefined;
@@ -615,26 +616,36 @@
     }
     if (activeRoute === '/prints' || activeRoute === '/prints/new' || cityPrintId) {
       if (citySession.admin) {
-        cityPrintQueue = (await cityLoad(cityApi.adminPrintQueue(), { queue: [] })).queue;
+        const [queuePayload, ncriPayload] = await Promise.all([
+          cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
+          cityLoad(cityApi.adminNullcityNcri(), { available: false, records: [], error: 'not_configured' }),
+        ]);
+        cityPrintQueue = queuePayload.queue;
+        cityNullcityNcriRecords = ncriPayload.records;
+        if (!ncriPayload.available) cityNullcityBridgeError = ncriPayload.error || cityNullcityBridgeError;
+      } else {
+        cityNullcityNcriRecords = [];
       }
       cityPrintRequests = (await cityLoad(cityApi.prints(), { requests: [] })).requests;
       citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
     }
     if (activeRoute.startsWith('/admin')) {
-      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, printsPayload, ledgerPayload] = await Promise.all([
+      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, ncriPayload, printsPayload, ledgerPayload] = await Promise.all([
         cityLoad(cityApi.adminPrinters(), { printers: [] }),
         cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
         cityLoad(cityApi.proposals(), { proposals: [] }),
         cityLoad(cityApi.adminNullcityProposals(), { available: false, proposals: [], error: 'not_configured' }),
+        cityLoad(cityApi.adminNullcityNcri(), { available: false, records: [], error: 'not_configured' }),
         cityLoad(cityApi.prints(), { requests: [] }),
         cityLoad(cityApi.ledger(), { entries: [] }),
       ]);
       cityPrinters = printersPayload.printers;
       cityPrintQueue = queuePayload.queue;
       cityProposals = proposalsPayload.proposals;
-      cityNullcityBridgeAvailable = nullcityPayload.available;
-      cityNullcityBridgeError = nullcityPayload.error || '';
+      cityNullcityBridgeAvailable = nullcityPayload.available && ncriPayload.available;
+      cityNullcityBridgeError = nullcityPayload.error || ncriPayload.error || '';
       cityNullcityProposals = nullcityPayload.proposals;
+      cityNullcityNcriRecords = ncriPayload.records;
       cityPrintRequests = printsPayload.requests;
       cityLedger = ledgerPayload.entries;
     }
@@ -717,6 +728,7 @@
     cityStoryDigests = [];
     cityPrinters = [];
     cityPrintQueue = [];
+    cityNullcityNcriRecords = [];
   }
 
   async function cityLoad<T>(promise: Promise<T>, fallback: T): Promise<T>;
@@ -1820,6 +1832,23 @@
 
   function activePrintCount(): number {
     return cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
+  }
+
+  function ncriApprovalCount(status: NullCityNcriRecord['approvalStatus']): number {
+    return cityNullcityNcriRecords.filter(record => record.approvalStatus === status).length;
+  }
+
+  function ncriRedemptionCount(status: NullCityNcriRecord['redemptionStatus']): number {
+    return cityNullcityNcriRecords.filter(record => record.redemptionStatus === status).length;
+  }
+
+  function ncriTone(record: NullCityNcriRecord): string {
+    if (record.redemptionStatus === 'redeemed') return 'warn';
+    return record.approvalStatus === 'approved' ? 'ok' : 'warn';
+  }
+
+  function ncriStatusLabel(record: NullCityNcriRecord): string {
+    return record.redemptionStatus === 'redeemed' ? 'redeemed' : record.approvalStatus;
   }
 
   async function runAction(fn: () => Promise<void>) {
@@ -3877,6 +3906,30 @@
           <span><small>Failed</small><strong>{cityPrintInsights.ncriTrades.failed}</strong></span>
           <span><small>Recent</small><strong>{cityPrintInsights.ncriTrades.recent.length}</strong></span>
         </div>
+        {#if citySession.admin}
+          <div class="city-resident-profile-grid">
+            <span><small>Registry pending</small><strong>{ncriApprovalCount('pending')}</strong></span>
+            <span><small>Registry approved</small><strong>{ncriApprovalCount('approved')}</strong></span>
+            <span><small>Registry available</small><strong>{ncriRedemptionCount('available')}</strong></span>
+            <span><small>Registry redeemed</small><strong>{ncriRedemptionCount('redeemed')}</strong></span>
+          </div>
+          <div class="city-record-list compact">
+            {#each cityNullcityNcriRecords.slice(0, 4) as record (record.id)}
+              <article>
+                <span class={`tag ${ncriTone(record)}`}>{ncriStatusLabel(record)}</span>
+                <div>
+                  <strong>{record.displayName}</strong>
+                  <small>item {record.itemId} · {record.owner} · {timeAgo(record.updatedAt)}</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state">
+                <strong>No controller NCRI records</strong>
+                <span>{cityNullcityBridgeError || 'Create or transfer NCRIs through the controller API to populate this registry.'}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
         <div class="city-record-list compact">
           {#each cityPrintInsights.ncriTrades.recent as signal (signal.id)}
             <article>

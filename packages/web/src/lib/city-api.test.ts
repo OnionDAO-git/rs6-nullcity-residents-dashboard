@@ -99,4 +99,25 @@ describe('cityApi', () => {
       { path: '/api/admin/nullcity/proposals/proposal-3/birth', method: 'POST', body: {} },
     ]);
   });
+
+  test('calls controller-backed NCRI admin endpoint', async () => {
+    const calls: Array<{ path: string; method: string; body: unknown }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return new Response(JSON.stringify({ available: true, records: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    await cityApi.adminNullcityNcri();
+
+    expect(calls).toEqual([
+      { path: '/api/admin/nullcity/ncri', method: 'GET', body: undefined },
+    ]);
+  });
 });
