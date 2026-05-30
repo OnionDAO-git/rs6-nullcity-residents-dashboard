@@ -7,6 +7,7 @@ import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
 import { buildEventReadinessSummary } from './readiness';
 import { RuntimeRepository } from './runtime';
+import { readStorytellerDigestFeed } from './storyteller';
 import { routeRs6Api } from './rs6/routes';
 import { serveDashboardWeb } from './static';
 import { jsonResponse, notFound, textResponse } from './util';
@@ -189,6 +190,11 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
 
   if (method === 'GET' && pathname === '/api/gateway/status') return jsonResponse(await gateway.probeStatus());
   if (method === 'GET' && pathname === '/api/controller/status') return jsonResponse(await runtime.status());
+  if (method === 'GET' && pathname === '/api/storyteller/digests') {
+    const rawLimit = Number(url.searchParams.get('limit') || '12');
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(50, Math.round(rawLimit))) : 12;
+    return jsonResponse(await readStorytellerDigestFeed(config.memoryRoot, limit));
+  }
   if (method === 'GET' && pathname === '/api/controller/config') {
     const protocol = publicRequestProtocol(request, url);
     return jsonResponse({

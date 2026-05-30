@@ -3,7 +3,7 @@
   import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { createDomCanvasAdapter, createForkedRuntimeLifecycleAdapter, createGameClient, createHttpSessionTicketAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
-  import { api, routeTo } from './lib/api';
+  import { api, routeTo, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
@@ -124,6 +124,9 @@
   let cityResidentReadModel: ResidentReadModel | undefined;
   let cityResidentPosts: ResidentPost[] = [];
   let cityLibraryLives: LibrarySoulLife[] = [];
+  let cityStoryDigests: StorytellerDigestSummary[] = [];
+  let cityStoryRunId = '';
+  let cityStoryDigest: StorytellerDigestSummary | undefined;
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
@@ -245,6 +248,7 @@
   const cityNavItems: CityNavItem[] = [
     { label: 'Overview', path: '/', match: '/', glyph: 'OV' },
     { label: 'World', path: '/world', match: '/world', glyph: 'WO' },
+    { label: 'Story', path: '/story', match: '/story', glyph: 'ST' },
     { label: 'Embassy', path: '/embassy', match: '/embassy', glyph: 'EM' },
     { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
     { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
@@ -271,6 +275,10 @@
   $: cityProposalId = !isDebugRoute && cityParts[0] === 'embassy' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
   $: cityInboxThreadId = !isDebugRoute && cityParts[0] === 'inbox' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
   $: cityPrintId = !isDebugRoute && cityParts[0] === 'prints' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
+  $: cityStoryRunId = !isDebugRoute && cityParts[0] === 'story' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
+  $: cityStoryDigest = cityStoryRunId
+    ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
+    : cityStoryDigests[0];
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
   $: cityResidents = overview?.residents || residents;
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
@@ -504,6 +512,9 @@
       cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
       citySelectedProposal = undefined;
     }
+    if (activeRoute === '/' || activeRoute === '/story' || activeRoute.startsWith('/story/')) {
+      cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
+    }
     if (activeRoute === '/embassy/new') {
       cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
       citySelectedProposal = undefined;
@@ -584,6 +595,8 @@
       activeRoute === '/profile' ||
       activeRoute === '/world' ||
       activeRoute === '/embassy' ||
+      activeRoute === '/story' ||
+      activeRoute.startsWith('/story/') ||
       activeRoute.startsWith('/embassy/') ||
       activeRoute === '/residents' ||
       activeRoute.startsWith('/residents/') ||
@@ -611,6 +624,7 @@
     citySelectedThread = undefined;
     cityPrintRequests = [];
     citySelectedPrint = undefined;
+    cityStoryDigests = [];
     cityPrinters = [];
     cityPrintQueue = [];
   }
@@ -2659,6 +2673,8 @@
         {@render CityProfile()}
       {:else if route === '/world'}
         {@render CityWorld()}
+      {:else if route === '/story' || route.startsWith('/story/')}
+        {@render CityStory()}
       {:else if route === '/embassy' || route === '/embassy/new' || route.startsWith('/embassy/')}
         {@render CityEmbassy()}
       {:else if route === '/residents'}
@@ -2735,6 +2751,29 @@
   </section>
 
   <section class="city-dashboard-grid">
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">Storyteller</div>
+        <button onclick={() => cityNav('/story')}>Open Feed</button>
+      </div>
+      {#if cityStoryDigests[0]}
+        <div class="city-copy-block">
+          <strong>{cityStoryDigests[0].dispatch?.publicTitle || cityStoryDigests[0].digestId}</strong>
+          <p>{cityStoryDigests[0].summary || 'Digest captured. Open the feed for event and review details.'}</p>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Run</small><strong>{cityStoryDigests[0].runId}</strong></span>
+          <span><small>Events</small><strong>{cityStoryDigests[0].topEventCount}</strong></span>
+          <span><small>Residents</small><strong>{cityStoryDigests[0].residentCount}</strong></span>
+          <span><small>Review</small><strong>{cityStoryDigests[0].dispatch?.needsReview ? 'needs review' : 'grounded'}</strong></span>
+        </div>
+      {:else}
+        <div class="city-empty-state">
+          <strong>No digest runs yet</strong>
+          <span>Run `storyteller:dry-run` or model dispatch to populate this feed.</span>
+        </div>
+      {/if}
+    </div>
     <div class="city-panel span-2">
       <div class="row">
         <div class="panel-title">Resident Activity</div>
@@ -2780,6 +2819,62 @@
         {/each}
       </div>
       <button onclick={() => cityNav('/prints')}>Prints</button>
+    </div>
+  </section>
+{/snippet}
+
+{#snippet CityStory()}
+  <section class="city-page-head">
+    <p class="kicker">Storyteller</p>
+    <h1>Digest Feed</h1>
+  </section>
+  <section class="city-dashboard-grid">
+    <div class="city-panel">
+      <div class="panel-title">Runs</div>
+      <div class="city-card-list compact">
+        {#each cityStoryDigests as digest (digest.runId)}
+          <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/story/${encodeURIComponent(digest.runId)}`)}>
+            <span class={`tag ${digest.dispatch?.needsReview ? 'warn' : 'ok'}`}>{digest.dispatch?.needsReview ? 'review' : 'ready'}</span>
+            <strong>{digest.dispatch?.publicTitle || digest.digestId}</strong>
+            <small>{digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No storyteller runs</strong>
+            <span>Digest and dispatch artifacts will appear once controller storytelling runs are written.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+    <div class="city-panel span-2">
+      <div class="row">
+        <div class="panel-title">Operator Review</div>
+        {#if cityStoryDigest?.dispatch?.generatedAt}
+          <span class="tag">dispatch {timeAgo(cityStoryDigest.dispatch.generatedAt)}</span>
+        {/if}
+      </div>
+      {#if cityStoryDigest}
+        <div class="city-resident-profile-grid">
+          <span><small>Run</small><strong>{cityStoryDigest.runId}</strong></span>
+          <span><small>Digest</small><strong>{cityStoryDigest.digestId}</strong></span>
+          <span><small>Top Events</small><strong>{cityStoryDigest.topEventCount}</strong></span>
+          <span><small>Residents</small><strong>{cityStoryDigest.residentCount}</strong></span>
+          <span><small>Model</small><strong>{cityStoryDigest.dispatch?.modelProfile || 'dry-run'}</strong></span>
+          <span><small>Cost</small><strong>{cityStoryDigest.dispatch?.estimatedCostUsd === undefined ? '-' : cityStoryDigest.dispatch.estimatedCostUsd === null ? 'local/free' : `$${cityStoryDigest.dispatch.estimatedCostUsd.toFixed(3)}`}</strong></span>
+        </div>
+        <div class="city-copy-block">
+          <strong>{cityStoryDigest.dispatch?.publicTitle || 'No model dispatch title yet'}</strong>
+          <p>{cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>
+        </div>
+        {#if cityStoryDigest.dispatch?.needsReview}
+          <div class="notice">Dispatch flagged for review before public broadcast.</div>
+        {/if}
+      {:else}
+        <div class="city-empty-state">
+          <strong>Select a digest run</strong>
+          <span>Use the run list to inspect latest grounded story artifacts.</span>
+        </div>
+      {/if}
     </div>
   </section>
 {/snippet}

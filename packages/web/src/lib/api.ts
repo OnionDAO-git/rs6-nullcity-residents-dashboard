@@ -102,6 +102,7 @@ export const api = {
   benchmark: (runId: string) => request<BenchmarkArtifact>(`/api/benchmarks/${encodeURIComponent(runId)}`),
   benchmarkLeaderboard: (limit = 50) => request<BenchmarkLeaderboardRow[]>(`/api/benchmarks/leaderboard?limit=${encodeURIComponent(limit)}`),
   residentEconomy: (resident: string) => request<ResidentEconomy>(`/api/resident/${encodeURIComponent(resident)}/economy`),
+  storytellerDigests: (limit = 12) => request<StorytellerDigestFeed>(`/api/storyteller/digests?limit=${encodeURIComponent(limit)}`),
 };
 
 export interface EconomyEvent {
@@ -127,6 +128,33 @@ export interface ResidentEconomy {
   ap: number;
   recentEvents: EconomyEvent[];
   activeGoals: ActiveGoal[];
+}
+
+export interface StorytellerDispatchSummary {
+  dispatchId: string;
+  generatedAt?: string;
+  modelProfile?: string;
+  needsReview: boolean;
+  warningCount: number;
+  publicTitle?: string;
+  eventRefCount: number;
+  estimatedCostUsd?: number | null;
+}
+
+export interface StorytellerDigestSummary {
+  runId: string;
+  digestId: string;
+  builtAt?: string;
+  windowStart?: string;
+  windowEnd?: string;
+  topEventCount: number;
+  residentCount: number;
+  summary?: string;
+  dispatch?: StorytellerDispatchSummary;
+}
+
+export interface StorytellerDigestFeed {
+  items: StorytellerDigestSummary[];
 }
 
 export function routeTo(path: string): void {
