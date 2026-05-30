@@ -6,7 +6,7 @@
   import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
   import { summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
@@ -37,6 +37,7 @@
   import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
+  import { residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -678,9 +679,9 @@
       cityBenchmarkRuns = [];
     }
     if (cityResidentId) {
-      const cityResidentApiId = cityResident?.name || cityResidentId;
+      const cityResidentApiId = resolveResidentRouteId(cityResidentId, overview?.residents || residents);
       const [residentPayload, postsPayload, economyPayload] = await Promise.all([
-        cityLoad(cityApi.resident(cityResidentApiId), undefined),
+        cityLoad(optionalCityRead(cityApi.resident(cityResidentApiId)), undefined),
         cityLoad(cityApi.residentPosts(cityResidentApiId), { posts: [] }),
         cityLoad(api.residentEconomy(cityResidentApiId), undefined),
       ]);
@@ -1175,8 +1176,7 @@
   }
 
   function residentSlug(name: string): string {
-    const normalized = name.trim().toLowerCase();
-    return normalized.startsWith('res:') ? normalized.slice(4) : normalized;
+    return residentRouteSlug(name);
   }
 
   function residentDisplayName(name: string): string {

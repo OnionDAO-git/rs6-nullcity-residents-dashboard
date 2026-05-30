@@ -498,6 +498,15 @@ export function setCityCsrfToken(token: string | undefined): void {
   csrfToken = token || '';
 }
 
+export async function optionalCityRead<T>(request: Promise<T>): Promise<T | undefined> {
+  try {
+    return await request;
+  } catch (err) {
+    if (err instanceof CityApiError && err.status === 404) return undefined;
+    throw err;
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('accept', 'application/json');

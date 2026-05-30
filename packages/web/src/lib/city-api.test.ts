@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken } from './city-api';
+import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken } from './city-api';
 
 const originalFetch = globalThis.fetch;
 
@@ -47,6 +47,17 @@ describe('cityApi', () => {
       message: 'unauthenticated',
       loginUrl: '/login?returnTo=%2Fprofile',
     } satisfies Partial<CityApiError>);
+  });
+
+  test('treats missing optional city read models as absent instead of fatal', async () => {
+    await expect(optionalCityRead(Promise.reject(new CityApiError(404, 'not_found')))).resolves.toBeUndefined();
+    await expect(optionalCityRead(Promise.resolve({ resident: { id: 'resident-1' } }))).resolves.toEqual({
+      resident: { id: 'resident-1' },
+    });
+    await expect(optionalCityRead(Promise.reject(new CityApiError(500, 'bridge_down')))).rejects.toMatchObject({
+      status: 500,
+      message: 'bridge_down',
+    });
   });
 
   test('summarizes resident trades without claiming in-game coin settlement', () => {
