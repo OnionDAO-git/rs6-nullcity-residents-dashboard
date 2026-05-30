@@ -31,7 +31,7 @@ describe('buildWorldReadiness', () => {
       ['session', 'fail'],
       ['gateway', 'ok'],
       ['residents', 'ok'],
-      ['client', 'warn'],
+      ['client', 'ok'],
     ]);
     expect(summary.nextActions[0]).toBe('Login before starting the embedded RuneScape client.');
     expect(summary.canStartClient).toBe(false);
@@ -72,6 +72,22 @@ describe('buildWorldReadiness', () => {
     });
   });
 
+  test('keeps start disabled while the client runtime is already starting', () => {
+    const summary = buildWorldReadiness({
+      authenticated: true,
+      gateway: connectedGateway,
+      onlineResidents: [resident()],
+      gameClientStatus: 'starting-runtime',
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.canStartClient).toBe(false);
+    expect(summary.checks.find(check => check.id === 'client')).toMatchObject({
+      tone: 'warn',
+      value: 'starting runtime',
+    });
+  });
+
   test('marks the world ready when login, gateway, residents, and running client are present', () => {
     const summary = buildWorldReadiness({
       authenticated: true,
@@ -83,7 +99,7 @@ describe('buildWorldReadiness', () => {
 
     expect(summary.status).toBe('ready');
     expect(summary.headline).toBe('World session running.');
-    expect(summary.canStartClient).toBe(true);
+    expect(summary.canStartClient).toBe(false);
     expect(summary.checks.map(check => [check.id, check.tone, check.value])).toEqual([
       ['session', 'ok', 'attendee'],
       ['gateway', 'ok', 'online'],

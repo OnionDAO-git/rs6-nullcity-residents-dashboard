@@ -38,7 +38,10 @@ export function buildWorldReadiness(input: WorldReadinessInput): WorldReadinessS
   ];
   const blockers = checks.filter(check => check.tone === 'fail');
   const status: WorldReadinessStatus = blockers.length ? 'blocked' : checks.some(check => check.tone === 'warn') ? 'watch' : 'ready';
-  const canStartClient = input.authenticated && Boolean(input.gateway?.connected) && input.gameClientStatus !== 'error';
+  const canStartClient =
+    input.authenticated &&
+    Boolean(input.gateway?.connected) &&
+    input.gameClientStatus === 'idle';
 
   return {
     status,
@@ -108,6 +111,15 @@ function residentsCheck(onlineResidents: number): WorldReadinessCheck {
 }
 
 function clientCheck(status: GameClientStatus, ticketUser: string | undefined): WorldReadinessCheck {
+  if (status === 'idle') {
+    return {
+      id: 'client',
+      label: 'Client',
+      tone: 'ok',
+      value: 'ready',
+      detail: 'Client runtime is idle and ready to start.',
+    };
+  }
   if (status === 'error') {
     return {
       id: 'client',
@@ -132,7 +144,7 @@ function clientCheck(status: GameClientStatus, ticketUser: string | undefined): 
       label: 'Client',
       tone: 'warn',
       value: status.replace(/-/g, ' '),
-      detail: 'Client startup or shutdown is in progress.',
+      detail: 'Client startup or shutdown is in progress. Wait before starting again.',
     };
   }
   return {
@@ -140,7 +152,7 @@ function clientCheck(status: GameClientStatus, ticketUser: string | undefined): 
     label: 'Client',
     tone: 'warn',
     value: status,
-    detail: 'Client is ready to start when the operator presses Start Client.',
+    detail: 'Client status is unknown. Refresh the page before starting.',
   };
 }
 
