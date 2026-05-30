@@ -222,6 +222,49 @@ export interface NullCityLiveEconomyBridgeResponse {
   error?: string;
 }
 
+export type NullCityApGpExchangeStatus = 'complete' | 'failed_gp' | 'failed_ap' | 'failed_unknown';
+
+export interface NullCityApGpExchangeRequest {
+  idempotencyKey: string;
+  apAmount: number;
+  gpAmount: number;
+  cityUserId?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
+export interface NullCityApGpExchangeRecord {
+  schemaVersion: 1;
+  exchangeId: string;
+  idempotencyKey: string;
+  resident: string;
+  apAmount: number;
+  gpAmount: number;
+  cityUserId?: string;
+  sourceType?: string;
+  sourceId?: string;
+  status: NullCityApGpExchangeStatus;
+  failureReason?: string;
+  apEvidence?: {
+    creditedAmount: number;
+    attentionBefore: number;
+    attentionAfter: number;
+  };
+  gpEvidence?: {
+    itemId: 995;
+    burnedAmount: number;
+    remainingAmount: number;
+  };
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface NullCityApGpExchangeBridgeResponse {
+  available: boolean;
+  exchange?: NullCityApGpExchangeRecord;
+  error?: string;
+}
+
 export interface SoulProposalInput {
   residentName?: string;
   displayName: string;
@@ -517,6 +560,11 @@ export const cityApi = {
   adminNullcityNcri: () => request<NullCityNcriBridgeResponse>('/api/admin/nullcity/ncri'),
   nullcityEconomyLive: (options?: { since?: string; limit?: number; residentLimit?: number }) =>
     request<NullCityLiveEconomyBridgeResponse>(`/api/nullcity/economy/live${liveEconomyQuery(options)}`),
+  exchangeNullcityApForGp: (residentId: string, body: NullCityApGpExchangeRequest) =>
+    request<NullCityApGpExchangeBridgeResponse>(
+      `/api/admin/nullcity/residents/${encodeURIComponent(residentId)}/ap-gp-exchanges`,
+      { method: 'POST', body: jsonBody(body) },
+    ),
   approveNullcityProposal: (id: string, adminNotes?: string) =>
     request<unknown>(`/api/admin/nullcity/proposals/${encodeURIComponent(id)}/approve`, { method: 'POST', body: jsonBody({ adminNotes }) }),
   rejectNullcityProposal: (id: string, adminNotes?: string) =>

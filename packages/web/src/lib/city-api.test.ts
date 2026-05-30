@@ -135,4 +135,42 @@ describe('cityApi', () => {
 
     expect(calls).toEqual(['/api/nullcity/economy/live?limit=5&residentLimit=3']);
   });
+
+  test('calls the admin AP-for-GP exchange endpoint', async () => {
+    const calls: Array<{ path: string; method: string; body: unknown; csrf: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        csrf: new Headers(init?.headers).get('x-csrf-token'),
+      });
+      return new Response(JSON.stringify({ available: true, exchange: { status: 'complete' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    setCityCsrfToken('csrf-123');
+    await cityApi.exchangeNullcityApForGp('res:angler', {
+      idempotencyKey: 'exchange-1',
+      apAmount: 50,
+      gpAmount: 25,
+      cityUserId: 'city-user:operator',
+    });
+
+    expect(calls).toEqual([
+      {
+        path: '/api/admin/nullcity/residents/res%3Aangler/ap-gp-exchanges',
+        method: 'POST',
+        body: {
+          idempotencyKey: 'exchange-1',
+          apAmount: 50,
+          gpAmount: 25,
+          cityUserId: 'city-user:operator',
+        },
+        csrf: 'csrf-123',
+      },
+    ]);
+  });
 });

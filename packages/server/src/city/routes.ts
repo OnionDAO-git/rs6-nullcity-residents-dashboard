@@ -129,6 +129,26 @@ export async function routeCityApi(
       }
     }
 
+    const nullcityExchangeAction = pathname.match(/^\/api\/admin\/nullcity\/residents\/([^/]+)\/ap-gp-exchanges$/);
+    if (nullcityExchangeAction && method === 'POST') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.nullcityControl?.exchangeApForGp) return jsonResponse({ error: 'not_configured' }, { status: 503 });
+      const resident = decodeURIComponent(nullcityExchangeAction[1] || '');
+      const body = await readJsonBody(request);
+      return jsonResponse({
+        available: true,
+        exchange: await context.nullcityControl.exchangeApForGp(resident, {
+          idempotencyKey: stringBody(body, 'idempotencyKey') || crypto.randomUUID(),
+          apAmount: numberBody(body, 'apAmount'),
+          gpAmount: numberBody(body, 'gpAmount'),
+          ...(stringBody(body, 'cityUserId') ? { cityUserId: stringBody(body, 'cityUserId') } : {}),
+          ...(stringBody(body, 'sourceType') ? { sourceType: stringBody(body, 'sourceType') } : {}),
+          ...(stringBody(body, 'sourceId') ? { sourceId: stringBody(body, 'sourceId') } : {}),
+        }),
+      });
+    }
+
     const nullcityProposalAction = pathname.match(/^\/api\/admin\/nullcity\/proposals\/([^/]+)\/(approve|reject|birth)$/);
     if (nullcityProposalAction && method === 'POST') {
       const auth = await requireAdmin(request, url, context);

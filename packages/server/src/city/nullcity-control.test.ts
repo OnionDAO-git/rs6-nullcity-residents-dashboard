@@ -161,6 +161,109 @@ describe('createNullCityControlClient', () => {
     expect(snapshot.pendingProposals[0]).toMatchObject({ residentName: 'res:lantern', apFunded: 80 });
   });
 
+  test('posts AP-for-GP exchanges to the controller resident route', async () => {
+    const calls: Array<{ url: string; method: string; authorization: string | null; body: unknown }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        method: init?.method || 'GET',
+        authorization: new Headers(init?.headers).get('authorization'),
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          exchangeId: 'apgp:res:angler:exchange-1',
+          idempotencyKey: 'exchange-1',
+          resident: 'res:angler',
+          apAmount: 50,
+          gpAmount: 25,
+          status: 'complete',
+          apEvidence: { creditedAmount: 50, attentionBefore: 24953, attentionAfter: 25003 },
+          gpEvidence: { itemId: 995, burnedAmount: 25, remainingAmount: 250 },
+          createdAt: '2026-05-30T18:24:03.201Z',
+          completedAt: '2026-05-30T18:24:03.202Z',
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const exchange = await client.exchangeApForGp!('res:angler', {
+      idempotencyKey: 'exchange-1',
+      apAmount: 50,
+      gpAmount: 25,
+      cityUserId: 'city-user:operator',
+      sourceType: 'dashboard_operator',
+      sourceId: 'dashboard-1',
+    });
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/residents/res%3Aangler/ap-gp-exchanges',
+        method: 'POST',
+        authorization: 'Bearer city-token',
+        body: {
+          idempotencyKey: 'exchange-1',
+          apAmount: 50,
+          gpAmount: 25,
+          cityUserId: 'city-user:operator',
+          sourceType: 'dashboard_operator',
+          sourceId: 'dashboard-1',
+        },
+      },
+    ]);
+    expect(exchange).toMatchObject({
+      exchangeId: 'apgp:res:angler:exchange-1',
+      resident: 'res:angler',
+      status: 'complete',
+      apEvidence: { attentionAfter: 25003 },
+      gpEvidence: { remainingAmount: 250 },
+    });
+  });
+
+  test('preserves failed AP-for-GP exchange evidence from controller conflicts', async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          exchangeId: 'apgp:res:angler:exchange-2',
+          idempotencyKey: 'exchange-2',
+          resident: 'res:angler',
+          apAmount: 50,
+          gpAmount: 5000,
+          status: 'failed_gp',
+          failureReason: 'resident lacks enough GP item 995',
+          gpEvidence: { itemId: 995, burnedAmount: 0, remainingAmount: 250 },
+          createdAt: '2026-05-30T18:25:03.201Z',
+        }),
+        { status: 409, headers: { 'content-type': 'application/json' } },
+      )) as unknown as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const exchange = await client.exchangeApForGp!('res:angler', {
+      idempotencyKey: 'exchange-2',
+      apAmount: 50,
+      gpAmount: 5000,
+    });
+
+    expect(exchange).toMatchObject({
+      exchangeId: 'apgp:res:angler:exchange-2',
+      resident: 'res:angler',
+      status: 'failed_gp',
+      failureReason: 'resident lacks enough GP item 995',
+      gpEvidence: { burnedAmount: 0, remainingAmount: 250 },
+    });
+  });
+
   test('rejects malformed proposal lists before the UI can render them', async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ proposals: [{ id: 'proposal-1' }] }), {

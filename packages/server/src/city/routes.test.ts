@@ -441,6 +441,162 @@ describe('routeCityApi points and souls', () => {
     expect(await response.json()).toEqual({ available: false, error: 'not_configured' });
   });
 
+  test('admin AP-for-GP exchange route proxies to the Null City controller', async () => {
+    const calls: Array<{ resident: string; body: unknown }> = [];
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        liveEconomy: async () => {
+          throw new Error('not called');
+        },
+        exchangeApForGp: async (resident, body) => {
+          calls.push({ resident, body });
+          return {
+            schemaVersion: 1,
+            exchangeId: 'apgp:res:angler:exchange-1',
+            idempotencyKey: 'exchange-1',
+            resident,
+            apAmount: 50,
+            gpAmount: 25,
+            status: 'complete',
+            apEvidence: { creditedAmount: 50, attentionBefore: 24953, attentionAfter: 25003 },
+            gpEvidence: { itemId: 995, burnedAmount: 25, remainingAmount: 250 },
+            createdAt: '2026-05-30T18:24:03.201Z',
+            completedAt: '2026-05-30T18:24:03.202Z',
+          };
+        },
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(jsonRequest('/api/admin/nullcity/residents/res%3Aangler/ap-gp-exchanges', {
+      idempotencyKey: 'exchange-1',
+      apAmount: 50,
+      gpAmount: 25,
+      cityUserId: 'city-user:operator',
+    }), services);
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      {
+        resident: 'res:angler',
+        body: {
+          idempotencyKey: 'exchange-1',
+          apAmount: 50,
+          gpAmount: 25,
+          cityUserId: 'city-user:operator',
+        },
+      },
+    ]);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      exchange: {
+        exchangeId: 'apgp:res:angler:exchange-1',
+        resident: 'res:angler',
+        status: 'complete',
+        gpEvidence: { remainingAmount: 250 },
+      },
+    });
+  });
+
+  test('non-admin users cannot post AP-for-GP exchange operations', async () => {
+    const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        exchangeApForGp: async resident => ({
+          schemaVersion: 1,
+          exchangeId: 'apgp:test',
+          idempotencyKey: 'exchange-test',
+          resident,
+          apAmount: 1,
+          gpAmount: 1,
+          status: 'complete',
+          createdAt: '2026-05-30T18:24:03.201Z',
+        }),
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(jsonRequest('/api/admin/nullcity/residents/res%3Aangler/ap-gp-exchanges', { apAmount: 1, gpAmount: 1 }), services);
+
+    expect(response.status).toBe(403);
+  });
+
+  test('admin AP-for-GP exchange route preserves failed GP records for operators', async () => {
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        exchangeApForGp: async resident => ({
+          schemaVersion: 1,
+          exchangeId: 'apgp:res:angler:exchange-2',
+          idempotencyKey: 'exchange-2',
+          resident,
+          apAmount: 50,
+          gpAmount: 5000,
+          status: 'failed_gp',
+          failureReason: 'resident lacks enough GP item 995',
+          gpEvidence: { itemId: 995, burnedAmount: 0, remainingAmount: 250 },
+          createdAt: '2026-05-30T18:25:03.201Z',
+        }),
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(jsonRequest('/api/admin/nullcity/residents/res%3Aangler/ap-gp-exchanges', {
+      idempotencyKey: 'exchange-2',
+      apAmount: 50,
+      gpAmount: 5000,
+    }), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      exchange: {
+        resident: 'res:angler',
+        status: 'failed_gp',
+        failureReason: 'resident lacks enough GP item 995',
+        gpEvidence: { remainingAmount: 250 },
+      },
+    });
+  });
+
+  test('configured AP-for-GP exchange operations still require csrf in production mode', async () => {
+    const services = testServices(adminUser, undefined, {
+      csrfEnabled: true,
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        exchangeApForGp: async resident => ({
+          schemaVersion: 1,
+          exchangeId: 'apgp:test',
+          idempotencyKey: 'exchange-test',
+          resident,
+          apAmount: 1,
+          gpAmount: 1,
+          status: 'complete',
+          createdAt: '2026-05-30T18:24:03.201Z',
+        }),
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(jsonRequest('/api/admin/nullcity/residents/res%3Aangler/ap-gp-exchanges', { apAmount: 1, gpAmount: 1 }), services);
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'csrf_required' });
+  });
+
   test('non-admin users cannot access controller-backed NCRI list', async () => {
     const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
       nullcityControl: {

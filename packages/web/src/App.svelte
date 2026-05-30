@@ -6,7 +6,7 @@
   import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
   import { summarizeLiveEconomy, type LiveEconomySummary } from './lib/live-economy';
@@ -310,6 +310,11 @@
   let adminGrantResource: PointResource = 'AP';
   let adminGrantAmount = '100';
   let adminGrantMemo = '';
+  let exchangeResidentId = 'res:qa-angler';
+  let exchangeApAmount = '50';
+  let exchangeGpAmount = '25';
+  let exchangeCityUserId = '';
+  let exchangeResult: NullCityApGpExchangeRecord | undefined;
   let cityActionNotice = '';
   let gameClientMount: HTMLElement | undefined;
   let gameClientCanvas: HTMLCanvasElement | undefined;
@@ -1706,6 +1711,29 @@
       });
       cityActionNotice = `${amount.toLocaleString()} ${adminGrantResource} granted`;
       await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
+  async function exchangeResidentGpForAp() {
+    await runAction(async () => {
+      const residentId = exchangeResidentId.trim();
+      if (!residentId) throw new Error('Resident ID required');
+      const apAmount = positiveInt(exchangeApAmount, 'AP amount');
+      const gpAmount = positiveInt(exchangeGpAmount, 'GP amount');
+      const cityUserId = exchangeCityUserId.trim() || citySession.cityUserId;
+      const response = await cityApi.exchangeNullcityApForGp(residentId, {
+        idempotencyKey: `dashboard-apgp-${Date.now()}`,
+        apAmount,
+        gpAmount,
+        ...(cityUserId ? { cityUserId } : {}),
+        sourceType: 'dashboard_operator',
+        sourceId: 'admin-economy-panel',
+      });
+      exchangeResult = response.exchange;
+      cityActionNotice = response.exchange
+        ? `${response.exchange.status}: ${gpAmount.toLocaleString()} GP -> ${apAmount.toLocaleString()} AP for ${residentId}`
+        : 'AP/GP exchange submitted';
       await loadRoute(false);
     });
   }
@@ -4391,6 +4419,27 @@
             <label>Memo <textarea bind:value={adminGrantMemo} rows="3"></textarea></label>
             <button class="primary" disabled={actionBusy} onclick={grantPoints}>Grant</button>
           </div>
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Resident GP -> AP</div>
+          <div class="city-form-grid single">
+            <label>Resident ID <input bind:value={exchangeResidentId} placeholder="res:qa-angler" /></label>
+            <label>AP Amount <input bind:value={exchangeApAmount} inputmode="numeric" /></label>
+            <label>GP Amount <input bind:value={exchangeGpAmount} inputmode="numeric" /></label>
+            <label>City user ID <input bind:value={exchangeCityUserId} placeholder={citySession.cityUserId || 'operator'} /></label>
+            <button class="primary" disabled={actionBusy} onclick={exchangeResidentGpForAp}>Exchange</button>
+          </div>
+          {#if exchangeResult}
+            <div class="city-record-list compact">
+              <article>
+                <span class={`tag ${exchangeResult.status === 'complete' ? 'ok' : 'warn'}`}>{exchangeResult.status}</span>
+                <div>
+                  <strong>{exchangeResult.gpAmount.toLocaleString()} GP -> {exchangeResult.apAmount.toLocaleString()} AP</strong>
+                  <small>{exchangeResult.resident} · {exchangeResult.gpEvidence ? `${exchangeResult.gpEvidence.remainingAmount.toLocaleString()} GP left` : exchangeResult.failureReason || 'operator review'}</small>
+                </div>
+              </article>
+            </div>
+          {/if}
         </div>
         <div class="city-panel span-2">
           <div class="panel-title">Recent Ledger</div>

@@ -97,10 +97,48 @@ export interface NullCityLiveEconomySnapshot {
   pendingProposals: NullCityLiveEconomyProposal[];
 }
 
+export interface NullCityApGpExchangeRequest {
+  idempotencyKey: string;
+  apAmount: number;
+  gpAmount: number;
+  cityUserId?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
+export type NullCityApGpExchangeStatus = 'complete' | 'failed_gp' | 'failed_ap' | 'failed_unknown';
+
+export interface NullCityApGpExchangeRecord {
+  schemaVersion: 1;
+  exchangeId: string;
+  idempotencyKey: string;
+  resident: string;
+  apAmount: number;
+  gpAmount: number;
+  cityUserId?: string;
+  sourceType?: string;
+  sourceId?: string;
+  status: NullCityApGpExchangeStatus;
+  failureReason?: string;
+  apEvidence?: {
+    creditedAmount: number;
+    attentionBefore: number;
+    attentionAfter: number;
+  };
+  gpEvidence?: {
+    itemId: 995;
+    burnedAmount: number;
+    remainingAmount: number;
+  };
+  createdAt: string;
+  completedAt?: string;
+}
+
 export interface NullCityControlClient {
   listProposals(): Promise<NullCitySoulProposal[]>;
   listNcri(): Promise<NullCityNcriRecord[]>;
   liveEconomy?(query?: NullCityLiveEconomyQuery): Promise<NullCityLiveEconomySnapshot>;
+  exchangeApForGp?(resident: string, body: NullCityApGpExchangeRequest): Promise<NullCityApGpExchangeRecord>;
   approveProposal(id: string, adminNotes?: string): Promise<unknown>;
   rejectProposal(id: string, adminNotes?: string): Promise<unknown>;
   birthProposal(id: string): Promise<unknown>;
@@ -111,6 +149,10 @@ export interface NullCityControlClientOptions {
   token: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+}
+
+interface RequestOptions {
+  okStatuses?: number[];
 }
 
 export class NullCityControlError extends Error {
@@ -136,7 +178,7 @@ export function createNullCityControlClient(options: NullCityControlClientOption
   const fetchImpl = options.fetchImpl || fetch;
   const timeoutMs = options.timeoutMs ?? 5000;
 
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function request<T>(path: string, init: RequestInit = {}, requestOptions: RequestOptions = {}): Promise<T> {
     const timeoutSignal = createTimeoutSignal(timeoutMs);
     let response: Response;
     try {
@@ -155,7 +197,7 @@ export function createNullCityControlClient(options: NullCityControlClientOption
       throw new NullCityControlError('controller_unreachable', 502);
     }
     const payload = await readPayload(response);
-    if (!response.ok) {
+    if (!response.ok && !requestOptions.okStatuses?.includes(response.status)) {
       const record = asRecord(payload);
       const message = typeof record.error === 'string' ? record.error : `${response.status} ${response.statusText}`;
       throw new NullCityControlError(message, response.status);
@@ -167,6 +209,11 @@ export function createNullCityControlClient(options: NullCityControlClientOption
     listProposals: async () => parseProposalList(await request<unknown>('/proposals')),
     listNcri: async () => parseNcriList(await request<unknown>('/ncri')),
     liveEconomy: async query => parseLiveEconomy(await request<unknown>(`/economy/live${queryString(query)}`)),
+    exchangeApForGp: async (resident, body) =>
+      parseApGpExchange(await request<unknown>(`/residents/${encodeURIComponent(resident)}/ap-gp-exchanges`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }, { okStatuses: [409] })),
     approveProposal: (id, adminNotes) =>
       request(`/proposals/${encodeURIComponent(id)}/approve`, {
         method: 'POST',
@@ -216,6 +263,13 @@ function parseNcriList(payload: unknown): NullCityNcriRecord[] {
 function parseLiveEconomy(payload: unknown): NullCityLiveEconomySnapshot {
   if (!isLiveEconomySnapshot(payload)) {
     throw new NullCityControlError('invalid_live_economy', 502);
+  }
+  return payload;
+}
+
+function parseApGpExchange(payload: unknown): NullCityApGpExchangeRecord {
+  if (!isApGpExchangeRecord(payload)) {
+    throw new NullCityControlError('invalid_ap_gp_exchange', 502);
   }
   return payload;
 }
@@ -309,6 +363,25 @@ function isLiveEconomyProposal(value: unknown): value is NullCityLiveEconomyProp
     typeof record.apFunded === 'number' &&
     typeof record.apThreshold === 'number' &&
     typeof record.status === 'string';
+}
+
+function isApGpExchangeRecord(value: unknown): value is NullCityApGpExchangeRecord {
+  const record = asRecord(value);
+  return record.schemaVersion === 1 &&
+    typeof record.exchangeId === 'string' &&
+    typeof record.idempotencyKey === 'string' &&
+    typeof record.resident === 'string' &&
+    typeof record.apAmount === 'number' &&
+    typeof record.gpAmount === 'number' &&
+    isApGpExchangeStatus(record.status) &&
+    typeof record.createdAt === 'string';
+}
+
+function isApGpExchangeStatus(value: unknown): value is NullCityApGpExchangeStatus {
+  return value === 'complete' ||
+    value === 'failed_gp' ||
+    value === 'failed_ap' ||
+    value === 'failed_unknown';
 }
 
 function isStringNumberRecord(value: unknown): value is Record<string, number> {
