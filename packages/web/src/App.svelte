@@ -25,6 +25,7 @@
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
+  import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
@@ -161,6 +162,11 @@
   let cityStoryDigest: StorytellerDigestSummary | undefined;
   let cityPrintInsights = printQueueInsights([], [], []);
   let cityPrintResidentSignals: PrintResidentSignal[] = [];
+  let cityPrintStorySignal: PrintStoryDigestSignal = printStoryDigestSignal({
+    digests: [],
+    printInsights: cityPrintInsights,
+    ncriRecords: [],
+  });
   let cityProfileEconomy: ProfileEconomySummary = buildProfileEconomySummary({
     apBalance: 0,
     gpBalance: 0,
@@ -350,6 +356,11 @@
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
+  $: cityPrintStorySignal = printStoryDigestSignal({
+    digests: cityStoryDigests,
+    printInsights: cityPrintInsights,
+    ncriRecords: cityNullcityNcriRecords,
+  });
   $: cityResidents = overview?.residents || residents;
   $: cityReleaseReadiness = buildReleaseReadiness({
     residents: cityResidents,
@@ -649,15 +660,18 @@
     }
     if (activeRoute === '/prints' || activeRoute === '/prints/new' || cityPrintId) {
       if (citySession.admin) {
-        const [queuePayload, ncriPayload] = await Promise.all([
+        const [queuePayload, ncriPayload, storyPayload] = await Promise.all([
           cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
           cityLoad(cityApi.adminNullcityNcri(), { available: false, records: [], error: 'not_configured' }),
+          cityLoad(api.storytellerDigests(6), { items: [] }),
         ]);
         cityPrintQueue = queuePayload.queue;
         cityNullcityNcriRecords = ncriPayload.records;
+        cityStoryDigests = storyPayload.items;
         if (!ncriPayload.available) cityNullcityBridgeError = ncriPayload.error || cityNullcityBridgeError;
       } else {
         cityNullcityNcriRecords = [];
+        cityStoryDigests = (await cityLoad(api.storytellerDigests(6), { items: [] })).items;
       }
       cityPrintRequests = (await cityLoad(cityApi.prints(), { requests: [] })).requests;
       citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
@@ -4014,6 +4028,37 @@
                 <small>{blocker.printRequestId} · {blocker.printerId || 'no printer'} · {timeAgo(blocker.updatedAt)}</small>
               </div>
               <button onclick={() => cityNav(`/prints/${encodeURIComponent(blocker.printRequestId)}`)}>Open</button>
+            </article>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Story Canon</div>
+        <div class="city-resident-profile-grid">
+          <span><small>Status</small><strong>{cityPrintStorySignal.summary}</strong></span>
+          <span><small>Events</small><strong>{cityPrintStorySignal.eventCount}</strong></span>
+          <span><small>Age</small><strong>{cityPrintStorySignal.latestAgeMinutes === undefined ? '-' : `${cityPrintStorySignal.latestAgeMinutes}m`}</strong></span>
+          <span><small>Review</small><strong>{cityPrintStorySignal.dispatchNeedsReview ? 'needed' : 'clear'}</strong></span>
+        </div>
+        <div class="city-record-list compact">
+          <article>
+            <span class={`tag ${cityPrintStorySignal.tone}`}>{cityPrintStorySignal.tone}</span>
+            <div>
+              <strong>{cityPrintStorySignal.summary}</strong>
+              <small>{cityPrintStorySignal.detail}</small>
+              {#if cityPrintStorySignal.latestRunId}
+                <small>run {cityPrintStorySignal.latestRunId}</small>
+              {/if}
+            </div>
+            <button onclick={() => cityNav('/story')}>Story</button>
+          </article>
+          {#each cityPrintStorySignal.events.slice(0, 3) as event (event.ref)}
+            <article>
+              <span class={`tag ${storytellerEventTone(event)}`}>{storytellerEventTitle(event)}</span>
+              <div>
+                <strong>{event.note || event.ref}</strong>
+                <small>{storytellerEventMeta(event)} · {event.evidenceLabels.join(' · ') || 'grounded evidence'}</small>
+              </div>
             </article>
           {/each}
         </div>
