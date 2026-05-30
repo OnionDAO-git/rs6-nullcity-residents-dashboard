@@ -41,6 +41,7 @@
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
   import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
+  import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { residentDetailEmptyState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
@@ -109,6 +110,7 @@
 
   const browserOrigin = window.location.origin;
   let browserPath = window.location.pathname;
+  let browserSearch = window.location.search;
   let route = toRouteForShell(browserPath);
   let loading = false;
   let actionBusy = false;
@@ -117,6 +119,7 @@
   let cityDataError = '';
   let sessionLoading = true;
   let citySession: CitySession = guestSession;
+  let publicProfileHandle = '';
   let notificationPermission: NotificationPermission | 'unsupported' = notificationStatus();
   let notificationsEnabled = false;
   let inboxNotificationReady = false;
@@ -143,6 +146,7 @@
   let cityEntries: CityEntry[] = [];
   let cityResident: ResidentDashboardRow | undefined;
   let cityProfileData: CityProfileData | undefined;
+  let cityPublicPatronProfile: PublicPatronProfile | undefined;
   let cityLedger: PointLedgerEntry[] = [];
   let cityLedgerFilter: PointResource | 'all' = 'all';
   let cityProposals: SoulProposal[] = [];
@@ -364,6 +368,7 @@
 
   $: isDebugRoute = isDebugPath(browserPath);
   $: route = toRouteForShell(browserPath);
+  $: publicProfileHandle = !isDebugRoute && route === '/profile' ? publicPatronHandleFromSearch(browserSearch) : '';
   $: parts = route.split('/').filter(Boolean);
   $: residentName = isDebugRoute && parts[0] === 'residents' && parts[1] && parts[1] !== 'new' ? decodeURIComponent(parts[1]) : '';
   $: benchmarkRunId = isDebugRoute && parts[0] === 'benchmarks' && parts[1] ? decodeURIComponent(parts[1]) : '';
@@ -486,6 +491,7 @@
   onMount(() => {
     const listener = () => {
       browserPath = window.location.pathname;
+      browserSearch = window.location.search;
       void loadRoute();
     };
     const beforeInstallPromptListener = (event: Event) => {
@@ -577,6 +583,7 @@
   async function loadRoute(showSpinner = true) {
     const currentBrowserPath = window.location.pathname;
     browserPath = currentBrowserPath;
+    browserSearch = window.location.search;
     const currentIsDebug = isDebugPath(currentBrowserPath);
     const currentRoute = toRouteForShell(currentBrowserPath);
     if (showSpinner) loading = true;
@@ -632,6 +639,7 @@
   async function loadCityRoute(activeRoute: string) {
     closeRuntimeStream();
     closeSessionStream();
+    const routePublicProfileHandle = activeRoute === '/profile' ? publicPatronHandleFromSearch(browserSearch) : '';
     if (isStoryRoute(activeRoute)) {
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
       return;
@@ -660,13 +668,22 @@
       cityEconomyHeartbeat = heartbeatPayload;
     }
     if (activeRoute === '/profile') {
-      const [profilePayload, ledgerPayload] = await Promise.all([
-        cityLoad(cityApi.profile(), undefined),
-        cityLoad(cityApi.ledger(cityLedgerFilter === 'all' ? undefined : cityLedgerFilter), { entries: [] }),
-      ]);
-      cityProfileData = profilePayload?.profile;
-      cityLedger = ledgerPayload.entries;
-      seedProfileDraft();
+      if (routePublicProfileHandle) {
+        cityProfileData = undefined;
+        cityLedger = [];
+        cityPublicPatronProfile = await cityLoad(fetchPublicPatronProfile(routePublicProfileHandle), undefined);
+      } else {
+        cityPublicPatronProfile = undefined;
+        const [profilePayload, ledgerPayload] = await Promise.all([
+          cityLoad(cityApi.profile(), undefined),
+          cityLoad(cityApi.ledger(cityLedgerFilter === 'all' ? undefined : cityLedgerFilter), { entries: [] }),
+        ]);
+        cityProfileData = profilePayload?.profile;
+        cityLedger = ledgerPayload.entries;
+        seedProfileDraft();
+      }
+    } else {
+      cityPublicPatronProfile = undefined;
     }
     if (activeRoute === '/embassy') {
       cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
@@ -806,7 +823,7 @@
   }
 
   function cityRouteRequiresLogin(activeRoute: string): boolean {
-    return isProtectedCityRoute(activeRoute);
+    return isProtectedCityRoute(activeRoute) && !(activeRoute === '/profile' && publicPatronHandleFromSearch(browserSearch));
   }
 
   function cityRouteShowsTrades(activeRoute: string): boolean {
@@ -822,6 +839,7 @@
 
   function clearProtectedCityData() {
     cityProfileData = undefined;
+    cityPublicPatronProfile = undefined;
     cityLedger = [];
     cityInboxThreads = [];
     citySelectedThread = undefined;
@@ -3675,8 +3693,85 @@
 {#snippet CityProfile()}
   <section class="city-page-head">
     <p class="kicker">Profile</p>
-    <h1>{citySession.authenticated ? citySession.name : 'Guest'}</h1>
+    <h1>{publicProfileHandle ? cityPublicPatronProfile?.displayName || publicProfileHandle : citySession.authenticated ? citySession.name : 'Guest'}</h1>
+    {#if publicProfileHandle}
+      <p class="city-lede">Public attendee view for AP, Embassy standing, resident relationships, and inbox readiness.</p>
+    {/if}
   </section>
+  {#if publicProfileHandle}
+    {#if cityPublicPatronProfile}
+      <section class="city-dashboard-grid">
+        <div class="city-panel profile-panel">
+          <div class="city-avatar">{publicPatronInitials(cityPublicPatronProfile)}</div>
+          <div>
+            <strong>{cityPublicPatronProfile.displayName}</strong>
+            <span>{publicPatronStandingLabel(cityPublicPatronProfile)}</span>
+            <small>Public profile from `/v1/patron/*` and `/v1/inbox`</small>
+          </div>
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Attention</div>
+          <div class="city-balance-grid">
+            <span><small>AP</small><strong>{cityPublicPatronProfile.apBalance.toLocaleString()}</strong></span>
+            <span><small>Letters</small><strong>{cityPublicPatronProfile.letterCount.toLocaleString()}</strong></span>
+          </div>
+          {#if cityPublicPatronProfile.legacyCurrencyLabel}
+            <div class="notice">Legacy event ledgers still store this as {cityPublicPatronProfile.legacyCurrencyLabel}; attendees should read it as AP.</div>
+          {/if}
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Embassy Standing</div>
+          <div class="city-resident-profile-grid">
+            <span><small>Tier</small><strong>{cityPublicPatronProfile.standing.tier || 'stranger'}</strong></span>
+            <span><small>Points</small><strong>{cityPublicPatronProfile.standing.points.toLocaleString()}</strong></span>
+            <span><small>Next</small><strong>{cityPublicPatronProfile.standing.nextTier || 'max'}</strong></span>
+            <span><small>Needed</small><strong>{cityPublicPatronProfile.standing.pointsToNext ?? 0}</strong></span>
+          </div>
+        </div>
+        <div class="city-panel">
+          <div class="panel-title">Inbox</div>
+          {#if cityPublicPatronProfile.latestLetter}
+            <div class="city-copy-block">
+              <strong>{cityPublicPatronProfile.latestLetter.subject}</strong>
+              <p>{cityPublicPatronProfile.latestLetter.at ? timeAgo(cityPublicPatronProfile.latestLetter.at) : 'undated'} · {cityPublicPatronProfile.letterCount.toLocaleString()} total letter{cityPublicPatronProfile.letterCount === 1 ? '' : 's'}</p>
+            </div>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No letters yet</strong>
+              <span>AP grants, resident replies, and epitaphs will make this profile feel alive.</span>
+            </div>
+          {/if}
+          <a class="city-link-button" href={`/debug/inbox/?human=${encodeURIComponent(cityPublicPatronProfile.human)}`}>Open Inbox</a>
+        </div>
+        <div class="city-panel span-2">
+          <div class="panel-title">Residents Touched</div>
+          <div class="city-card-list">
+            {#each cityPublicPatronProfile.residents as resident (resident.slug)}
+              <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.slug)}`)}>
+                <span class="tag ok">linked</span>
+                <strong>{resident.displayName}</strong>
+                <small>{resident.slug}</small>
+              </button>
+            {:else}
+              <div class="city-empty-state">
+                <strong>No resident relationships yet</strong>
+                <span>Grant AP or witness a resident to create the first relationship signal.</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {:else}
+      <section class="city-dashboard-grid">
+        <div class="city-panel span-2">
+          <div class="city-empty-state">
+            <strong>Public profile not loaded</strong>
+            <span>Check that the handle exists and the public event endpoints are running.</span>
+          </div>
+        </div>
+      </section>
+    {/if}
+  {:else}
   {#if !citySession.authenticated}
     {@render CityAuthCta({ label: 'Login to view your profile' })}
   {/if}
@@ -3768,6 +3863,7 @@
       </div>
     </div>
   </section>
+  {/if}
 {/snippet}
 
 {#snippet CityWorld()}
