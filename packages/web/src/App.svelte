@@ -38,7 +38,7 @@
   import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
-  import { residentDetailEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
+  import { residentDetailEmptyState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -956,21 +956,6 @@
       cityLiveEconomy.available ||
       cityDataError,
     );
-  }
-
-  function residentRosterEmptyTitle(): string {
-    return residentRosterHasLiveHints() ? 'Resident roster is syncing' : 'No public residents reported';
-  }
-
-  function residentRosterEmptyDetail(): string {
-    const heartbeat = cityEconomyHeartbeat.heartbeat;
-    if (cityDataError) return `${cityDataError}. Story and ops views may still have live resident evidence.`;
-    if (heartbeat?.residentCount) {
-      return `${heartbeat.activeResidentCount.toLocaleString()} / ${heartbeat.residentCount.toLocaleString()} residents are visible through the economy heartbeat while the public roster catches up.`;
-    }
-    if (gatewayStatus?.connected || overview?.controller.available) return 'Gateway/controller is connected; the public roster may still be catching up.';
-    if (cityEconomyHeartbeat.available || cityLiveEconomy.available) return 'Controller bridge data is present while the public resident roster catches up.';
-    return 'Residents appear here after the public dashboard snapshot reports them.';
   }
 
   function residentLoopLine(signal: string, limit = 78): string {
@@ -4661,9 +4646,19 @@
         <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}
+      {@const rosterHeartbeat = cityEconomyHeartbeat.heartbeat}
+      {@const rosterState = residentRosterEmptyState({
+        loading,
+        hasLiveHints: residentRosterHasLiveHints(),
+        cityDataError,
+        activeResidentCount: rosterHeartbeat?.activeResidentCount ?? 0,
+        residentCount: rosterHeartbeat?.residentCount ?? 0,
+        gatewayOrControllerConnected: Boolean(gatewayStatus?.connected || overview?.controller.available),
+        bridgeAvailable: cityEconomyHeartbeat.available || cityLiveEconomy.available,
+      })}
       <div class="city-empty-state resident-sync-state">
-        <strong>{residentRosterEmptyTitle()}</strong>
-        <span>{residentRosterEmptyDetail()}</span>
+        <strong>{rosterState.title}</strong>
+        <span>{rosterState.detail}</span>
         <div class="resident-sync-actions">
           <button onclick={() => cityNav('/story')}>Story</button>
           <button onclick={() => debugNav('/residents')}>Ops Roster</button>
