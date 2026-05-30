@@ -2,6 +2,8 @@
 
 This directory breaks the city dashboard work into implementation plans. The current dashboard remains valuable as an operations/debug surface, but the public product should become a city-facing dashboard at `city.oniondao.dev` with shared Onion DAO authentication, a new city database, resident social systems, AP/GP economy, the Null City game client, and an admin 3D print queue.
 
+Autonomous dashboard agents should start with `../AGENTS.md`, then claim one `D*` packet or one phase from `09-implementation-roadmap.md`. Server API needs should be recorded in `../../rs6-nullcity-server/docs/city-dashboard-integration.md` or implemented through a separately claimed server `S11` packet.
+
 ## Source Context
 
 - Current app: `residents-dashboard`, Bun workspace with `packages/web`, `packages/server`, `packages/shared`, and `packages/observer`.
@@ -42,4 +44,3 @@ This directory breaks the city dashboard work into implementation plans. The cur
 - Which login method the forked game client should use: a new RS server SSO ticket, a generated per-user game password, or a separate city game account table.
 - Whether Bambu P2S printers are truly supported by the chosen adapter stack on the deployed firmware, and whether Snapmaker U1 should be controlled through Moonraker, FDM Monster, or a custom adapter.
 - GP pricing policy for print requests, refunds, cancellations, failed prints, and material/admin overrides.
-
