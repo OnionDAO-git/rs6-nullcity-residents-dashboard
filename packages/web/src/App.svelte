@@ -8,6 +8,7 @@
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
+  import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
@@ -182,6 +183,7 @@
     storyDigests: [],
     printInsights: cityPrintInsights,
   });
+  let cityEconomyProofs: EconomyProofSummary = buildEconomyProofSummary([]);
   let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
     authenticated: false,
     onlineResidents: [],
@@ -374,6 +376,7 @@
     printInsights: cityPrintInsights,
     benchmarkRuns: cityBenchmarkRuns,
   });
+  $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
     gateway: gatewayStatus,
@@ -3158,6 +3161,30 @@
         {/each}
       </div>
     {/if}
+  </section>
+
+  <section class="city-panel">
+    <div class="row">
+      <div>
+        <div class="panel-title">AP/GP Loop Proofs</div>
+        <strong>{cityEconomyProofs.headline}</strong>
+        <small>Priority proofs track AP top-up/resume, AP/GP goal hierarchy honesty, and AP-for-GP coin-995 exchange.</small>
+      </div>
+      <span class={`tag ${cityEconomyProofs.ready === cityEconomyProofs.total ? 'ok' : cityEconomyProofs.ready === 0 ? 'fail' : 'warn'}`}>
+        {cityEconomyProofs.ready}/{cityEconomyProofs.total} fresh
+      </span>
+    </div>
+    <div class="city-record-list compact">
+      {#each cityEconomyProofs.checks as check (check.id)}
+        <article>
+          <span class={`tag ${check.tone}`}>{check.tone}</span>
+          <div>
+            <strong>{check.label}: {check.summary}</strong>
+            <small>{check.detail}</small>
+          </div>
+        </article>
+      {/each}
+    </div>
   </section>
 
   <section class="city-dashboard-grid">
