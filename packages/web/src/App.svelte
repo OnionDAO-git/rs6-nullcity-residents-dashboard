@@ -11,6 +11,7 @@
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
   import { summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
+  import { residentEconomyGpEvidence, type ResidentEconomyGpEvidence } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
     residentGuestTrailFacts,
@@ -197,6 +198,7 @@
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
   let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
+  let cityResidentEconomyGpEvidence: ResidentEconomyGpEvidence | undefined;
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
@@ -373,8 +375,10 @@
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityResidentGoalContract = residentGoalContractSignal(cityResidentEconomy);
+  $: cityResidentEconomyGpEvidence = residentEconomyGpEvidence(cityResidentEconomy);
   $: cityResidentProofPulse = residentProofPulse(cityResident, {
     benchmark: cityResidentBenchmarkStatus,
+    economyGp: cityResidentEconomyGpEvidence,
     goalContract: cityResidentGoalContract,
     storyteller: cityResidentStorySignal,
   });
@@ -3884,7 +3888,7 @@
         <div class="city-panel">
           <div class="panel-title">Capability Warnings</div>
           <div class="city-record-list">
-            {#each residentOperatorWarnings(cityResident, cityResidentBenchmarkStatus) as warning, index (warning.summary + index)}
+            {#each residentOperatorWarnings(cityResident, cityResidentBenchmarkStatus, { economyGp: cityResidentEconomyGpEvidence }) as warning, index (warning.summary + index)}
               <article>
                 <span class={`tag ${warning.tone}`}>{warning.tone}</span>
                 <div>

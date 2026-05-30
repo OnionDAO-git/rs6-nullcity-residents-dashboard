@@ -218,6 +218,62 @@ describe('resident loop helpers', () => {
     ]);
   });
 
+  test('uses recent economy GP evidence when the live inventory snapshot is missing coin proof', () => {
+    const warnings = residentOperatorWarnings(row({
+      attention: 100,
+      thinking: { mode: 'executing', activePlan: 'Trade GP for AP when needed' },
+      body: {
+        controlHeld: true,
+        feed: { attached: true, ageMs: 5000, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 1, availableActions: 6 },
+      },
+      storyArc: { phase: 'progress', summary: 'Making GP progress.' },
+    }), undefined, {
+      economyGp: {
+        tone: 'ok',
+        summary: 'Recent economy GP evidence is available.',
+        detail: 'gp_observed: observed 24138 GP in item 995',
+      },
+    });
+
+    expect(warnings).toContainEqual({
+      tone: 'warn',
+      summary: 'Live inventory GP missing; recent economy evidence exists.',
+      detail: 'gp_observed: observed 24138 GP in item 995',
+    });
+    expect(warnings).not.toContainEqual({
+      tone: 'warn',
+      summary: 'No coin-995 GP evidence in current snapshot.',
+      detail: 'Do not imply this resident can pay GP yet.',
+    });
+  });
+
+  test('counts economy-backed GP evidence in the resident proof pulse', () => {
+    expect(residentProofPulse(row({
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Trade GP for AP when needed' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'body' },
+        feed: {
+          attached: true,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can use coin 995 for AP.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Making GP progress.' },
+    }), {
+      economyGp: { tone: 'ok', summary: 'Recent economy GP evidence is available.', detail: 'ap_gp_exchange: exchanged 10 GP for 20 AP' },
+    })).toEqual({
+      tone: 'ok',
+      summary: '5/5 loop proofs live',
+      detail: 'all tracked proof signals are live',
+    });
+  });
+
   test('builds stack summary from model/endpoint and SPARK module', () => {
     expect(residentStackSummary(row({
       stack: {

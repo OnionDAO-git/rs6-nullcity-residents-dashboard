@@ -48,12 +48,17 @@ export interface ResidentGuestTrailPulse {
 export interface ResidentProofPulseSignals {
   benchmark?: ResidentBenchmarkSignal;
   goalContract?: { tone: 'ok' | 'warn'; summary: string };
+  economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
   storyteller?: { tone: 'ok' | 'warn'; summary: string };
 }
 
 export interface ResidentIntentSignals {
   goalContract?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
   storyteller?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
+}
+
+export interface ResidentOperatorEvidenceSignals {
+  economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
 }
 
 const LOW_AP_THRESHOLD = 10;
@@ -259,8 +264,9 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
 export function residentPrimaryWarning(
   row: ResidentDashboardRow | undefined,
   benchmarkSignal?: ResidentBenchmarkSignal,
+  signals: ResidentOperatorEvidenceSignals = {},
 ): ResidentOperatorWarning {
-  const warning = residentOperatorWarnings(row, benchmarkSignal)[0];
+  const warning = residentOperatorWarnings(row, benchmarkSignal, signals)[0];
   return warning || {
     tone: 'warn',
     summary: 'No operator warning available.',
@@ -271,6 +277,7 @@ export function residentPrimaryWarning(
 export function residentOperatorWarnings(
   row: ResidentDashboardRow | undefined,
   benchmarkSignal?: ResidentBenchmarkSignal,
+  signals: ResidentOperatorEvidenceSignals = {},
 ): ResidentOperatorWarning[] {
   if (!row) {
     return [{ tone: 'warn', summary: 'No live resident snapshot yet.', detail: 'Wait for the controller or city read model to publish this resident.' }];
@@ -289,7 +296,13 @@ export function residentOperatorWarnings(
   } else if (feed.ageMs !== undefined && feed.ageMs > STALE_FEED_MS) {
     warnings.push({ tone: 'warn', summary: `Feed stale (${Math.round(feed.ageMs / 1000)}s old).`, detail: 'Live action/speech may lag the controller.' });
   }
-  if (residentGoldEvidenceLabel(row).value === 'not observed') {
+  if (residentGoldEvidenceLabel(row).value === 'not observed' && signals.economyGp?.tone === 'ok') {
+    warnings.push({
+      tone: 'warn',
+      summary: 'Live inventory GP missing; recent economy evidence exists.',
+      detail: signals.economyGp.detail,
+    });
+  } else if (residentGoldEvidenceLabel(row).value === 'not observed') {
     warnings.push({ tone: 'warn', summary: 'No coin-995 GP evidence in current snapshot.', detail: 'Do not imply this resident can pay GP yet.' });
   }
   if (!row.thinking?.activePlan) {
@@ -415,7 +428,7 @@ export function residentProofPulse(
     { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
     { label: 'Action', ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) },
     { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
-    { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 },
+    { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok' },
     {
       label: 'Goal contract',
       ok: signals.goalContract?.tone === 'ok',
