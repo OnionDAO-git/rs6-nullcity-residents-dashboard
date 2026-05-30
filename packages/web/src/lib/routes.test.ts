@@ -2,13 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import {
   DEBUG_PREFIX,
   cityPath,
+  cityRouteNeedsSnapshot,
   debugPath,
   isDebugInternalRoute,
   isDebugPath,
+  isKnownCityRoute,
   observeResidentDebugRoute,
   publicEventPath,
   residentDebugRoute,
   residentRuntimeApiPath,
+  isStoryRoute,
   isProtectedCityRoute,
   toDebugInternalRoute,
 } from './routes';
@@ -63,5 +66,15 @@ describe('dashboard route helpers', () => {
     expect(isProtectedCityRoute('/prints/new')).toBe(true);
     expect(isProtectedCityRoute('/')).toBe(false);
     expect(isProtectedCityRoute('/residents')).toBe(false);
+  });
+
+  test('keeps Storyteller routes public and independent from the heavy city snapshot', () => {
+    expect(isStoryRoute('/story')).toBe(true);
+    expect(isStoryRoute('/story/run-2026-05-30')).toBe(true);
+    expect(isKnownCityRoute('/story')).toBe(true);
+    expect(isKnownCityRoute('/story/run-2026-05-30')).toBe(true);
+    expect(cityRouteNeedsSnapshot('/story')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/story/run-2026-05-30')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/residents/res%3Aagent')).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerMythCard } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -112,6 +112,46 @@ describe('residentStoryDigestSignal', () => {
     expect(signal.tone).toBe('ok');
     expect(signal.summary).toContain('Grounded Storyteller events found');
     expect(signal.detail).toContain('12m old');
+  });
+});
+
+describe('storytellerDigestStatus', () => {
+  test('labels no-dispatch digest runs as dry-run instead of ready canon', () => {
+    const status = storytellerDigestStatus(digest(), Date.parse('2026-05-30T04:10:00.000Z'));
+    expect(status).toMatchObject({
+      label: 'dry-run',
+      tone: 'warn',
+    });
+    expect(status.summary).toContain('No public dispatch');
+  });
+
+  test('labels review, ready, and stale dispatches honestly', () => {
+    const baseDispatch = {
+      dispatchId: 'dispatch-1',
+      generatedAt: '2026-05-30T04:05:00.000Z',
+      modelProfile: 'default',
+      needsReview: false,
+      warningCount: 0,
+      publicBullets: [],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefCount: 1,
+      eventRefsUsed: ['e1'],
+      estimatedCostUsd: null,
+    };
+
+    expect(storytellerDigestStatus(digest({ dispatch: { ...baseDispatch, needsReview: true } }), Date.parse('2026-05-30T04:10:00.000Z'))).toMatchObject({
+      label: 'review',
+      tone: 'warn',
+    });
+    expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-30T04:10:00.000Z'))).toMatchObject({
+      label: 'ready',
+      tone: 'ok',
+    });
+    expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-31T05:10:00.000Z'))).toMatchObject({
+      label: 'stale',
+      tone: 'warn',
+    });
   });
 });
 

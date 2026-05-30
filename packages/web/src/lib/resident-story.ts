@@ -20,6 +20,12 @@ export interface StorytellerMythCard {
   evidenceLabels: string[];
 }
 
+export interface StorytellerDigestStatus {
+  label: 'review' | 'ready' | 'dry-run' | 'stale';
+  tone: 'ok' | 'warn';
+  summary: string;
+}
+
 export function residentStoryEvents(
   resident: ResidentDashboardRow | undefined,
   digests: StorytellerDigestSummary[],
@@ -96,6 +102,39 @@ export function storytellerMythCard(event: StorytellerDigestEventSummary): Story
   };
 }
 
+export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs = Date.now()): StorytellerDigestStatus {
+  if (digest.dispatch?.needsReview) {
+    return {
+      label: 'review',
+      tone: 'warn',
+      summary: 'Dispatch is grounded but needs operator review before public broadcast.',
+    };
+  }
+
+  if (!digest.dispatch) {
+    return {
+      label: 'dry-run',
+      tone: 'warn',
+      summary: 'No public dispatch exists yet; showing deterministic digest evidence only.',
+    };
+  }
+
+  const timestamp = digestTs(digest);
+  if (timestamp > 0 && nowMs - timestamp > DAY_MS) {
+    return {
+      label: 'stale',
+      tone: 'warn',
+      summary: 'Dispatch is older than 24h; review freshness before treating it as live canon.',
+    };
+  }
+
+  return {
+    label: 'ready',
+    tone: 'ok',
+    summary: 'Dispatch is grounded and ready for public review.',
+  };
+}
+
 function residentMatches(wanted: string, residentName: string | undefined): boolean {
   if (!residentName) return false;
   return normalizeResident(residentName) === wanted;
@@ -149,6 +188,13 @@ function eventVerb(kind: string): string {
 
 function eventTs(event: StorytellerDigestEventSummary, digest: StorytellerDigestSummary): number {
   const stamp = event.ts || digest.builtAt || digest.windowEnd || digest.windowStart;
+  if (!stamp) return 0;
+  const ts = Date.parse(stamp);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function digestTs(digest: StorytellerDigestSummary): number {
+  const stamp = digest.dispatch?.generatedAt || digest.builtAt || digest.windowEnd || digest.windowStart;
   if (!stamp) return 0;
   const ts = Date.parse(stamp);
   return Number.isFinite(ts) ? ts : 0;

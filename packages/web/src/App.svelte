@@ -26,9 +26,9 @@
     residentStackSummary,
     type ResidentLoopFact,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, isProtectedCityRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
@@ -617,6 +617,10 @@
   async function loadCityRoute(activeRoute: string) {
     closeRuntimeStream();
     closeSessionStream();
+    if (isStoryRoute(activeRoute)) {
+      cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
+      return;
+    }
     if (!cityRouteNeedsSnapshot(activeRoute)) return;
     await loadCitySnapshot();
     if (sessionLoading) await bootstrapSession();
@@ -653,7 +657,7 @@
       cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
       citySelectedProposal = undefined;
     }
-    if (activeRoute === '/' || activeRoute === '/story' || activeRoute.startsWith('/story/')) {
+    if (activeRoute === '/') {
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
     }
     if (activeRoute === '/embassy/new') {
@@ -768,24 +772,6 @@
     } catch (err) {
       cityDataError = err instanceof Error ? err.message : 'City data unavailable';
     }
-  }
-
-  function cityRouteNeedsSnapshot(activeRoute: string): boolean {
-    return activeRoute === '/' ||
-      activeRoute === '/profile' ||
-      activeRoute === '/world' ||
-      activeRoute === '/embassy' ||
-      activeRoute === '/story' ||
-      activeRoute.startsWith('/story/') ||
-      activeRoute.startsWith('/embassy/') ||
-      activeRoute === '/residents' ||
-      activeRoute.startsWith('/residents/') ||
-      activeRoute === '/inbox' ||
-      activeRoute.startsWith('/inbox/') ||
-      activeRoute === '/prints' ||
-      activeRoute.startsWith('/prints/') ||
-      activeRoute === '/library' ||
-      activeRoute.startsWith('/admin');
   }
 
   function cityRouteRequiresLogin(activeRoute: string): boolean {
@@ -1121,17 +1107,6 @@
         notification.close();
       };
     }
-  }
-
-  function isKnownCityRoute(activeRoute: string): boolean {
-    if (activeRoute === '/' || activeRoute === '/login') return true;
-    if (activeRoute === '/profile' || activeRoute === '/world' || activeRoute === '/library') return true;
-    if (activeRoute === '/residents') return true;
-    if (activeRoute.startsWith('/residents/') && activeRoute !== '/residents/new') return true;
-    if (activeRoute === '/embassy' || activeRoute === '/embassy/new' || activeRoute.startsWith('/embassy/')) return true;
-    if (activeRoute === '/inbox' || activeRoute.startsWith('/inbox/')) return true;
-    if (activeRoute === '/prints' || activeRoute === '/prints/new' || activeRoute.startsWith('/prints/')) return true;
-    return activeRoute === '/admin' || activeRoute.startsWith('/admin/');
   }
 
   function legacyDebugEquivalent(activeRoute: string): string {
@@ -3289,6 +3264,7 @@
         <button onclick={() => cityNav('/story')}>Open Feed</button>
       </div>
       {#if cityStoryDigests[0]}
+        {@const storyStatus = storytellerDigestStatus(cityStoryDigests[0])}
         <div class="city-copy-block">
           <strong>{cityStoryDigests[0].dispatch?.publicTitle || cityStoryDigests[0].digestId}</strong>
           <p>{cityStoryDigests[0].dispatch?.publicBody || cityStoryDigests[0].summary || 'Digest captured. Open the feed for event and review details.'}</p>
@@ -3297,8 +3273,9 @@
           <span><small>Run</small><strong>{cityStoryDigests[0].runId}</strong></span>
           <span><small>Events</small><strong>{cityStoryDigests[0].topEventCount}</strong></span>
           <span><small>Residents</small><strong>{cityStoryDigests[0].residentCount}</strong></span>
-          <span><small>Review</small><strong>{cityStoryDigests[0].dispatch?.needsReview ? 'needs review' : 'grounded'}</strong></span>
+          <span><small>Status</small><strong>{storyStatus.label}</strong></span>
         </div>
+        <div class={`notice ${storyStatus.tone === 'warn' ? 'amber' : ''}`}>{storyStatus.summary}</div>
         {@render CityStoryEvents({ events: cityStoryDigests[0].topEvents.slice(0, 3), compact: true })}
       {:else}
         <div class="city-empty-state">
@@ -3406,8 +3383,9 @@
       <div class="panel-title">Runs</div>
       <div class="city-card-list compact">
         {#each cityStoryDigests as digest (digest.runId)}
+          {@const status = storytellerDigestStatus(digest)}
           <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/story/${encodeURIComponent(digest.runId)}`)}>
-            <span class={`tag ${digest.dispatch?.needsReview ? 'warn' : 'ok'}`}>{digest.dispatch?.needsReview ? 'review' : 'ready'}</span>
+            <span class={`tag ${status.tone}`}>{status.label}</span>
             <strong>{digest.dispatch?.publicTitle || digest.digestId}</strong>
             <small>{digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
           </button>
@@ -3427,6 +3405,7 @@
         {/if}
       </div>
       {#if cityStoryDigest}
+        {@const selectedStoryStatus = storytellerDigestStatus(cityStoryDigest)}
         <div class="city-resident-profile-grid">
           <span><small>Run</small><strong>{cityStoryDigest.runId}</strong></span>
           <span><small>Digest</small><strong>{cityStoryDigest.digestId}</strong></span>
@@ -3435,8 +3414,9 @@
           <span><small>Model</small><strong>{cityStoryDigest.dispatch?.modelProfile || 'dry-run'}</strong></span>
           <span><small>Cost</small><strong>{cityStoryDigest.dispatch?.estimatedCostUsd === undefined ? '-' : cityStoryDigest.dispatch.estimatedCostUsd === null ? 'local/free' : `$${cityStoryDigest.dispatch.estimatedCostUsd.toFixed(3)}`}</strong></span>
           <span><small>Refs Used</small><strong>{cityStoryDigest.dispatch?.eventRefCount ?? 0}</strong></span>
-          <span><small>Warnings</small><strong>{(cityStoryDigest.dispatch?.operatorWarnings.length ?? 0) + (cityStoryDigest.dispatch?.reviewReasons.length ?? 0)}</strong></span>
+          <span><small>Status</small><strong>{selectedStoryStatus.label}</strong></span>
         </div>
+        <div class={`notice ${selectedStoryStatus.tone === 'warn' ? 'amber' : ''}`}>{selectedStoryStatus.summary}</div>
         <div class="city-copy-block">
           <strong>{cityStoryDigest.dispatch?.publicTitle || 'No model dispatch title yet'}</strong>
           <p>{cityStoryDigest.dispatch?.publicBody || cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>

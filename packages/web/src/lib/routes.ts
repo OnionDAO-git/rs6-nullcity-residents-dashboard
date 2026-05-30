@@ -94,6 +94,41 @@ export function isProtectedCityRoute(route: string): boolean {
     normalized.startsWith('/admin');
 }
 
+export function isStoryRoute(route: string): boolean {
+  const normalized = normalizePath(route);
+  return normalized === '/story' || normalized.startsWith('/story/');
+}
+
+export function cityRouteNeedsSnapshot(route: string): boolean {
+  const normalized = normalizePath(route);
+  return normalized === '/' ||
+    normalized === '/profile' ||
+    normalized === '/world' ||
+    normalized === '/embassy' ||
+    normalized.startsWith('/embassy/') ||
+    normalized === '/residents' ||
+    normalized.startsWith('/residents/') ||
+    normalized === '/inbox' ||
+    normalized.startsWith('/inbox/') ||
+    normalized === '/prints' ||
+    normalized.startsWith('/prints/') ||
+    normalized === '/library' ||
+    normalized.startsWith('/admin');
+}
+
+export function isKnownCityRoute(route: string): boolean {
+  const normalized = normalizePath(route);
+  if (normalized === '/' || normalized === '/login') return true;
+  if (normalized === '/profile' || normalized === '/world' || normalized === '/library') return true;
+  if (isStoryRoute(normalized)) return true;
+  if (normalized === '/residents') return true;
+  if (normalized.startsWith('/residents/') && normalized !== '/residents/new') return true;
+  if (normalized === '/embassy' || normalized === '/embassy/new' || normalized.startsWith('/embassy/')) return true;
+  if (normalized === '/inbox' || normalized.startsWith('/inbox/')) return true;
+  if (normalized === '/prints' || normalized === '/prints/new' || normalized.startsWith('/prints/')) return true;
+  return normalized === '/admin' || normalized.startsWith('/admin/');
+}
+
 function normalizePath(pathname: string): string {
   const [pathOnly = '/'] = pathname.split(/[?#]/);
   const withSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
