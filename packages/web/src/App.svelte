@@ -11,6 +11,7 @@
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import { residentGoldEvidenceLabel, residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
+  import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -131,6 +132,8 @@
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
+  let cityResidentStoryEvents: ResidentStoryEvent[] = [];
+  let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
@@ -288,6 +291,8 @@
     ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
     : cityStoryDigests[0];
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
+  $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
+  $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityResidents = overview?.residents || residents;
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
@@ -3372,6 +3377,29 @@
                   <small>AP/GP, feed freshness, and live plan signals</small>
                 </div>
               </article>
+            {/each}
+          </div>
+        </div>
+        <div class="city-panel span-2">
+          <div class="panel-title">Storyteller Grounded Events</div>
+          <div class="city-record-list">
+            <article>
+              <span class={`tag ${cityResidentStorySignal.tone}`}>{cityResidentStorySignal.tone}</span>
+              <div>
+                <strong>{cityResidentStorySignal.summary}</strong>
+                <small>{cityResidentStorySignal.detail}</small>
+              </div>
+            </article>
+            {#each cityResidentStoryEvents as evidence (evidence.digest.runId + ':' + evidence.event.ref)}
+              <article>
+                <span class={`tag ${storytellerEventTone(evidence.event)}`}>{evidence.event.kind}</span>
+                <div>
+                  <strong>{storytellerEventTitle(evidence.event)}</strong>
+                  <small>{storytellerEventMeta(evidence.event)} · {evidence.digest.runId} · {evidence.event.ts ? timeAgo(evidence.event.ts) : evidence.digest.builtAt ? timeAgo(evidence.digest.builtAt) : '-'}</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No resident-specific digest refs</strong><span>Run Storyteller digest generation to capture grounded resident events.</span></div>
             {/each}
           </div>
         </div>
