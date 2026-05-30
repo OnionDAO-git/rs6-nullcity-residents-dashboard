@@ -8,6 +8,7 @@
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
+  import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import { residentGoldEvidenceLabel, residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
@@ -98,6 +99,7 @@
   let souls: SoulSummary[] = [];
   let logs: { actions: unknown[]; inference: unknown[] } = { actions: [], inference: [] };
   let benchmarkRuns: BenchmarkArtifactSummary[] = [];
+  let cityBenchmarkRuns: BenchmarkArtifactSummary[] = [];
   let selectedBenchmark: BenchmarkArtifact | undefined;
   let benchmarkLeaderboard: BenchmarkLeaderboardRow[] = [];
   let rawVisibleResidents: ResidentDashboardRow[] = [];
@@ -129,6 +131,7 @@
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
+  let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
@@ -285,6 +288,7 @@
     ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
     : cityStoryDigests[0];
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
+  $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityResidents = overview?.residents || residents;
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
@@ -535,7 +539,14 @@
       cityProposals = proposalsPayload.proposals;
     }
     if (activeRoute === '/residents' || cityResidentId) {
-      cityDirectoryResidents = (await cityLoad(cityApi.residents(), { residents: [] })).residents;
+      const [directoryPayload, benchmarkPayload] = await Promise.all([
+        cityLoad(cityApi.residents(), { residents: [] }),
+        cityLoad(api.benchmarks(200), []),
+      ]);
+      cityDirectoryResidents = directoryPayload.residents;
+      cityBenchmarkRuns = benchmarkPayload;
+    } else {
+      cityBenchmarkRuns = [];
     }
     if (cityResidentId) {
       const cityResidentApiId = cityResident?.name || cityResidentId;
@@ -1929,6 +1940,7 @@
   function residentCapabilityWarnings(row: ResidentDashboardRow | undefined): string[] {
     if (!row) return ['No live resident snapshot yet.'];
     const warnings: string[] = [];
+    const benchmarkSignal = residentBenchmarkSignal(latestBenchmarkForResident(cityBenchmarkRuns, row.name));
     if (!row.online) warnings.push('Resident is offline in the live controller snapshot.');
     if (residentNeedsAp(row)) warnings.push(`AP low (${row.attention ?? 0}); top-up may be needed soon.`);
     if (!row.feed) warnings.push('No live feed attached; latest action/speech may be stale.');
@@ -1936,7 +1948,13 @@
     if (residentGoldEvidenceLabel(row).value === 'not observed') warnings.push('No coin-995 GP evidence in current snapshot.');
     if (!row.thinking?.activePlan) warnings.push('No active plan published by thinking module.');
     if (!row.storyArc?.summary && !row.storyArc?.latestEventKind) warnings.push('Library strategy evidence is still thin for this resident.');
+    if (benchmarkSignal.tone !== 'ok') warnings.push(benchmarkSignal.summary);
     return warnings.length ? warnings : ['No immediate AP/feed/strategy warnings detected.'];
+  }
+
+  function residentBenchmarkLabel(row: ResidentDashboardRow | undefined): { tone: 'ok' | 'warn' | 'fail'; summary: string; detail: string } {
+    if (!row) return residentBenchmarkSignal(undefined);
+    return residentBenchmarkSignal(latestBenchmarkForResident(cityBenchmarkRuns, row.name));
   }
 
   function residentHealthTone(row: ResidentDashboardRow): string {
@@ -3288,6 +3306,13 @@
         <div class="city-panel">
           <div class="panel-title">Capability Warnings</div>
           <div class="city-record-list">
+            <article>
+              <span class={`tag ${cityResidentBenchmarkStatus.tone}`}>{cityResidentBenchmarkStatus.tone}</span>
+              <div>
+                <strong>{cityResidentBenchmarkStatus.summary}</strong>
+                <small>{cityResidentBenchmarkStatus.detail}</small>
+              </div>
+            </article>
             {#each residentCapabilityWarnings(cityResident) as warning, index (warning + index)}
               <article>
                 <span class={warning.startsWith('No immediate') ? 'tag ok' : 'tag warn'}>{warning.startsWith('No immediate') ? 'ok' : 'warn'}</span>
