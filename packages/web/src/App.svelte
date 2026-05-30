@@ -10,7 +10,15 @@
   import { compactJson, timeAgo } from './lib/format';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
-  import { residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, residentOperatorWarnings, type ResidentLoopFact } from './lib/resident-loop';
+  import {
+    residentCoinEvidenceAmount,
+    residentIntelligenceFacts,
+    residentLoopSignal,
+    residentLoopSummaryLine,
+    residentNeedsAp,
+    residentOperatorWarnings,
+    type ResidentLoopFact,
+  } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
@@ -46,6 +54,15 @@
     path: string;
     match: string;
     glyph: string;
+  };
+
+  type CityLoopPulse = {
+    online: number;
+    lowAp: number;
+    planPublished: number;
+    recentSpeech: number;
+    storyEvidence: number;
+    observedGp: number;
   };
 
   type BeforeInstallPromptEvent = Event & {
@@ -140,6 +157,14 @@
   let cityResidentStoryEvents: ResidentStoryEvent[] = [];
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
+  let cityLoopPulse: CityLoopPulse = {
+    online: 0,
+    lowAp: 0,
+    planPublished: 0,
+    recentSpeech: 0,
+    storyEvidence: 0,
+    observedGp: 0,
+  };
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
@@ -306,6 +331,7 @@
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
+  $: cityLoopPulse = buildCityLoopPulse(cityResidents);
   $: cityResidentTrades = tradesForResident(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId, cityTrades);
   $: embassyPageActive = isDebugRoute && embassyPages.some(page => browserPath === page.path || browserPath === page.path.replace(/\/$/, ''));
   $: rawVisibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
@@ -823,6 +849,33 @@
             : 'GP burn and printer queue status',
       },
     ];
+  }
+
+  function buildCityLoopPulse(rows: ResidentDashboardRow[]): CityLoopPulse {
+    const pulse: CityLoopPulse = {
+      online: 0,
+      lowAp: 0,
+      planPublished: 0,
+      recentSpeech: 0,
+      storyEvidence: 0,
+      observedGp: 0,
+    };
+    for (const row of rows) {
+      const signal = residentLoopSignal(row);
+      if (row.online) pulse.online += 1;
+      if (residentNeedsAp(row)) pulse.lowAp += 1;
+      if (signal.plan !== '-' && signal.plan !== 'No active plan published') pulse.planPublished += 1;
+      if (signal.speech !== '-') pulse.recentSpeech += 1;
+      if (signal.story !== '-') pulse.storyEvidence += 1;
+      pulse.observedGp += residentCoinEvidenceAmount(row);
+    }
+    return pulse;
+  }
+
+  function residentLoopLine(signal: string, limit = 78): string {
+    if (!signal || signal === '-') return '-';
+    if (signal.length <= limit) return signal;
+    return `${signal.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
   }
 
   function cityNavActive(item: CityNavItem): boolean {
@@ -2974,6 +3027,14 @@
         <div class="panel-title">Resident Activity</div>
         <button onclick={() => cityNav('/residents')}>Directory</button>
       </div>
+      <div class="city-resident-profile-grid city-loop-pulse-grid">
+        <span><small>Online</small><strong>{cityLoopPulse.online}</strong></span>
+        <span><small>Low AP</small><strong>{cityLoopPulse.lowAp}</strong></span>
+        <span><small>Plan Live</small><strong>{cityLoopPulse.planPublished}</strong></span>
+        <span><small>Recent Speech</small><strong>{cityLoopPulse.recentSpeech}</strong></span>
+        <span><small>Story Evidence</small><strong>{cityLoopPulse.storyEvidence}</strong></span>
+        <span><small>Observed GP</small><strong>{cityLoopPulse.observedGp.toLocaleString()}</strong></span>
+      </div>
       {@render CityResidentList({ rows: cityFeaturedResidents })}
     </div>
     <div class="city-panel">
@@ -4051,14 +4112,17 @@
 {#snippet CityResidentList({ rows }: { rows: ResidentDashboardRow[] })}
   <div class="city-resident-list">
     {#each rows as row (row.name)}
+      {@const signal = residentLoopSignal(row)}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
         <small>
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
-          <br />
-          {residentLoopSummaryLine(row)}
         </small>
+        <small class="city-resident-loop-line">Plan: {residentLoopLine(signal.plan, 72)}</small>
+        <small class="city-resident-loop-line">Action: {residentLoopLine(signal.action, 60)}</small>
+        <small class="city-resident-loop-line">Speech: {residentLoopLine(signal.speech, 72)}</small>
+        <small class="city-resident-loop-line">Story: {residentLoopLine(signal.story, 72)}</small>
         <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}

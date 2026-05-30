@@ -14,6 +14,13 @@ export interface ResidentOperatorWarning {
   detail: string;
 }
 
+export interface ResidentLoopSignal {
+  plan: string;
+  action: string;
+  speech: string;
+  story: string;
+}
+
 const LOW_AP_THRESHOLD = 10;
 const STALE_FEED_MS = 120_000;
 const GP_ITEM_ID = 995;
@@ -129,7 +136,7 @@ export function residentNeedsAp(row: ResidentDashboardRow): boolean {
 }
 
 export function residentGoldEvidenceLabel(row: ResidentDashboardRow): { value: string; detail: string; tone: 'ok' | 'warn' } {
-  const amount = coin995Amount(row);
+  const amount = residentCoinEvidenceAmount(row);
   if (amount > 0) {
     return { value: `${amount} GP`, detail: 'coin-995 inventory evidence', tone: 'ok' };
   }
@@ -137,6 +144,28 @@ export function residentGoldEvidenceLabel(row: ResidentDashboardRow): { value: s
     value: 'not observed',
     detail: 'No coin-995 inventory evidence in latest dashboard snapshot',
     tone: 'warn',
+  };
+}
+
+export function residentCoinEvidenceAmount(row: ResidentDashboardRow): number {
+  return coin995Amount(row);
+}
+
+export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSignal {
+  const story = row.storyArc;
+  const speech = recentSpeech(row);
+  const storyLabel =
+    story?.summary ||
+    (story?.latestEventKind && story.latestEventTick !== undefined
+      ? `${story.latestEventKind} @ ${story.latestEventTick}`
+      : story?.latestEventKind) ||
+    '-';
+
+  return {
+    plan: residentGoalLabel(row),
+    action: row.body?.lastAction?.kind || row.lastEvent?.kind || '-',
+    speech,
+    story: storyLabel,
   };
 }
 
@@ -217,6 +246,17 @@ function coin995Amount(row: ResidentDashboardRow): number {
     if (amount > 0) return amount;
   }
   return 0;
+}
+
+function recentSpeech(row: ResidentDashboardRow): string {
+  const feed = row.feed || row.body?.feed;
+  if (feed?.latestEventKind === 'say' && typeof feed.latestEventText === 'string' && feed.latestEventText.trim().length > 0) {
+    return feed.latestEventText.trim();
+  }
+  if (row.lastEvent?.kind === 'say' && typeof row.lastEvent.text === 'string' && row.lastEvent.text.trim().length > 0) {
+    return row.lastEvent.text.trim();
+  }
+  return '-';
 }
 
 function inventoryCoinAmount(value: unknown): number {

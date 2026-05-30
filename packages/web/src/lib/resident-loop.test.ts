@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import {
+  residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
   residentIntelligenceFacts,
+  residentLoopSignal,
   residentLoopSummaryLine,
   residentNeedsAp,
   residentOperatorWarnings,
@@ -55,8 +57,34 @@ describe('resident loop helpers', () => {
 
     expect(residentNeedsAp(low)).toBe(true);
     expect(residentGoldEvidenceLabel(low)).toEqual({ value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' });
+    expect(residentCoinEvidenceAmount(low)).toBe(37);
     expect(residentLoopSummaryLine(low)).toContain('needs AP');
     expect(residentLoopSummaryLine(row({ attention: 100 }))).toContain('GP unobserved');
+  });
+
+  test('builds current plan/action/speech/story loop signals from live row state', () => {
+    expect(residentLoopSignal(row({
+      thinking: { mode: 'executing', activePlan: 'Earn GP to fund AP' },
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          ageMs: 5000,
+          nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 7,
+          latestEventKind: 'say',
+          latestEventText: 'I can trade once I get coin 995.',
+        },
+        lastAction: { kind: 'trade_with', result: 'success', source: 'thinking' },
+      },
+      storyArc: { phase: 'progress', latestEventKind: 'city_attention_credit', latestEventTick: 1337 },
+    }))).toEqual({
+      plan: 'Earn GP to fund AP',
+      action: 'trade_with',
+      speech: 'I can trade once I get coin 995.',
+      story: 'city_attention_credit @ 1337',
+    });
   });
 
   test('builds operator warnings from AP, GP, plan, story, feed, and benchmark evidence', () => {

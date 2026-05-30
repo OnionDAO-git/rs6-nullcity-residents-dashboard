@@ -2269,16 +2269,24 @@ pre {
 .city-resident-list button {
   display: grid;
   grid-template-columns: 18px minmax(120px, 0.65fr) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
+  align-items: start;
+  gap: 4px 10px;
+  min-height: 96px;
   padding: 8px 10px;
   text-align: left;
   background: var(--ground-2);
   border: 1px solid var(--ground-4);
 }
 
+.city-resident-list .dot {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  margin-top: 6px;
+}
+
 .city-resident-list strong {
+  grid-column: 2;
+  grid-row: 1;
   overflow: hidden;
   color: var(--text-0);
   text-overflow: ellipsis;
@@ -2286,17 +2294,35 @@ pre {
 }
 
 .city-resident-list small {
+  grid-column: 3;
+  grid-row: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.city-resident-loop-line {
+  grid-column: 2 / 4;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .city-resident-list em {
+  grid-column: 4;
+  grid-row: 1 / span 2;
+  align-self: start;
   color: var(--text-3);
   font-family: var(--mono);
   font-size: 11px;
   font-style: normal;
   white-space: nowrap;
+}
+
+.city-loop-pulse-grid {
+  margin-top: 12px;
 }
 
 .resident-loop-grid {
@@ -2830,10 +2856,25 @@ pre {
 
   .city-resident-list button {
     grid-template-columns: 14px minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .city-resident-list .dot,
+  .city-resident-list strong,
+  .city-resident-list small,
+  .city-resident-loop-line,
+  .city-resident-list em {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .city-resident-list .dot {
+    grid-column: 1;
+    grid-row: 1;
+    margin-top: 5px;
   }
 
   .city-resident-list em {
-    grid-column: 2;
     white-space: normal;
   }
 
