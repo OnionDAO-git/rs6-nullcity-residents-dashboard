@@ -9,6 +9,7 @@ import {
   publicEventPath,
   residentDebugRoute,
   residentRuntimeApiPath,
+  isProtectedCityRoute,
   toDebugInternalRoute,
 } from './routes';
 
@@ -53,5 +54,14 @@ describe('dashboard route helpers', () => {
     expect(residentRuntimeApiPath('res:qa-scout')).toBe('/api/runtime/res%3Aqa-scout');
     expect(residentRuntimeApiPath('res:qa-scout', 'inference')).toBe('/api/runtime/res%3Aqa-scout/inference');
     expect(residentRuntimeApiPath(' res:hans ', 'memory/index')).toBe('/api/runtime/res%3Ahans/memory/index');
+  });
+
+  test('marks the RuneScape world route as protected attendee UI', () => {
+    expect(isProtectedCityRoute('/world')).toBe(true);
+    expect(isProtectedCityRoute('/profile')).toBe(true);
+    expect(isProtectedCityRoute('/inbox/thread-1')).toBe(true);
+    expect(isProtectedCityRoute('/prints/new')).toBe(true);
+    expect(isProtectedCityRoute('/')).toBe(false);
+    expect(isProtectedCityRoute('/residents')).toBe(false);
   });
 });

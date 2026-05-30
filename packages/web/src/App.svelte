@@ -21,9 +21,10 @@
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, isProtectedCityRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
+  import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
 
@@ -160,6 +161,11 @@
     residents: [],
     storyDigests: [],
     printInsights: cityPrintInsights,
+  });
+  let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
+    authenticated: false,
+    onlineResidents: [],
+    gameClientStatus: 'idle',
   });
   let cityResidentStoryEvents: ResidentStoryEvent[] = [];
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
@@ -338,6 +344,13 @@
     residents: cityResidents,
     storyDigests: cityStoryDigests,
     printInsights: cityPrintInsights,
+  });
+  $: cityWorldReadiness = buildWorldReadiness({
+    authenticated: citySession.authenticated,
+    gateway: gatewayStatus,
+    onlineResidents: cityOnlineResidents,
+    gameClientStatus,
+    ticketUser: gameClientTicketUser,
   });
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
@@ -698,12 +711,7 @@
   }
 
   function cityRouteRequiresLogin(activeRoute: string): boolean {
-    return activeRoute === '/profile' ||
-      activeRoute === '/inbox' ||
-      activeRoute.startsWith('/inbox/') ||
-      activeRoute === '/prints' ||
-      activeRoute.startsWith('/prints/') ||
-      activeRoute.startsWith('/admin');
+    return isProtectedCityRoute(activeRoute);
   }
 
   function cityRouteShowsTrades(activeRoute: string): boolean {
@@ -3375,12 +3383,43 @@
     <p class="kicker">World</p>
     <h1>Enter City</h1>
   </section>
+  <section class={`city-panel city-world-readiness tone-${cityWorldReadiness.status === 'blocked' ? 'fail' : cityWorldReadiness.status === 'watch' ? 'warn' : 'ok'}`}>
+    <div class="row">
+      <div>
+        <p class="kicker">Client Readiness</p>
+        <strong>{cityWorldReadiness.headline}</strong>
+        <small>{cityWorldReadiness.detail}</small>
+      </div>
+      {#if citySession.authenticated}
+        <span class="city-world-badge">session ready</span>
+      {:else}
+        <button class="primary" onclick={() => cityNav('/login')}>Login</button>
+      {/if}
+    </div>
+    <div class="city-world-checks">
+      {#each cityWorldReadiness.checks as check (check.id)}
+        <div class={`metric tone-${check.tone}`}>
+          <span>{check.label}</span>
+          <strong>{check.value}</strong>
+          <small>{check.detail}</small>
+        </div>
+      {/each}
+    </div>
+    <div class="city-world-actions">
+      {#each cityWorldReadiness.nextActions as action}
+        <span>{action}</span>
+      {/each}
+    </div>
+  </section>
+  {#if !citySession.authenticated}
+    {@render CityAuthCta({ label: 'Login to enter the RuneScape client' })}
+  {/if}
   <section class="city-world-layout">
     <div class="city-world-frame">
       <div bind:this={gameClientMount} class:fullscreen-fallback={cityGameFullscreenFallback} class="city-game-mount">
         <div class="city-game-status">
           <div>
-            <strong>{gatewayStatus?.connected ? 'Gateway online' : 'Gateway unavailable'}</strong>
+            <strong>{cityWorldReadiness.checks.find(check => check.id === 'gateway')?.value || 'unknown gateway'}</strong>
             <span>{cityOnlineResidents.length} online residents · game session {gameClientStatus}</span>
           </div>
           <button
@@ -3394,7 +3433,7 @@
           </button>
         </div>
         <div class="city-game-actions">
-          <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={startCityGameClient}>Start Client</button>
+          <button class="primary" disabled={actionBusy || !cityWorldReadiness.canStartClient} onclick={startCityGameClient}>Start Client</button>
           <button disabled={actionBusy || !gameClientController} onclick={stopCityGameClient}>Stop</button>
         </div>
       </div>

@@ -83,6 +83,17 @@ export function isDebugInternalRoute(route: string): boolean {
   );
 }
 
+export function isProtectedCityRoute(route: string): boolean {
+  const normalized = normalizePath(route);
+  return normalized === '/profile' ||
+    normalized === '/world' ||
+    normalized === '/inbox' ||
+    normalized.startsWith('/inbox/') ||
+    normalized === '/prints' ||
+    normalized.startsWith('/prints/') ||
+    normalized.startsWith('/admin');
+}
+
 function normalizePath(pathname: string): string {
   const [pathOnly = '/'] = pathname.split(/[?#]/);
   const withSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
