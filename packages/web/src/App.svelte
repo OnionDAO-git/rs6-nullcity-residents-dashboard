@@ -9,6 +9,7 @@
   import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
+  import { residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -3053,6 +3054,19 @@
           <p>{cityResidentReadModel?.latestThought || 'No resident post has been projected yet.'}</p>
         </div>
       </div>
+      {#if cityResident}
+        <div class="city-panel span-2">
+          <div class="row">
+            <div class="panel-title">Resident Intelligence Loop</div>
+            <button onclick={() => cityResident && debugNav(residentDebugRoute(cityResident.name))}>Open Ops View</button>
+          </div>
+          {@render ResidentLoopFactGrid({ facts: residentIntelligenceFacts(cityResident) })}
+          <div class="city-empty-state subtle">
+            <strong>{residentLoopSummaryLine(cityResident)}</strong>
+            <span>GP is shown only when coin-995 inventory evidence appears in the live dashboard snapshot.</span>
+          </div>
+        </div>
+      {/if}
       <div class="city-panel">
         <div class="panel-title">Grant Attention</div>
         {#if citySession.authenticated}
@@ -3085,6 +3099,20 @@
   {:else}
     <section class="city-panel"><div class="empty">Resident not found in public city data</div></section>
   {/if}
+{/snippet}
+
+{#snippet ResidentLoopFactGrid({ facts }: { facts: ResidentLoopFact[] })}
+  <div class="resident-loop-grid">
+    {#each facts as fact}
+      <span class:ok={fact.tone === 'ok'} class:warn={fact.tone === 'warn'} class:fail={fact.tone === 'fail'}>
+        <small>{fact.label}</small>
+        <strong>{fact.value}</strong>
+        {#if fact.detail}
+          <em>{fact.detail}</em>
+        {/if}
+      </span>
+    {/each}
+  </div>
 {/snippet}
 
 {#snippet CityInbox()}
@@ -3437,8 +3465,12 @@
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
-        <small>{residentStoryArcLabel(row)} · {residentFeedLabel(row)}</small>
-        <em>{row.attention ?? '-'} attn</em>
+        <small>
+          {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
+          <br />
+          {residentLoopSummaryLine(row)}
+        </small>
+        <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}
       <div class="empty">No public residents reported</div>

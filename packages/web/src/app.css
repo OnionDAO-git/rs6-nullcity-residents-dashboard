@@ -2221,6 +2221,51 @@ pre {
   white-space: nowrap;
 }
 
+.resident-loop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.resident-loop-grid span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+}
+
+.resident-loop-grid small {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.resident-loop-grid strong,
+.resident-loop-grid em {
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-style: normal;
+}
+
+.resident-loop-grid strong {
+  color: var(--text-0);
+  font-size: 16px;
+}
+
+.resident-loop-grid em {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.city-empty-state.subtle {
+  padding-bottom: 0;
+}
+
 .city-link-button {
   display: inline-flex;
   min-height: 36px;
