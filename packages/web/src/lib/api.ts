@@ -101,7 +101,33 @@ export const api = {
   benchmarks: (limit = 200) => request<BenchmarkArtifactSummary[]>(`/api/benchmarks?limit=${encodeURIComponent(limit)}`),
   benchmark: (runId: string) => request<BenchmarkArtifact>(`/api/benchmarks/${encodeURIComponent(runId)}`),
   benchmarkLeaderboard: (limit = 50) => request<BenchmarkLeaderboardRow[]>(`/api/benchmarks/leaderboard?limit=${encodeURIComponent(limit)}`),
+  residentEconomy: (resident: string) => request<ResidentEconomy>(`/api/resident/${encodeURIComponent(resident)}/economy`),
 };
+
+export interface EconomyEvent {
+  id: string;
+  ts: string;
+  kind: string;
+  apDelta?: number;
+  gpDelta?: number;
+  ncriId?: string;
+  note?: string;
+}
+
+export interface ActiveGoal {
+  id: string;
+  goalText: string;
+  completion?: {
+    condition: string;
+    evidenceSource: string;
+  };
+}
+
+export interface ResidentEconomy {
+  ap: number;
+  recentEvents: EconomyEvent[];
+  activeGoals: ActiveGoal[];
+}
 
 export function routeTo(path: string): void {
   history.pushState(null, '', path);

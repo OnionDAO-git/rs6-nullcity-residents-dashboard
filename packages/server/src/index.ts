@@ -2,6 +2,7 @@ import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-da
 import { routeCityApi } from './city/routes';
 import { createCityServicesFromEnv, initializeCityServices } from './city/services';
 import { config, parseRsClientHost } from './config';
+import { readResidentEconomy } from './economy';
 import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
 import { buildEventReadinessSummary } from './readiness';
@@ -265,6 +266,26 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
     if (action === 'pause') return jsonResponse(await gateway.command('pause_resident', { name, ...body }));
     if (action === 'connect') return jsonResponse(await gateway.command('connect_resident', { name, ...body }));
     if (action === 'attach' || action === 'detach') return jsonResponse(await gateway.command(action, { name, ...body }));
+  }
+
+  const residentEconomy = pathname.match(/^\/api\/resident\/([^/]+)\/economy$/);
+  if (residentEconomy && method === 'GET') {
+    const name = decodeURIComponent(residentEconomy[1] || '');
+    try {
+      return jsonResponse(await readResidentEconomy(config.memoryRoot, name));
+    } catch (error) {
+      // Even on unexpected reader failure, return an empty-state payload so the
+      // panel stays renderable rather than 500-ing the resident detail page.
+      return jsonResponse(
+        {
+          ap: 0,
+          recentEvents: [],
+          activeGoals: [],
+          error: error instanceof Error ? error.message : 'Economy read failed',
+        },
+        { status: 200 },
+      );
+    }
   }
 
   const residentDelete = pathname.match(/^\/api\/residents\/([^/]+)$/);

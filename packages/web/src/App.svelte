@@ -13,6 +13,7 @@
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
+  import EconomyPanel from './lib/EconomyPanel.svelte';
 
   type CitySession = {
     authenticated: boolean;
@@ -2487,6 +2488,7 @@
         {@render BodyTable({ body: liveSelectedRuntime?.body })}
       </div>
     </section>
+    <EconomyPanel resident={residentName} />
     {@render ActivityPanel({ activity: buildActivitySnapshot(liveSelectedRuntime, activeResidentSession), runtime: liveSelectedRuntime })}
     <section class="modules">
       {@render LogPanel({ title: 'Actions', rows: selectedRuntime?.logs.actions || [] })}
