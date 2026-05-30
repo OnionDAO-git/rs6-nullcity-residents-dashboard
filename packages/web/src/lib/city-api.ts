@@ -166,6 +166,62 @@ export interface NullCityNcriBridgeResponse {
   error?: string;
 }
 
+export interface NullCityLiveEconomyEvent {
+  id: string;
+  ts: string;
+  kind: string;
+  residentName?: string;
+  cityUserId?: string;
+  apDelta?: number;
+  gpDelta?: number;
+  ncriId?: string;
+  refId?: string;
+  note?: string;
+}
+
+export interface NullCityLiveEconomyResident {
+  residentName: string;
+  attentionBalance: number;
+  gpNetDelta: number;
+  eventCount: number;
+  windowEventCount: number;
+  activeInWindow: boolean;
+  online: boolean;
+  lastEventTs?: string;
+}
+
+export interface NullCityLiveEconomyProposal {
+  proposalId: string;
+  residentName: string;
+  goalText: string;
+  apFunded: number;
+  apThreshold: number;
+  status: string;
+}
+
+export interface NullCityLiveEconomySnapshot {
+  asOf: string;
+  window: { since: string; windowMs: number };
+  city: {
+    residentCount: number;
+    activeResidentCount: number;
+    attentionTotal: number;
+    attentionDelta: number;
+    gpNetDelta: number;
+  };
+  countsByKind: Record<string, number>;
+  topResidentsByAttention: NullCityLiveEconomyResident[];
+  residents: NullCityLiveEconomyResident[];
+  recentEvents: NullCityLiveEconomyEvent[];
+  pendingProposals: NullCityLiveEconomyProposal[];
+}
+
+export interface NullCityLiveEconomyBridgeResponse {
+  available: boolean;
+  snapshot?: NullCityLiveEconomySnapshot;
+  error?: string;
+}
+
 export interface SoulProposalInput {
   residentName?: string;
   displayName: string;
@@ -400,6 +456,15 @@ function jsonBody(body: unknown): string {
   return JSON.stringify(body);
 }
 
+function liveEconomyQuery(options: { since?: string; limit?: number; residentLimit?: number } = {}): string {
+  const params = new URLSearchParams();
+  if (options.since) params.set('since', options.since);
+  if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+  if (typeof options.residentLimit === 'number') params.set('residentLimit', String(options.residentLimit));
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -450,6 +515,8 @@ export const cityApi = {
 
   adminNullcityProposals: () => request<NullCityProposalBridgeResponse>('/api/admin/nullcity/proposals'),
   adminNullcityNcri: () => request<NullCityNcriBridgeResponse>('/api/admin/nullcity/ncri'),
+  nullcityEconomyLive: (options?: { since?: string; limit?: number; residentLimit?: number }) =>
+    request<NullCityLiveEconomyBridgeResponse>(`/api/nullcity/economy/live${liveEconomyQuery(options)}`),
   approveNullcityProposal: (id: string, adminNotes?: string) =>
     request<unknown>(`/api/admin/nullcity/proposals/${encodeURIComponent(id)}/approve`, { method: 'POST', body: jsonBody({ adminNotes }) }),
   rejectNullcityProposal: (id: string, adminNotes?: string) =>

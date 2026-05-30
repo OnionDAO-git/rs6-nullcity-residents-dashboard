@@ -6,9 +6,10 @@
   import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityLiveEconomyBridgeResponse, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
+  import { summarizeLiveEconomy, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
@@ -185,6 +186,8 @@
     printInsights: cityPrintInsights,
   });
   let cityEconomyProofs: EconomyProofSummary = buildEconomyProofSummary([]);
+  let cityLiveEconomy: NullCityLiveEconomyBridgeResponse = { available: false, error: 'not_loaded' };
+  let cityLiveEconomySummary: LiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
     authenticated: false,
     onlineResidents: [],
@@ -384,6 +387,7 @@
     benchmarkRuns: cityBenchmarkRuns,
   });
   $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
+  $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
     gateway: gatewayStatus,
@@ -608,16 +612,18 @@
       return;
     }
     if (activeRoute === '/') {
-      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload] = await Promise.all([
+      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
         citySession.authenticated ? cityLoad(cityApi.prints(), { requests: [] }) : Promise.resolve({ requests: [] }),
         citySession.authenticated ? cityLoad(cityApi.inbox(), { threads: [] }) : Promise.resolve({ threads: [] }),
         cityLoad(api.benchmarks(200), []),
+        cityLoad(cityApi.nullcityEconomyLive({ limit: 8, residentLimit: 6 }), { available: false, error: 'not_configured' }),
       ]);
       cityProposals = proposalsPayload.proposals;
       cityPrintRequests = printsPayload.requests;
       cityInboxThreads = inboxPayload.threads;
       cityBenchmarkRuns = benchmarkPayload;
+      cityLiveEconomy = liveEconomyPayload;
     }
     if (activeRoute === '/profile') {
       const [profilePayload, ledgerPayload] = await Promise.all([
@@ -3192,6 +3198,44 @@
         </article>
       {/each}
     </div>
+  </section>
+
+  <section class={`city-panel tone-${cityLiveEconomySummary.tone}`}>
+    <div class="row">
+      <div>
+        <div class="panel-title">Live AP/GP Economy</div>
+        <strong>{cityLiveEconomySummary.headline}</strong>
+        <small>{cityLiveEconomySummary.detail}</small>
+      </div>
+      <span class={`tag ${cityLiveEconomySummary.tone}`}>{cityLiveEconomy.available ? 'live' : 'bridge'}</span>
+    </div>
+    <div class="city-resident-profile-grid">
+      <span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>
+      <span><small>Soul Queue</small><strong>{cityLiveEconomySummary.proposalLabel}</strong></span>
+      <span><small>Window</small><strong>{cityLiveEconomy.snapshot ? `${Math.round(cityLiveEconomy.snapshot.window.windowMs / 60000)}m` : '-'}</strong></span>
+      <span><small>Top AP</small><strong>{cityLiveEconomy.snapshot?.topResidentsByAttention[0]?.residentName || '-'}</strong></span>
+    </div>
+    {#if cityLiveEconomy.snapshot}
+      <div class="city-record-list compact">
+        {#each cityLiveEconomy.snapshot.recentEvents.slice(0, 3) as event (event.id)}
+          <article>
+            <span class="tag ok">{event.kind.replace(/_/g, ' ')}</span>
+            <div>
+              <strong>{event.residentName || 'city'} {event.apDelta ? `AP ${event.apDelta > 0 ? '+' : ''}${event.apDelta}` : ''}{event.gpDelta ? ` GP ${event.gpDelta > 0 ? '+' : ''}${event.gpDelta}` : ''}</strong>
+              <small>{event.cityUserId || 'public'} · {timeAgo(event.ts)} ago</small>
+            </div>
+          </article>
+        {:else}
+          <article>
+            <span class="tag warn">quiet</span>
+            <div>
+              <strong>No AP/GP events in this polling window</strong>
+              <small>Residents and AP totals are still visible; wait for a top-up, GP burn, or Soul funding event.</small>
+            </div>
+          </article>
+        {/each}
+      </div>
+    {/if}
   </section>
 
   <section class="city-dashboard-grid">

@@ -391,6 +391,56 @@ describe('routeCityApi points and souls', () => {
     expect(await response.json()).toEqual({ available: false, records: [], error: 'not_configured' });
   });
 
+  test('public live economy route proxies the redacted Null City economy snapshot', async () => {
+    const services = testServices(null, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        liveEconomy: async options => ({
+          asOf: '2026-05-30T17:47:00.000Z',
+          window: { since: '2026-05-30T17:32:00.000Z', windowMs: 900000 },
+          city: { residentCount: 23, activeResidentCount: 5, attentionTotal: 50000, attentionDelta: 125, gpNetDelta: -20 },
+          countsByKind: { ap_topup: 2, gp_traded: 1 },
+          topResidentsByAttention: [
+            { residentName: 'res:hans', attentionBalance: 5000, gpNetDelta: 0, eventCount: 1, windowEventCount: 1, activeInWindow: true, online: true },
+          ],
+          residents: [],
+          recentEvents: [
+            { id: 'evt-1', ts: '2026-05-30T17:45:00.000Z', kind: 'ap_topup', residentName: 'res:hans', cityUserId: '<patron #1>', apDelta: 50 },
+          ],
+          pendingProposals: [
+            { proposalId: 'proposal-1', residentName: 'res:lantern', goalText: 'Keep the square lit.', apFunded: 80, apThreshold: 100, status: 'funding' },
+          ],
+          querySeen: options,
+        }),
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(new Request('http://city.test/api/nullcity/economy/live?limit=5&residentLimit=3'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      snapshot: {
+        city: { residentCount: 23, activeResidentCount: 5 },
+        recentEvents: [{ cityUserId: '<patron #1>', residentName: 'res:hans' }],
+        querySeen: { limit: 5, residentLimit: 3 },
+      },
+    });
+  });
+
+  test('public live economy route degrades when the control bridge is not configured', async () => {
+    const services = testServices(null);
+
+    const response = await route(new Request('http://city.test/api/nullcity/economy/live'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false, error: 'not_configured' });
+  });
+
   test('non-admin users cannot access controller-backed NCRI list', async () => {
     const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
       nullcityControl: {

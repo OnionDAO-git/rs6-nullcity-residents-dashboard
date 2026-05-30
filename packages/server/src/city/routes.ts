@@ -112,6 +112,23 @@ export async function routeCityApi(
       return jsonResponse({ available: true, records: await context.nullcityControl.listNcri() });
     }
 
+    if (method === 'GET' && pathname === '/api/nullcity/economy/live') {
+      if (!context.nullcityControl?.liveEconomy) return jsonResponse({ available: false, error: 'not_configured' });
+      try {
+        return jsonResponse({
+          available: true,
+          snapshot: await context.nullcityControl.liveEconomy({
+            since: url.searchParams.get('since') || undefined,
+            limit: positiveInteger(url.searchParams.get('limit')),
+            residentLimit: positiveInteger(url.searchParams.get('residentLimit')),
+          }),
+        });
+      } catch (error) {
+        if (error instanceof NullCityControlError) return jsonResponse({ available: false, error: error.message });
+        throw error;
+      }
+    }
+
     const nullcityProposalAction = pathname.match(/^\/api\/admin\/nullcity\/proposals\/([^/]+)\/(approve|reject|birth)$/);
     if (nullcityProposalAction && method === 'POST') {
       const auth = await requireAdmin(request, url, context);
@@ -554,6 +571,12 @@ function stringBody(body: Record<string, unknown>, key: string): string | undefi
 function numberBody(body: Record<string, unknown>, key: string, fallback = 0): number {
   const value = Number(body[key]);
   return Number.isFinite(value) ? Math.floor(value) : fallback;
+}
+
+function positiveInteger(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function booleanBody(body: Record<string, unknown>, key: string): boolean | undefined {

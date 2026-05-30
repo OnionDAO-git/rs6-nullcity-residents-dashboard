@@ -41,9 +41,66 @@ export interface NullCityNcriRecord {
   redeemedAt?: string;
 }
 
+export interface NullCityLiveEconomyQuery {
+  since?: string;
+  limit?: number;
+  residentLimit?: number;
+}
+
+export interface NullCityLiveEconomyEvent {
+  id: string;
+  ts: string;
+  kind: string;
+  residentName?: string;
+  cityUserId?: string;
+  apDelta?: number;
+  gpDelta?: number;
+  ncriId?: string;
+  refId?: string;
+  note?: string;
+}
+
+export interface NullCityLiveEconomyResident {
+  residentName: string;
+  attentionBalance: number;
+  gpNetDelta: number;
+  eventCount: number;
+  windowEventCount: number;
+  activeInWindow: boolean;
+  online: boolean;
+  lastEventTs?: string;
+}
+
+export interface NullCityLiveEconomyProposal {
+  proposalId: string;
+  residentName: string;
+  goalText: string;
+  apFunded: number;
+  apThreshold: number;
+  status: string;
+}
+
+export interface NullCityLiveEconomySnapshot {
+  asOf: string;
+  window: { since: string; windowMs: number };
+  city: {
+    residentCount: number;
+    activeResidentCount: number;
+    attentionTotal: number;
+    attentionDelta: number;
+    gpNetDelta: number;
+  };
+  countsByKind: Record<string, number>;
+  topResidentsByAttention: NullCityLiveEconomyResident[];
+  residents: NullCityLiveEconomyResident[];
+  recentEvents: NullCityLiveEconomyEvent[];
+  pendingProposals: NullCityLiveEconomyProposal[];
+}
+
 export interface NullCityControlClient {
   listProposals(): Promise<NullCitySoulProposal[]>;
   listNcri(): Promise<NullCityNcriRecord[]>;
+  liveEconomy?(query?: NullCityLiveEconomyQuery): Promise<NullCityLiveEconomySnapshot>;
   approveProposal(id: string, adminNotes?: string): Promise<unknown>;
   rejectProposal(id: string, adminNotes?: string): Promise<unknown>;
   birthProposal(id: string): Promise<unknown>;
@@ -109,6 +166,7 @@ export function createNullCityControlClient(options: NullCityControlClientOption
   return {
     listProposals: async () => parseProposalList(await request<unknown>('/proposals')),
     listNcri: async () => parseNcriList(await request<unknown>('/ncri')),
+    liveEconomy: async query => parseLiveEconomy(await request<unknown>(`/economy/live${queryString(query)}`)),
     approveProposal: (id, adminNotes) =>
       request(`/proposals/${encodeURIComponent(id)}/approve`, {
         method: 'POST',
@@ -155,6 +213,13 @@ function parseNcriList(payload: unknown): NullCityNcriRecord[] {
   return records;
 }
 
+function parseLiveEconomy(payload: unknown): NullCityLiveEconomySnapshot {
+  if (!isLiveEconomySnapshot(payload)) {
+    throw new NullCityControlError('invalid_live_economy', 502);
+  }
+  return payload;
+}
+
 function asProposalEnvelope(payload: unknown): unknown[] | undefined {
   const record = asRecord(payload);
   return Array.isArray(record.proposals) ? record.proposals : undefined;
@@ -195,6 +260,62 @@ function isNcriRecord(value: unknown): value is NullCityNcriRecord {
     typeof record.updatedAt === 'string';
 }
 
+function isLiveEconomySnapshot(value: unknown): value is NullCityLiveEconomySnapshot {
+  const record = asRecord(value);
+  const city = asRecord(record.city);
+  const window = asRecord(record.window);
+  return typeof record.asOf === 'string' &&
+    typeof window.since === 'string' &&
+    typeof window.windowMs === 'number' &&
+    typeof city.residentCount === 'number' &&
+    typeof city.activeResidentCount === 'number' &&
+    typeof city.attentionTotal === 'number' &&
+    typeof city.attentionDelta === 'number' &&
+    typeof city.gpNetDelta === 'number' &&
+    isStringNumberRecord(record.countsByKind) &&
+    Array.isArray(record.topResidentsByAttention) &&
+    record.topResidentsByAttention.every(isLiveEconomyResident) &&
+    Array.isArray(record.residents) &&
+    record.residents.every(isLiveEconomyResident) &&
+    Array.isArray(record.recentEvents) &&
+    record.recentEvents.every(isLiveEconomyEvent) &&
+    Array.isArray(record.pendingProposals) &&
+    record.pendingProposals.every(isLiveEconomyProposal);
+}
+
+function isLiveEconomyResident(value: unknown): value is NullCityLiveEconomyResident {
+  const record = asRecord(value);
+  return typeof record.residentName === 'string' &&
+    typeof record.attentionBalance === 'number' &&
+    typeof record.gpNetDelta === 'number' &&
+    typeof record.eventCount === 'number' &&
+    typeof record.windowEventCount === 'number' &&
+    typeof record.activeInWindow === 'boolean' &&
+    typeof record.online === 'boolean';
+}
+
+function isLiveEconomyEvent(value: unknown): value is NullCityLiveEconomyEvent {
+  const record = asRecord(value);
+  return typeof record.id === 'string' &&
+    typeof record.ts === 'string' &&
+    typeof record.kind === 'string';
+}
+
+function isLiveEconomyProposal(value: unknown): value is NullCityLiveEconomyProposal {
+  const record = asRecord(value);
+  return typeof record.proposalId === 'string' &&
+    typeof record.residentName === 'string' &&
+    typeof record.goalText === 'string' &&
+    typeof record.apFunded === 'number' &&
+    typeof record.apThreshold === 'number' &&
+    typeof record.status === 'string';
+}
+
+function isStringNumberRecord(value: unknown): value is Record<string, number> {
+  const record = asRecord(value);
+  return Object.values(record).every(entry => typeof entry === 'number');
+}
+
 function isProposalStatus(value: unknown): value is NullCityProposalStatus {
   return value === 'proposed' ||
     value === 'funding' ||
@@ -210,6 +331,15 @@ function isNcriApprovalStatus(value: unknown): value is NullCityNcriApprovalStat
 
 function isNcriRedemptionStatus(value: unknown): value is NullCityNcriRedemptionStatus {
   return value === 'available' || value === 'redeemed';
+}
+
+function queryString(query: NullCityLiveEconomyQuery | undefined): string {
+  const params = new URLSearchParams();
+  if (query?.since) params.set('since', query.since);
+  if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query?.residentLimit === 'number') params.set('residentLimit', String(query.residentLimit));
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
 }
 
 async function readPayload(response: Response): Promise<unknown> {
