@@ -15,6 +15,7 @@
   import {
     residentCoinEvidenceAmount,
     residentIntelligenceFacts,
+    residentLoopCheckpoints,
     residentLoopSignal,
     residentLoopSummaryLine,
     residentNeedsAp,
@@ -3858,6 +3859,20 @@
           </div>
         </div>
         <div class="city-panel span-2">
+          <div class="panel-title">Current Loop Checkpoints</div>
+          <div class="city-record-list">
+            {#each residentLoopCheckpoints(cityResident) as checkpoint (checkpoint.key)}
+              <article>
+                <span class={`tag ${checkpoint.tone}`}>{checkpoint.label}</span>
+                <div>
+                  <strong>{checkpoint.value}</strong>
+                  <small>{checkpoint.detail}</small>
+                </div>
+              </article>
+            {/each}
+          </div>
+        </div>
+        <div class="city-panel span-2">
           <EconomyPanel resident={cityResident.name} refreshMs={10000} />
         </div>
         <div class="city-panel">
@@ -4604,6 +4619,11 @@
   <div class="city-resident-list">
     {#each rows as row (row.name)}
       {@const signal = residentLoopSignal(row)}
+      {@const checkpoints = residentLoopCheckpoints(row)}
+      {@const planCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'plan')}
+      {@const actionCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'action')}
+      {@const speechCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'speech')}
+      {@const storyCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'story')}
       {@const benchmark = residentBenchmarkLabel(row)}
       {@const warning = residentPrimaryWarning(row, benchmark)}
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
@@ -4615,10 +4635,10 @@
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
         </small>
         <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
-        <small class="city-resident-loop-line">Plan: {residentLoopLine(signal.plan, 72)}</small>
-        <small class="city-resident-loop-line">Action: {residentLoopLine(signal.action, 60)}</small>
-        <small class="city-resident-loop-line">Speech: {residentLoopLine(signal.speech, 72)}</small>
-        <small class="city-resident-loop-line">Story: {residentLoopLine(signal.story, 72)}</small>
+        <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(signal.plan, 72)}</small>
+        <small class={`city-resident-loop-line tone-${actionCheckpoint?.tone || 'warn'}`}>Action: {residentLoopLine(signal.action, 60)}</small>
+        <small class={`city-resident-loop-line tone-${speechCheckpoint?.tone || 'warn'}`}>Speech: {residentLoopLine(signal.speech, 72)}</small>
+        <small class={`city-resident-loop-line tone-${storyCheckpoint?.tone || 'warn'}`}>Story: {residentLoopLine(signal.story, 72)}</small>
         <small class={`city-resident-loop-line tone-${pulse.tone}`}>Proof: {residentLoopLine(`${pulse.summary} · ${pulse.detail}`, 80)}</small>
         <small class="city-resident-loop-line">Capability: {residentLoopLine(warning.summary, 76)}</small>
         <small class="city-resident-loop-line">Storyteller: {residentLoopLine(storySignal.summary, 76)}</small>

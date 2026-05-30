@@ -21,6 +21,14 @@ export interface ResidentLoopSignal {
   story: string;
 }
 
+export interface ResidentLoopCheckpoint {
+  key: 'plan' | 'action' | 'speech' | 'story';
+  label: 'Plan' | 'Action' | 'Speech' | 'Story';
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn';
+}
+
 export interface ResidentProofPulse {
   tone: 'ok' | 'warn' | 'fail';
   summary: string;
@@ -199,6 +207,45 @@ export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSigna
     speech,
     story: storyLabel,
   };
+}
+
+export function residentLoopCheckpoints(row: ResidentDashboardRow): ResidentLoopCheckpoint[] {
+  const signal = residentLoopSignal(row);
+  const planLive = Boolean(row.thinking?.activePlan?.trim());
+  const speechLive = signal.speech !== '-';
+  const storyLive = signal.story !== '-';
+  const actionLive = signal.action !== '-';
+
+  return [
+    {
+      key: 'plan',
+      label: 'Plan',
+      value: planLive ? signal.plan : '-',
+      detail: planLive ? 'live thinking plan' : 'no active plan published yet',
+      tone: planLive ? 'ok' : 'warn',
+    },
+    {
+      key: 'action',
+      label: 'Action',
+      value: actionLive ? signal.action : '-',
+      detail: actionLive ? actionDetail(row) : '-',
+      tone: actionLive ? 'ok' : 'warn',
+    },
+    {
+      key: 'speech',
+      label: 'Speech',
+      value: speechLive ? signal.speech : '-',
+      detail: speechLive ? 'live speech event' : 'no recent speech in feed',
+      tone: speechLive ? 'ok' : 'warn',
+    },
+    {
+      key: 'story',
+      label: 'Story',
+      value: storyLive ? signal.story : '-',
+      detail: storyLive ? 'latest Library/Storyteller signal' : 'no current story signal',
+      tone: storyLive ? 'ok' : 'warn',
+    },
+  ];
 }
 
 export function residentProofPulse(

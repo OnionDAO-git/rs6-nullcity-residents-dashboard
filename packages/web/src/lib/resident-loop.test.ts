@@ -4,6 +4,7 @@ import {
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
   residentIntelligenceFacts,
+  residentLoopCheckpoints,
   residentLoopSignal,
   residentLoopSummaryLine,
   residentNeedsAp,
@@ -88,6 +89,44 @@ describe('resident loop helpers', () => {
       speech: 'I can trade once I get coin 995.',
       story: 'city_attention_credit @ 1337',
     });
+  });
+
+  test('builds resident loop checkpoints with tone and details for operator triage', () => {
+    expect(residentLoopCheckpoints(row({
+      thinking: { mode: 'executing', activePlan: 'Earn GP to fund AP' },
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          ageMs: 5000,
+          nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 7,
+          latestEventKind: 'say',
+          latestEventText: 'Trading once I have item 995.',
+        },
+        lastAction: { kind: 'trade_with', result: 'success', source: 'thinking', cause: 'goal:ap-gp' },
+      },
+      storyArc: { phase: 'progress', latestEventKind: 'city_attention_credit', latestEventTick: 2048 },
+    }))).toEqual([
+      { key: 'plan', label: 'Plan', value: 'Earn GP to fund AP', detail: 'live thinking plan', tone: 'ok' },
+      { key: 'action', label: 'Action', value: 'trade_with', detail: 'success | thinking | goal:ap-gp', tone: 'ok' },
+      { key: 'speech', label: 'Speech', value: 'Trading once I have item 995.', detail: 'live speech event', tone: 'ok' },
+      { key: 'story', label: 'Story', value: 'city_attention_credit @ 2048', detail: 'latest Library/Storyteller signal', tone: 'ok' },
+    ]);
+  });
+
+  test('marks missing loop checkpoints as warning signals', () => {
+    expect(residentLoopCheckpoints(row({
+      thinking: { mode: 'idle', activePlan: '' },
+      feed: { attached: true, ageMs: 220000, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 0 },
+      storyArc: { phase: 'pitch' },
+    }))).toEqual([
+      { key: 'plan', label: 'Plan', value: '-', detail: 'no active plan published yet', tone: 'warn' },
+      { key: 'action', label: 'Action', value: '-', detail: '-', tone: 'warn' },
+      { key: 'speech', label: 'Speech', value: '-', detail: 'no recent speech in feed', tone: 'warn' },
+      { key: 'story', label: 'Story', value: '-', detail: 'no current story signal', tone: 'warn' },
+    ]);
   });
 
   test('builds operator warnings from AP, GP, plan, story, feed, and benchmark evidence', () => {
