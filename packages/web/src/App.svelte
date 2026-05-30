@@ -4640,7 +4640,7 @@
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
         </small>
         <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
-        <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(signal.plan, 72)}</small>
+        <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(planCheckpoint?.value || '-', 72)}</small>
         <small class={`city-resident-loop-line tone-${actionCheckpoint?.tone || 'warn'}`}>Action: {residentLoopLine(signal.action, 60)}</small>
         <small class={`city-resident-loop-line tone-${speechCheckpoint?.tone || 'warn'}`}>Speech: {residentLoopLine(signal.speech, 72)}</small>
         <small class={`city-resident-loop-line tone-${storyCheckpoint?.tone || 'warn'}`}>Story: {residentLoopLine(signal.story, 72)}</small>
