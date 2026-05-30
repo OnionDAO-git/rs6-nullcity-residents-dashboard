@@ -25,6 +25,7 @@
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
+  import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -160,6 +161,12 @@
   let cityStoryDigest: StorytellerDigestSummary | undefined;
   let cityPrintInsights = printQueueInsights([], [], []);
   let cityPrintResidentSignals: PrintResidentSignal[] = [];
+  let cityProfileEconomy: ProfileEconomySummary = buildProfileEconomySummary({
+    apBalance: 0,
+    gpBalance: 0,
+    ledger: [],
+    residents: [],
+  });
   let cityReleaseReadiness: ReleaseReadinessSummary = buildReleaseReadiness({
     residents: [],
     storyDigests: [],
@@ -362,6 +369,12 @@
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: cityLoopPulse = buildCityLoopPulse(cityResidents);
+  $: cityProfileEconomy = buildProfileEconomySummary({
+    apBalance: citySession.ap,
+    gpBalance: citySession.gp,
+    ledger: cityLedger,
+    residents: cityResidents,
+  });
   $: cityResidentTrades = tradesForResident(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId, cityTrades);
   $: embassyPageActive = isDebugRoute && embassyPages.some(page => browserPath === page.path || browserPath === page.path.replace(/\/$/, ''));
   $: rawVisibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
@@ -3370,6 +3383,37 @@
       <div class="city-balance-grid">
         <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
         <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
+      </div>
+    </div>
+    <div class={`city-panel span-2 city-economy-health tone-${cityProfileEconomy.tone}`}>
+      <div class="row">
+        <div>
+          <div class="panel-title">Economy Health</div>
+          <strong>{cityProfileEconomy.headline}</strong>
+          <small>{cityProfileEconomy.detail}</small>
+        </div>
+        <span class={`tag ${cityProfileEconomy.tone}`}>{cityProfileEconomy.tone}</span>
+      </div>
+      <div class="city-resident-profile-grid city-economy-metrics">
+        {#each cityProfileEconomy.metrics as metric (metric.id)}
+          <span class={`tone-${metric.tone}`}>
+            <small>{metric.label}</small>
+            <strong>{metric.value}</strong>
+            <small>{metric.detail}</small>
+          </span>
+        {/each}
+      </div>
+      {#if cityProfileEconomy.warnings.length}
+        <div class="story-evidence-list city-economy-warnings" aria-label="Economy warnings">
+          {#each cityProfileEconomy.warnings as warning}
+            <span>{warning}</span>
+          {/each}
+        </div>
+      {/if}
+      <div class="story-evidence-list city-economy-actions" aria-label="Economy next actions">
+        {#each cityProfileEconomy.nextActions as action}
+          <span>{action}</span>
+        {/each}
       </div>
     </div>
     <div class="city-panel span-2">

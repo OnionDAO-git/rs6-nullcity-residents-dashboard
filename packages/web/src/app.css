@@ -2137,6 +2137,38 @@ pre {
   color: var(--text-2);
 }
 
+.city-economy-health {
+  border-left: 3px solid var(--ground-4);
+}
+
+.city-economy-health.tone-ok {
+  border-left-color: var(--s-emerald);
+}
+
+.city-economy-health.tone-warn {
+  border-left-color: var(--s-amber);
+}
+
+.city-economy-health.tone-fail {
+  border-left-color: #d95c5c;
+}
+
+.city-economy-metrics span.tone-warn {
+  border-color: rgba(228, 184, 64, 0.34);
+}
+
+.city-economy-metrics span.tone-fail {
+  border-color: rgba(217, 92, 92, 0.5);
+}
+
+.city-economy-actions {
+  margin-top: 12px;
+}
+
+.city-economy-warnings {
+  margin-top: 12px;
+}
+
 .city-avatar {
   display: grid;
   width: 58px;
