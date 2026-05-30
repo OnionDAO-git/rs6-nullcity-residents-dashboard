@@ -943,6 +943,57 @@ describe('RuntimeRepository benchmarks', () => {
     });
   });
 
+  test('normalizes named capability soak artifacts that omit benchmark task/module envelopes', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-named-soak-'));
+    const benchmarkRoot = path.join(root, 'benchmarks');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      path.join(root, 'residents'),
+      benchmarkRoot,
+    );
+    await fs.mkdir(path.join(benchmarkRoot, 'capability-qa'), { recursive: true });
+    await fs.writeFile(
+      path.join(benchmarkRoot, 'capability-qa', 'named_trade_soak_20260530125718.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: 'named_trade_soak',
+        startedAt: '2026-05-30T12:56:25.537Z',
+        endedAt: '2026-05-30T12:57:18.314Z',
+        options: { resident: 'res:qa-trader' },
+        status: 'passed',
+        score: 1,
+        metrics: { tradeCompletedEvents: 1, unsafeDeclines: 3 },
+        summaries: ['safe trade completed; unsafe prompts declined'],
+        entries: [
+          {
+            sparkModule: { id: 'onion.runescape.standard', version: '0.1.0' },
+            action: { kind: 'trade_request' },
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const runs = await repository.listBenchmarkArtifacts();
+    const detail = await repository.readBenchmarkArtifact('named_trade_soak_20260530125718');
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      runId: 'named_trade_soak_20260530125718',
+      task: { id: 'named-trade-soak' },
+      module: { id: 'onion.runescape.standard', version: '0.1.0' },
+      resident: 'res:qa-trader',
+      status: 'passed',
+      score: 1,
+      metrics: { tradeCompletedEvents: 1, unsafeDeclines: 3 },
+    });
+    expect(detail?.evidence.summaries).toEqual(['safe trade completed; unsafe prompts declined']);
+  });
+
   test('ranks module leaderboard by pass rate, progress, run count, and recency', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-leaderboard-'));

@@ -348,6 +348,7 @@
     residents: cityResidents,
     storyDigests: cityStoryDigests,
     printInsights: cityPrintInsights,
+    benchmarkRuns: cityBenchmarkRuns,
   });
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
@@ -567,14 +568,16 @@
       return;
     }
     if (activeRoute === '/') {
-      const [proposalsPayload, printsPayload, inboxPayload] = await Promise.all([
+      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
         citySession.authenticated ? cityLoad(cityApi.prints(), { requests: [] }) : Promise.resolve({ requests: [] }),
         citySession.authenticated ? cityLoad(cityApi.inbox(), { threads: [] }) : Promise.resolve({ threads: [] }),
+        cityLoad(api.benchmarks(200), []),
       ]);
       cityProposals = proposalsPayload.proposals;
       cityPrintRequests = printsPayload.requests;
       cityInboxThreads = inboxPayload.threads;
+      cityBenchmarkRuns = benchmarkPayload;
     }
     if (activeRoute === '/profile') {
       const [profilePayload, ledgerPayload] = await Promise.all([
@@ -612,7 +615,7 @@
       ]);
       cityDirectoryResidents = directoryPayload.residents;
       cityBenchmarkRuns = benchmarkPayload;
-    } else {
+    } else if (activeRoute !== '/') {
       cityBenchmarkRuns = [];
     }
     if (cityResidentId) {
@@ -3098,6 +3101,7 @@
       <span><small>Plans</small><strong>{cityReleaseReadiness.metrics.activePlans}</strong></span>
       <span><small>Low AP</small><strong>{cityReleaseReadiness.metrics.lowApResidents}</strong></span>
       <span><small>Observed GP</small><strong>{cityReleaseReadiness.metrics.observedGp.toLocaleString()}</strong></span>
+      <span><small>Capability QA</small><strong>{cityReleaseReadiness.metrics.capabilityProofs}/{cityReleaseReadiness.metrics.capabilityProofs + cityReleaseReadiness.metrics.capabilityMissing}</strong></span>
       <span><small>Story Age</small><strong>{cityReleaseReadiness.metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${cityReleaseReadiness.metrics.latestStorytellerAgeMinutes}m`}</strong></span>
     </div>
     <div class="city-record-list compact">

@@ -994,11 +994,14 @@ function sumNumbers(values: number[]): number {
 function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifact | undefined {
   const record = asRecord(raw);
   const runId = stringField(record, 'runId') || path.basename(file, '.json');
-  const task = benchmarkIdentity(record.task);
-  const module = benchmarkIdentity(record.module);
+  const task = benchmarkIdentity(record.task) || benchmarkTaskFromSoak(record, runId);
+  const module = benchmarkIdentity(record.module) || benchmarkModuleFromSoak(record);
   const status = benchmarkStatus(record.status);
   const score = numberField(record, 'score');
   if (!runId || !task || !module || !status || score === undefined) return undefined;
+  const evidence = benchmarkEvidence(record.evidence);
+  const summaries = stringArray(record.summaries);
+  if (!evidence.summaries && summaries) evidence.summaries = summaries;
 
   return {
     schemaVersion: numberField(record, 'schemaVersion'),
@@ -1006,7 +1009,7 @@ function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifa
     task,
     module,
     mode: benchmarkMode(record.mode),
-    resident: stringField(record, 'resident') || 'unknown',
+    resident: stringField(record, 'resident') || stringField(asRecord(record.options), 'resident') || 'unknown',
     ...(stringField(record, 'modelProfile') ? { modelProfile: stringField(record, 'modelProfile') } : {}),
     commits: benchmarkCommits(record.commits),
     ...(stringField(record, 'startedAt') ? { startedAt: stringField(record, 'startedAt') } : {}),
@@ -1015,10 +1018,28 @@ function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifa
     status,
     score,
     metrics: benchmarkMetrics(record.metrics),
-    evidence: benchmarkEvidence(record.evidence),
+    evidence,
     ...(stringField(record, 'failureReason') ? { failureReason: stringField(record, 'failureReason') } : {}),
     ...(stringField(record, 'generatedAt') ? { generatedAt: stringField(record, 'generatedAt') } : {}),
   };
+}
+
+function benchmarkTaskFromSoak(record: Record<string, unknown>, runId: string): BenchmarkIdentity | undefined {
+  const kind = stringField(record, 'kind') || runId;
+  if (/named[_-]trade[_-]soak/i.test(kind)) return { id: 'named-trade-soak' };
+  if (/named[_-]equip[_-]soak/i.test(kind)) return { id: 'named-equip-soak' };
+  return undefined;
+}
+
+function benchmarkModuleFromSoak(record: Record<string, unknown>): BenchmarkIdentity | undefined {
+  const direct = benchmarkIdentity(record.sparkModule);
+  if (direct) return direct;
+  if (!Array.isArray(record.entries)) return undefined;
+  for (const entry of record.entries) {
+    const module = benchmarkIdentity(asRecord(entry).sparkModule);
+    if (module) return module;
+  }
+  return undefined;
 }
 
 function toBenchmarkSummary(artifact: BenchmarkArtifact): BenchmarkArtifactSummary {

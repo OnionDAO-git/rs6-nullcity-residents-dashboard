@@ -1,4 +1,4 @@
-import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
 import { residentCoinEvidenceAmount, residentLoopSignal, residentNeedsAp } from './resident-loop';
@@ -7,7 +7,7 @@ export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
 export type ReleaseReadinessTone = 'ok' | 'warn' | 'fail';
 
 export interface ReleaseReadinessCheck {
-  id: 'residents' | 'plans' | 'ap' | 'gp' | 'storyteller' | 'ncri-print';
+  id: 'residents' | 'plans' | 'ap' | 'gp' | 'capabilities' | 'storyteller' | 'ncri-print';
   label: string;
   tone: ReleaseReadinessTone;
   value: string;
@@ -21,6 +21,8 @@ export interface ReleaseReadinessMetrics {
   lowApResidents: number;
   observedGp: number;
   latestStorytellerAgeMinutes?: number;
+  capabilityProofs: number;
+  capabilityMissing: number;
 }
 
 export interface ReleaseReadinessSummary {
@@ -37,11 +39,36 @@ export interface ReleaseReadinessInput {
   residents: ResidentDashboardRow[];
   storyDigests: StorytellerDigestSummary[];
   printInsights: PrintQueueInsightSummary;
+  benchmarkRuns?: BenchmarkArtifactSummary[];
   nowMs?: number;
 }
 
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
+const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
+
+type CapabilityGroupId = 'ap-gp' | 'trade' | 'combat' | 'gear' | 'memory';
+
+interface CapabilityGroup {
+  id: CapabilityGroupId;
+  label: string;
+  match: RegExp;
+}
+
+interface CapabilityQaSummary {
+  proven: number;
+  missing: CapabilityGroup[];
+  stale: Array<{ group: CapabilityGroup; run: BenchmarkArtifactSummary }>;
+  failed: Array<{ group: CapabilityGroup; run: BenchmarkArtifactSummary }>;
+}
+
+const CAPABILITY_GROUPS: CapabilityGroup[] = [
+  { id: 'ap-gp', label: 'AP/GP loop', match: /(ap-gp|starter[-_]gp|coin[-_]995)/i },
+  { id: 'trade', label: 'trade safety', match: /(named[-_]trade[-_]soak|trade[-_]soak|operator[-_]trade)/i },
+  { id: 'combat', label: 'combat/survival', match: /(combat[-_]prayer|combat[-_]survival)/i },
+  { id: 'gear', label: 'gear/equip', match: /(named[-_]equip[-_]soak|equipment[-_]prep|gear[-_]soak)/i },
+  { id: 'memory', label: 'memory/world recall', match: /(memory[-_]route[-_]recall|world[-_]event[-_]reaction|cross[-_]resident)/i },
+];
 
 export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseReadinessSummary {
   const nowMs = input.nowMs ?? Date.now();
@@ -56,11 +83,14 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const latestDigest = latestStorytellerDigest(input.storyDigests);
   const latestStorytellerAgeMinutes = latestDigest ? digestAgeMinutes(latestDigest, nowMs) : undefined;
 
+  const capabilityQa = summarizeCapabilityQa(input.benchmarkRuns || [], nowMs);
+
   const checks: ReleaseReadinessCheck[] = [
     residentCheck(residents.length, onlineResidents),
     planCheck(activePlans, residents.length),
     apCheck(lowApResidents),
     gpCheck(observedGp),
+    capabilityQaCheck(capabilityQa),
     storytellerCheck(latestDigest, latestStorytellerAgeMinutes),
     ncriPrintCheck(input.printInsights),
   ];
@@ -81,10 +111,97 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       lowApResidents,
       observedGp,
       ...(latestStorytellerAgeMinutes !== undefined ? { latestStorytellerAgeMinutes } : {}),
+      capabilityProofs: capabilityQa.proven,
+      capabilityMissing: capabilityQa.missing.length + capabilityQa.stale.length + capabilityQa.failed.length,
     },
     blockers,
     nextActions,
   };
+}
+
+function summarizeCapabilityQa(runs: BenchmarkArtifactSummary[], nowMs: number): CapabilityQaSummary {
+  const latestByGroup = new Map<CapabilityGroupId, BenchmarkArtifactSummary>();
+  for (const run of runs) {
+    const group = capabilityGroupForRun(run);
+    if (!group) continue;
+    const current = latestByGroup.get(group.id);
+    if (!current || benchmarkTimestamp(run) > benchmarkTimestamp(current)) latestByGroup.set(group.id, run);
+  }
+
+  const missing: CapabilityGroup[] = [];
+  const stale: Array<{ group: CapabilityGroup; run: BenchmarkArtifactSummary }> = [];
+  const failed: Array<{ group: CapabilityGroup; run: BenchmarkArtifactSummary }> = [];
+  let proven = 0;
+
+  for (const group of CAPABILITY_GROUPS) {
+    const run = latestByGroup.get(group.id);
+    if (!run) {
+      missing.push(group);
+      continue;
+    }
+    if (run.status !== 'passed' || run.score < 0.95) {
+      failed.push({ group, run });
+      continue;
+    }
+    if (nowMs - benchmarkTimestamp(run) > CAPABILITY_STALE_MS) {
+      stale.push({ group, run });
+      continue;
+    }
+    proven += 1;
+  }
+
+  return { proven, missing, stale, failed };
+}
+
+function capabilityQaCheck(summary: CapabilityQaSummary): ReleaseReadinessCheck {
+  if (summary.failed.length > 0) {
+    const failedLabels = summary.failed.map(item => `${item.group.label} (${item.run.status})`).join(', ');
+    return {
+      id: 'capabilities',
+      label: 'Capability QA',
+      tone: 'fail',
+      value: `${summary.failed.length.toLocaleString()} failed`,
+      detail: `Latest proof failed for ${failedLabels}.`,
+    };
+  }
+
+  const weakCount = summary.missing.length + summary.stale.length;
+  if (weakCount > 0) {
+    const missingLabels = summary.missing.map(group => group.label);
+    const staleLabels = summary.stale.map(item => `${item.group.label} (${item.run.runId})`);
+    return {
+      id: 'capabilities',
+      label: 'Capability QA',
+      tone: 'warn',
+      value: `${summary.proven.toLocaleString()}/${CAPABILITY_GROUPS.length.toLocaleString()} fresh`,
+      detail: `Missing or stale proofs: ${[...missingLabels, ...staleLabels].join(', ')}.`,
+    };
+  }
+
+  return {
+    id: 'capabilities',
+    label: 'Capability QA',
+    tone: 'ok',
+    value: `${summary.proven.toLocaleString()}/${CAPABILITY_GROUPS.length.toLocaleString()} fresh`,
+    detail: 'Core AP/GP, trade, combat, gear, and memory capability proofs are fresh and passing.',
+  };
+}
+
+function capabilityGroupForRun(run: BenchmarkArtifactSummary): CapabilityGroup | undefined {
+  const haystack = [
+    run.task?.id,
+    run.runId,
+    run.file,
+    run.failureReason,
+  ].filter(Boolean).join(' ');
+  return CAPABILITY_GROUPS.find(group => group.match.test(haystack));
+}
+
+function benchmarkTimestamp(run: BenchmarkArtifactSummary): number {
+  const stamp = run.endedAt || run.startedAt || run.generatedAt;
+  if (!stamp) return 0;
+  const ts = Date.parse(stamp);
+  return Number.isFinite(ts) ? ts : 0;
 }
 
 function residentCheck(total: number, online: number): ReleaseReadinessCheck {
@@ -280,6 +397,7 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
+  if (byId.get('capabilities')?.tone !== 'ok') actions.push('Run missing or stale capability benchmarks before relying on unproven resident loops.');
   if (byId.get('storyteller')?.tone === 'warn') actions.push('Run or review Storyteller before using public canon narration.');
   if (byId.get('ncri-print')?.tone === 'warn') actions.push('Assign blocked print queue entries or avoid the print queue during the demo.');
   return actions.length ? actions : ['Keep the controller running and capture fresh screenshots/logs before a public demo.'];
