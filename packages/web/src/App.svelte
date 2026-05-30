@@ -24,9 +24,11 @@
     residentNeedsAp,
     residentOperatorWarnings,
     residentProofPulse,
+    residentProofRollup,
     residentPrimaryWarning,
     residentStackSummary,
     type ResidentLoopFact,
+    type ResidentProofRollup,
     type ResidentGuestTrailPulse,
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
@@ -200,6 +202,7 @@
   let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
   let cityResidentEconomyGpEvidence: ResidentEconomyGpEvidence | undefined;
   let cityResidentProofPulse = residentProofPulse(undefined);
+  let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
     lowAp: 0,
@@ -412,6 +415,11 @@
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
+  $: cityResidentProofRollup = residentProofRollup(cityResidents, row => ({
+    benchmark: residentBenchmarkLabel(row),
+    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
+    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
+  }));
   $: cityProfileEconomy = buildProfileEconomySummary({
     apBalance: citySession.ap,
     gpBalance: citySession.gp,
@@ -3207,6 +3215,16 @@
           </div>
         </article>
       {/each}
+    </div>
+    <div class="city-copy-block">
+      <strong>{cityResidentProofRollup.headline}</strong>
+      <p>{cityResidentProofRollup.detail}</p>
+    </div>
+    <div class="city-resident-profile-grid">
+      <span><small>Online</small><strong>{cityResidentProofRollup.online}</strong></span>
+      <span><small>Healthy</small><strong>{cityResidentProofRollup.healthy}</strong></span>
+      <span><small>Warn</small><strong>{cityResidentProofRollup.warn}</strong></span>
+      <span><small>Fail</small><strong>{cityResidentProofRollup.fail}</strong></span>
     </div>
   </section>
 

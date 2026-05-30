@@ -13,6 +13,7 @@ import {
   residentNeedsAp,
   residentOperatorWarnings,
   residentProofPulse,
+  residentProofRollup,
   residentPrimaryWarning,
   residentStackSummary,
 } from './resident-loop';
@@ -356,6 +357,63 @@ describe('resident loop helpers', () => {
       tone: 'fail',
       summary: '0/7 loop proofs live',
       detail: 'offline · AP, Plan, Action',
+    });
+  });
+
+  test('builds city-level proof rollup with top missing signals', () => {
+    const rows = [
+      row({
+        name: 'res:healthy',
+        attention: 75,
+        thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking' },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+          feed: {
+            attached: true,
+            ageMs: 4000,
+            nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 4,
+            latestEventKind: 'say',
+            latestEventText: 'I can fund AP from coin 995.',
+          },
+        },
+      }),
+      row({
+        name: 'res:low',
+        attention: 1,
+        thinking: { mode: 'idle', activePlan: '' },
+      }),
+    ];
+
+    const rollup = residentProofRollup(rows);
+    expect(rollup).toEqual({
+      tone: 'warn',
+      headline: '1/2 residents have live loop proofs',
+      detail: 'Top gaps: AP, Plan, Action',
+      healthy: 1,
+      warn: 1,
+      fail: 0,
+      online: 2,
+    });
+  });
+
+  test('returns syncing rollup when no online residents are visible', () => {
+    const rollup = residentProofRollup([
+      row({ name: 'res:offline-a', online: false }),
+      row({ name: 'res:offline-b', online: false }),
+    ]);
+
+    expect(rollup).toEqual({
+      tone: 'warn',
+      headline: 'No online residents in current snapshot',
+      detail: 'Waiting for live AP/GP proof signals.',
+      healthy: 0,
+      warn: 0,
+      fail: 0,
+      online: 0,
     });
   });
 

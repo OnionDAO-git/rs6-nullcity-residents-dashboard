@@ -35,6 +35,16 @@ export interface ResidentProofPulse {
   detail: string;
 }
 
+export interface ResidentProofRollup {
+  tone: 'ok' | 'warn' | 'fail';
+  headline: string;
+  detail: string;
+  healthy: number;
+  warn: number;
+  fail: number;
+  online: number;
+}
+
 export interface ResidentGuestTrailPulse {
   online: number;
   lowAp: number;
@@ -50,6 +60,12 @@ export interface ResidentProofPulseSignals {
   goalContract?: { tone: 'ok' | 'warn'; summary: string };
   economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
   storyteller?: { tone: 'ok' | 'warn'; summary: string };
+}
+
+interface ResidentProofCheck {
+  label: string;
+  ok: boolean;
+  optional?: boolean;
 }
 
 export interface ResidentIntentSignals {
@@ -423,29 +439,7 @@ export function residentProofPulse(
     };
   }
 
-  const checks = [
-    { label: 'AP', ok: !residentNeedsAp(row) },
-    { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
-    { label: 'Action', ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) },
-    { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
-    { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok' },
-    {
-      label: 'Goal contract',
-      ok: signals.goalContract?.tone === 'ok',
-      optional: signals.goalContract === undefined,
-    },
-    {
-      label: 'Storyteller',
-      ok: signals.storyteller?.tone === 'ok',
-      optional: signals.storyteller === undefined,
-    },
-    {
-      label: 'Benchmark',
-      ok: signals.benchmark?.tone === 'ok',
-      optional: signals.benchmark === undefined,
-    },
-  ];
-
+  const checks = residentProofChecks(row, signals);
   const requiredChecks = checks.filter(check => !check.optional);
   const okCount = requiredChecks.filter(check => check.ok).length;
   const missing = requiredChecks.filter(check => !check.ok).map(check => check.label);
@@ -461,6 +455,69 @@ export function residentProofPulse(
     tone,
     summary: `${okCount}/${total} loop proofs live`,
     detail,
+  };
+}
+
+export function residentProofRollup(
+  rows: ResidentDashboardRow[],
+  resolveSignals: (row: ResidentDashboardRow) => ResidentProofPulseSignals = () => ({}),
+): ResidentProofRollup {
+  const onlineRows = rows.filter(row => row.online);
+  if (onlineRows.length === 0) {
+    return {
+      tone: 'warn',
+      headline: 'No online residents in current snapshot',
+      detail: 'Waiting for live AP/GP proof signals.',
+      healthy: 0,
+      warn: 0,
+      fail: 0,
+      online: 0,
+    };
+  }
+
+  let healthy = 0;
+  let warn = 0;
+  let fail = 0;
+  const gapCounts = new Map<string, number>();
+  const gapOrder = new Map<string, number>();
+  let gapIndex = 0;
+
+  for (const row of onlineRows) {
+    const pulse = residentProofPulse(row, resolveSignals(row));
+    if (pulse.tone === 'ok') healthy += 1;
+    else if (pulse.tone === 'warn') warn += 1;
+    else fail += 1;
+
+    const checks = residentProofChecks(row, resolveSignals(row)).filter(check => !check.optional && !check.ok);
+    for (const check of checks) {
+      gapCounts.set(check.label, (gapCounts.get(check.label) ?? 0) + 1);
+      if (!gapOrder.has(check.label)) {
+        gapOrder.set(check.label, gapIndex);
+        gapIndex += 1;
+      }
+    }
+  }
+
+  const topGaps = [...gapCounts.entries()]
+    .sort((a, b) => {
+      const countDelta = b[1] - a[1];
+      if (countDelta !== 0) return countDelta;
+      return (gapOrder.get(a[0]) ?? 0) - (gapOrder.get(b[0]) ?? 0);
+    })
+    .slice(0, 3)
+    .map(([label]) => label);
+
+  const tone: ResidentProofRollup['tone'] = healthy === onlineRows.length ? 'ok' : fail > 0 && healthy === 0 ? 'fail' : 'warn';
+  const detail = topGaps.length ? `Top gaps: ${topGaps.join(', ')}` : 'All tracked AP/GP loop proofs are live.';
+
+  return {
+    tone,
+    headline: `${healthy.toLocaleString()}/${onlineRows.length.toLocaleString()} residents have live loop proofs`,
+    detail,
+    healthy,
+    warn,
+    fail,
+    online: onlineRows.length,
   };
 }
 
@@ -564,6 +621,31 @@ function recentSpeechSignal(row: ResidentDashboardRow): { text: string; source: 
     };
   }
   return { text: '-', source: 'none' };
+}
+
+function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPulseSignals): ResidentProofCheck[] {
+  return [
+    { label: 'AP', ok: !residentNeedsAp(row) },
+    { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
+    { label: 'Action', ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) },
+    { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
+    { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok' },
+    {
+      label: 'Goal contract',
+      ok: signals.goalContract?.tone === 'ok',
+      optional: signals.goalContract === undefined,
+    },
+    {
+      label: 'Storyteller',
+      ok: signals.storyteller?.tone === 'ok',
+      optional: signals.storyteller === undefined,
+    },
+    {
+      label: 'Benchmark',
+      ok: signals.benchmark?.tone === 'ok',
+      optional: signals.benchmark === undefined,
+    },
+  ];
 }
 
 function tickFreshness(row: ResidentDashboardRow, eventTick: number | undefined, staleGap: number): string {
