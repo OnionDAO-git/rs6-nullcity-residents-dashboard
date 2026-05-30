@@ -2013,6 +2013,35 @@ pre {
   grid-column: 2;
 }
 
+.city-admin-row .city-proposal-meter {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 4px 0;
+}
+
+.city-admin-row .actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.city-admin-note,
+.city-row-input {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.city-admin-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.city-row-input {
+  display: grid;
+  gap: 6px;
+}
+
 .city-copy-block {
   display: grid;
   gap: 8px;

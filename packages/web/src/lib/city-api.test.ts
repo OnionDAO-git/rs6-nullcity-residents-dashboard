@@ -70,4 +70,33 @@ describe('cityApi', () => {
     expect(residentTradeTone('accepted')).toBe('ok');
     expect(residentTradeTone('failed')).toBe('fail');
   });
+
+  test('calls controller-backed Soul proposal admin endpoints', async () => {
+    const calls: Array<{ path: string; method: string; body: unknown }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return new Response(JSON.stringify({ available: true, proposals: [], ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    setCityCsrfToken('csrf-123');
+
+    await cityApi.adminNullcityProposals();
+    await cityApi.approveNullcityProposal('proposal-1', 'ready');
+    await cityApi.rejectNullcityProposal('proposal-2', 'duplicate');
+    await cityApi.birthNullcityProposal('proposal-3');
+
+    expect(calls).toEqual([
+      { path: '/api/admin/nullcity/proposals', method: 'GET', body: undefined },
+      { path: '/api/admin/nullcity/proposals/proposal-1/approve', method: 'POST', body: { adminNotes: 'ready' } },
+      { path: '/api/admin/nullcity/proposals/proposal-2/reject', method: 'POST', body: { adminNotes: 'duplicate' } },
+      { path: '/api/admin/nullcity/proposals/proposal-3/birth', method: 'POST', body: {} },
+    ]);
+  });
 });

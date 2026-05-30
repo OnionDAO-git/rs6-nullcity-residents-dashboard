@@ -7,6 +7,8 @@ export interface CityConfig {
   sessionCookieSecure: boolean;
   publicBaseUrl?: string;
   printBridgeToken?: string;
+  nullcityControlBaseUrl?: string;
+  nullcityControlToken?: string;
   baseBirthApCost: number;
   skillLevelApCost: number;
   equipmentGpPerAp: number;
@@ -25,6 +27,8 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     publicBaseUrl: clean(env.CITY_PUBLIC_BASE_URL),
     printBridgeToken: clean(env.CITY_PRINT_BRIDGE_TOKEN) || clean(env.PRINT_BRIDGE_CITY_TOKEN),
+    nullcityControlBaseUrl: clean(env.NULLCITY_CITY_API_URL) || clean(env.CITY_DASHBOARD_NULLCITY_URL),
+    nullcityControlToken: clean(env.NULLCITY_CITY_API_TOKEN) || clean(env.CITY_DASHBOARD_NULLCITY_TOKEN),
     baseBirthApCost: numberEnv(env.CITY_SOUL_BASE_BIRTH_AP, 500),
     skillLevelApCost: numberEnv(env.CITY_SOUL_SKILL_LEVEL_AP, 10),
     equipmentGpPerAp: numberEnv(env.CITY_SOUL_EQUIPMENT_GP_PER_AP, 1),

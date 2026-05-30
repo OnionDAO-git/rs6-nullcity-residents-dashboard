@@ -113,6 +113,32 @@ export interface SoulContribution {
   createdAt: string;
 }
 
+export type NullCityProposalStatus = 'proposed' | 'funding' | 'threshold_crossed' | 'approved' | 'rejected' | 'born';
+
+export interface NullCitySoulProposal {
+  schemaVersion: 1;
+  id: string;
+  residentName: string;
+  soulMarkdown: string;
+  goalText: string;
+  binaryCompletionCondition?: string;
+  apThreshold: number;
+  apFunded: number;
+  proposerCityUserId: string;
+  proposerDisplayName?: string;
+  status: NullCityProposalStatus;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+  bornAt?: string;
+}
+
+export interface NullCityProposalBridgeResponse {
+  available: boolean;
+  proposals: NullCitySoulProposal[];
+  error?: string;
+}
+
 export interface SoulProposalInput {
   residentName?: string;
   displayName: string;
@@ -394,6 +420,14 @@ export const cityApi = {
       `/api/embassy/proposals/${encodeURIComponent(id)}/contributions`,
       { method: 'POST', body: jsonBody({ apAmount, idempotencyKey }) },
     ),
+
+  adminNullcityProposals: () => request<NullCityProposalBridgeResponse>('/api/admin/nullcity/proposals'),
+  approveNullcityProposal: (id: string, adminNotes?: string) =>
+    request<unknown>(`/api/admin/nullcity/proposals/${encodeURIComponent(id)}/approve`, { method: 'POST', body: jsonBody({ adminNotes }) }),
+  rejectNullcityProposal: (id: string, adminNotes?: string) =>
+    request<unknown>(`/api/admin/nullcity/proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: jsonBody({ adminNotes }) }),
+  birthNullcityProposal: (id: string) =>
+    request<unknown>(`/api/admin/nullcity/proposals/${encodeURIComponent(id)}/birth`, { method: 'POST', body: jsonBody({}) }),
 
   inbox: () => request<{ threads: InboxThread[] }>('/api/inbox'),
   inboxThread: (id: string) => request<InboxThreadDetail>(`/api/inbox/${encodeURIComponent(id)}`),

@@ -10,6 +10,7 @@ import {
   verifyGameSessionTicket,
 } from './game-session';
 import type { LandingSessionAuthenticator } from './landing-session';
+import { NullCityControlError, type NullCityControlClient } from './nullcity-control';
 import { quoteSoulProposal } from './quote';
 import { CityStoreError, type CityStore } from './store';
 import type { CityUser, LandingSessionUser, PointResource } from './types';
@@ -20,6 +21,7 @@ export interface CityApiContext {
   auth: LandingSessionAuthenticator;
   store: CityStore;
   landingCheckins?: LandingCheckinReader;
+  nullcityControl?: NullCityControlClient;
   gameTicketSecret?: string;
   gameTicketTtlSeconds?: number;
 }
@@ -94,6 +96,30 @@ export async function routeCityApi(
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
       return jsonResponse(await syncLandingCheckins(context.store, auth.cityUser, context.landingCheckins));
+    }
+
+    if (method === 'GET' && pathname === '/api/admin/nullcity/proposals') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.nullcityControl) return jsonResponse({ available: false, proposals: [], error: 'not_configured' });
+      return jsonResponse({ available: true, proposals: await context.nullcityControl.listProposals() });
+    }
+
+    const nullcityProposalAction = pathname.match(/^\/api\/admin\/nullcity\/proposals\/([^/]+)\/(approve|reject|birth)$/);
+    if (nullcityProposalAction && method === 'POST') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.nullcityControl) return jsonResponse({ error: 'not_configured' }, { status: 503 });
+      const proposalId = decodeURIComponent(nullcityProposalAction[1] || '');
+      const action = nullcityProposalAction[2] || '';
+      const body = await readJsonBody(request);
+      if (action === 'approve') {
+        return jsonResponse(await context.nullcityControl.approveProposal(proposalId, stringBody(body, 'adminNotes')));
+      }
+      if (action === 'reject') {
+        return jsonResponse(await context.nullcityControl.rejectProposal(proposalId, stringBody(body, 'adminNotes')));
+      }
+      return jsonResponse(await context.nullcityControl.birthProposal(proposalId));
     }
 
     if (method === 'POST' && pathname === '/api/game/session') {
@@ -436,6 +462,7 @@ export async function routeCityApi(
     return undefined;
   } catch (error) {
     if (error instanceof CityStoreError) return jsonResponse({ error: error.message }, { status: error.status });
+    if (error instanceof NullCityControlError) return jsonResponse({ error: error.message }, { status: error.status });
     throw error;
   }
 }

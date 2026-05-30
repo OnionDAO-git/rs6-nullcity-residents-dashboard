@@ -202,6 +202,141 @@ describe('routeCityApi points and souls', () => {
     expect(balanceOf(await points.json(), 'GP')).toBe(75);
     expect((await trades.json() as { trades: unknown[] }).trades).toHaveLength(1);
   });
+
+  test('admin can inspect controller-backed Soul proposals when the Null City control bridge is configured', async () => {
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [
+          {
+            schemaVersion: 1,
+            id: 'proposal-1',
+            residentName: 'res:lantern',
+            soulMarkdown: '---\nname: res:lantern\n---\n',
+            goalText: 'Keep the square lit.',
+            apThreshold: 100,
+            apFunded: 100,
+            proposerCityUserId: 'city-user-1',
+            status: 'threshold_crossed',
+            createdAt: '2026-05-30T07:00:00.000Z',
+            updatedAt: '2026-05-30T07:01:00.000Z',
+          },
+        ],
+        approveProposal: async () => {
+          throw new Error('not called');
+        },
+        rejectProposal: async () => {
+          throw new Error('not called');
+        },
+        birthProposal: async () => {
+          throw new Error('not called');
+        },
+      },
+    });
+
+    const response = await route(authedRequest('/api/admin/nullcity/proposals'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      proposals: [{ id: 'proposal-1', residentName: 'res:lantern', status: 'threshold_crossed' }],
+    });
+  });
+
+  test('admin proposal operations proxy approve/reject/birth to the Null City controller', async () => {
+    const calls: string[] = [];
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        approveProposal: async (id, adminNotes) => {
+          calls.push(`approve:${id}:${adminNotes}`);
+          return { id, status: 'approved' };
+        },
+        rejectProposal: async (id, adminNotes) => {
+          calls.push(`reject:${id}:${adminNotes}`);
+          return { id, status: 'rejected' };
+        },
+        birthProposal: async id => {
+          calls.push(`birth:${id}`);
+          return { ok: true, proposalId: id, resident: 'res:lantern', fundedAttention: 100 };
+        },
+      },
+    });
+
+    const approve = await route(jsonRequest('/api/admin/nullcity/proposals/proposal-1/approve', { adminNotes: 'ready' }), services);
+    const reject = await route(jsonRequest('/api/admin/nullcity/proposals/proposal-2/reject', { adminNotes: 'duplicate' }), services);
+    const birth = await route(jsonRequest('/api/admin/nullcity/proposals/proposal-1/birth', {}), services);
+
+    expect(approve.status).toBe(200);
+    expect(reject.status).toBe(200);
+    expect(birth.status).toBe(200);
+    expect(calls).toEqual(['approve:proposal-1:ready', 'reject:proposal-2:duplicate', 'birth:proposal-1']);
+    expect(await birth.json()).toMatchObject({ ok: true, proposalId: 'proposal-1', resident: 'res:lantern' });
+  });
+
+  test('non-admin users cannot post controller-backed Soul proposal operations', async () => {
+    const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        approveProposal: async () => ({ ok: true }),
+        rejectProposal: async () => ({ ok: true }),
+        birthProposal: async () => ({ ok: true }),
+      },
+    });
+
+    const response = await route(jsonRequest('/api/admin/nullcity/proposals/proposal-1/approve', { adminNotes: 'ready' }), services);
+
+    expect(response.status).toBe(403);
+  });
+
+  test('configured admin proposal operations still require csrf in production mode', async () => {
+    const services = testServices(adminUser, undefined, {
+      csrfEnabled: true,
+      nullcityControl: {
+        listProposals: async () => [],
+        approveProposal: async () => ({ ok: true }),
+        rejectProposal: async () => ({ ok: true }),
+        birthProposal: async () => ({ ok: true }),
+      },
+    });
+
+    const response = await route(jsonRequest('/api/admin/nullcity/proposals/proposal-1/approve', { adminNotes: 'ready' }), services);
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'csrf_required' });
+  });
+
+  test('controller-backed Soul proposal operations fail closed when the bridge is not configured', async () => {
+    const services = testServices(adminUser);
+
+    const response = await route(jsonRequest('/api/admin/nullcity/proposals/proposal-1/birth', {}), services);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'not_configured' });
+  });
+
+  test('non-admin users cannot use controller-backed Soul proposal operations', async () => {
+    const services = testServices({ ...adminUser, isAdmin: false }, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(authedRequest('/api/admin/nullcity/proposals'), services);
+
+    expect(response.status).toBe(403);
+  });
+
+  test('controller-backed Soul proposal list degrades when the control bridge is not configured', async () => {
+    const services = testServices(adminUser);
+
+    const response = await route(authedRequest('/api/admin/nullcity/proposals'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false, proposals: [], error: 'not_configured' });
+  });
 });
 
 describe('routeCityApi csrf protection', () => {
@@ -259,7 +394,7 @@ function balanceOf(payload: unknown, resource: 'AP' | 'GP'): number | undefined 
 function testServices(
   user: LandingSessionUser | null,
   onToken?: (token: string) => LandingSessionUser | null,
-  options: { csrfEnabled?: boolean; landingCheckins?: LandingCheckinReader } = {},
+  options: { csrfEnabled?: boolean; landingCheckins?: LandingCheckinReader; nullcityControl?: CityServices['nullcityControl'] } = {},
 ): CityServices {
   const config = cityConfigFromEnv({
     LANDING_AUTH_BASE_URL: 'https://oniondao.dev',
@@ -281,6 +416,7 @@ function testServices(
       })(),
     }),
     landingCheckins: options.landingCheckins,
+    nullcityControl: options.nullcityControl,
   };
 }
 

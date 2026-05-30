@@ -6,7 +6,7 @@
   import { api, routeTo, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
@@ -117,6 +117,9 @@
   let cityLedgerFilter: PointResource | 'all' = 'all';
   let cityProposals: SoulProposal[] = [];
   let citySelectedProposal: SoulProposal | undefined;
+  let cityNullcityBridgeAvailable = false;
+  let cityNullcityBridgeError = '';
+  let cityNullcityProposals: NullCitySoulProposal[] = [];
   let cityProposalQuote: SoulQuote | undefined;
   let cityInboxThreads: InboxThread[] = [];
   let citySelectedThread: InboxThreadDetail | undefined;
@@ -236,6 +239,7 @@
   let printerNotes = '';
   let printQuoteGp = '40';
   let printQuoteNotes = '';
+  let nullcityProposalAdminNotes: Record<string, string> = {};
   let adminGrantCityUserId = '';
   let adminGrantResource: PointResource = 'AP';
   let adminGrantAmount = '100';
@@ -580,16 +584,20 @@
       citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
     }
     if (activeRoute.startsWith('/admin')) {
-      const [printersPayload, queuePayload, proposalsPayload, printsPayload, ledgerPayload] = await Promise.all([
+      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, printsPayload, ledgerPayload] = await Promise.all([
         cityLoad(cityApi.adminPrinters(), { printers: [] }),
         cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
         cityLoad(cityApi.proposals(), { proposals: [] }),
+        cityLoad(cityApi.adminNullcityProposals(), { available: false, proposals: [], error: 'not_configured' }),
         cityLoad(cityApi.prints(), { requests: [] }),
         cityLoad(cityApi.ledger(), { entries: [] }),
       ]);
       cityPrinters = printersPayload.printers;
       cityPrintQueue = queuePayload.queue;
       cityProposals = proposalsPayload.proposals;
+      cityNullcityBridgeAvailable = nullcityPayload.available;
+      cityNullcityBridgeError = nullcityPayload.error || '';
+      cityNullcityProposals = nullcityPayload.proposals;
       cityPrintRequests = printsPayload.requests;
       cityLedger = ledgerPayload.entries;
     }
@@ -1416,6 +1424,30 @@
     });
   }
 
+  async function approveNullcityProposal(id: string) {
+    await runAction(async () => {
+      await cityApi.approveNullcityProposal(id, nullcityProposalNotes(id));
+      cityActionNotice = 'Controller proposal approved';
+      await loadRoute(false);
+    });
+  }
+
+  async function rejectNullcityProposal(id: string) {
+    await runAction(async () => {
+      await cityApi.rejectNullcityProposal(id, nullcityProposalNotes(id));
+      cityActionNotice = 'Controller proposal rejected';
+      await loadRoute(false);
+    });
+  }
+
+  async function birthNullcityProposal(id: string) {
+    await runAction(async () => {
+      await cityApi.birthNullcityProposal(id);
+      cityActionNotice = 'Controller proposal birth triggered';
+      await loadRoute(false);
+    });
+  }
+
   async function grantResidentAttention(residentId: string) {
     await runAction(async () => {
       const apAmount = positiveInt(grantAttentionAp, 'AP grant');
@@ -1668,8 +1700,29 @@
     return Math.max(0, proposal.attentionThreshold - proposal.contributedAttention);
   }
 
+  function nullcityProposalProgress(proposal: NullCitySoulProposal): number {
+    if (!proposal.apThreshold) return 0;
+    return Math.min(100, Math.round((proposal.apFunded / proposal.apThreshold) * 100));
+  }
+
+  function nullcityProposalRemaining(proposal: NullCitySoulProposal): number {
+    return Math.max(0, proposal.apThreshold - proposal.apFunded);
+  }
+
+  function nullcityProposalNotes(id: string): string {
+    return (nullcityProposalAdminNotes[id] || '').trim();
+  }
+
+  function setNullcityProposalNotes(id: string, value: string) {
+    nullcityProposalAdminNotes = { ...nullcityProposalAdminNotes, [id]: value };
+  }
+
+  function canRejectNullcityProposal(status: NullCitySoulProposal['status']): boolean {
+    return status === 'proposed' || status === 'funding' || status === 'threshold_crossed';
+  }
+
   function statusTone(status: string): string {
-    if (['ready_to_birth', 'paid', 'approved', 'queued', 'printing', 'completed', 'alive'].includes(status)) return 'ok';
+    if (['ready_to_birth', 'threshold_crossed', 'paid', 'approved', 'born', 'queued', 'printing', 'completed', 'alive'].includes(status)) return 'ok';
     if (['failed', 'cancelled', 'refunded', 'rejected', 'expired', 'deceased'].includes(status)) return 'fail';
     return 'warn';
   }
@@ -3891,18 +3944,57 @@
         </div>
       </section>
     {:else if route === '/admin/souls'}
-      <section class="city-panel">
-        <div class="panel-title">Soul Proposals</div>
-        <div class="city-card-list">
-          {#each cityProposals as proposal (proposal.id)}
-            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
-              <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
-              <strong>{proposal.displayName}</strong>
-              <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP</small>
-            </button>
+      <section class="city-dashboard-grid">
+        <div class="city-panel">
+          <div class="panel-title">Attendee Embassy</div>
+          <div class="city-card-list">
+            {#each cityProposals as proposal (proposal.id)}
+              <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+                <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+                <strong>{proposal.displayName}</strong>
+                <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP</small>
+              </button>
+            {:else}
+              <div class="city-empty-state"><strong>No attendee proposals</strong><span>Submitted proposals appear here after attendees use the Embassy.</span></div>
+            {/each}
+          </div>
+        </div>
+        <div class="city-panel span-2">
+          <div class="row">
+            <div class="panel-title">Controller Birth Queue</div>
+            <span class={`tag ${cityNullcityBridgeAvailable ? 'ok' : 'warn'}`}>{cityNullcityBridgeAvailable ? 'connected' : 'not configured'}</span>
+          </div>
+          {#if !cityNullcityBridgeAvailable}
+            <div class="city-empty-state">
+              <strong>Null City control bridge unavailable</strong>
+              <span>Set `NULLCITY_CITY_API_URL` and `NULLCITY_CITY_API_TOKEN` on the dashboard server to approve, reject, or birth controller-backed proposals.</span>
+              {#if cityNullcityBridgeError}<small>{cityNullcityBridgeError}</small>{/if}
+            </div>
           {:else}
-            <div class="city-empty-state"><strong>No soul proposals</strong><span>Submitted proposals appear here for birth operations.</span></div>
-          {/each}
+            <div class="city-card-list">
+              {#each cityNullcityProposals as proposal (proposal.id)}
+                <article class="city-admin-row">
+                  <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+                  <div>
+                    <strong>{proposal.residentName}</strong>
+                    <small>{proposal.apFunded.toLocaleString()} / {proposal.apThreshold.toLocaleString()} AP · {nullcityProposalRemaining(proposal).toLocaleString()} remaining</small>
+                  </div>
+                  <div class="city-proposal-meter" aria-label="AP funding progress">
+                    <span style={`--queue-fill: ${nullcityProposalProgress(proposal)}%`}></span>
+                  </div>
+                  <p class="city-admin-note">{proposal.goalText}</p>
+                  <label class="city-row-input">Admin notes <textarea value={nullcityProposalAdminNotes[proposal.id] || ''} rows="2" placeholder="Reason for approve/reject" oninput={(event) => setNullcityProposalNotes(proposal.id, event.currentTarget.value)}></textarea></label>
+                  <div class="actions">
+                    <button disabled={actionBusy || proposal.status !== 'threshold_crossed'} onclick={() => approveNullcityProposal(proposal.id)}>Approve</button>
+                    <button class="danger" disabled={actionBusy || !canRejectNullcityProposal(proposal.status)} onclick={() => rejectNullcityProposal(proposal.id)}>Reject</button>
+                    <button class="primary" disabled={actionBusy || proposal.status !== 'approved'} onclick={() => birthNullcityProposal(proposal.id)}>Birth</button>
+                  </div>
+                </article>
+              {:else}
+                <div class="city-empty-state"><strong>No controller proposals</strong><span>Controller-backed proposals from `/api/nullcity/proposals` appear here.</span></div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </section>
     {/if}
