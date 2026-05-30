@@ -148,9 +148,20 @@ export interface StorytellerDigestSummary {
   windowStart?: string;
   windowEnd?: string;
   topEventCount: number;
+  topEvents: StorytellerDigestEventSummary[];
   residentCount: number;
   summary?: string;
   dispatch?: StorytellerDispatchSummary;
+}
+
+export interface StorytellerDigestEventSummary {
+  ref: string;
+  kind: string;
+  residentName?: string;
+  ts?: string;
+  note?: string;
+  importance?: string;
+  evidenceLabels: string[];
 }
 
 export interface StorytellerDigestFeed {

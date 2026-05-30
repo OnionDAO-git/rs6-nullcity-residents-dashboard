@@ -69,6 +69,73 @@ describe('readStorytellerDigestFeed', () => {
     expect(feed.items[1]?.summary).toBe('Operator summary A');
   });
 
+  test('summarizes grounded top events with safe evidence labels and redacted public text', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
+
+    await fs.mkdir(path.join(storytellerRoot, 'run-events'), { recursive: true });
+    await fs.writeFile(
+      path.join(storytellerRoot, 'run-events', 'digest.json'),
+      JSON.stringify({
+        digestId: 'run-events',
+        builtAt: '2026-05-30T00:04:00.000Z',
+        topEvents: [
+          {
+            ref: 'exchange-1',
+            kind: 'ap_for_gp_exchange',
+            residentName: 'res:alice',
+            ts: '2026-05-30T00:00:30.000Z',
+            note: 'Alice traded 200 GP with patron:james for life-force.',
+            importance: 'high',
+            evidence: {
+              cityUserId: 'patron:james',
+              gpItemId: 995,
+              gpBurned: 200,
+              apGranted: 50,
+              exchangeId: 'apgp:res:alice:fixture-001',
+            },
+          },
+          {
+            ref: 'goal-1',
+            kind: 'goal_completed',
+            residentName: 'res:bob',
+            note: 'Bob completed a bounded quest step for demo@onion.test.',
+            importance: 'medium',
+            evidence: {
+              goalText: 'Cook a meal for the chef.',
+              questId: 'cooks_assistant',
+              evidenceSource: 'quest_complete',
+            },
+          },
+        ],
+      }),
+    );
+
+    const feed = await readStorytellerDigestFeed(memoryRoot);
+
+    expect(feed.items[0]?.topEvents).toEqual([
+      {
+        ref: 'exchange-1',
+        kind: 'ap_for_gp_exchange',
+        residentName: 'res:alice',
+        ts: '2026-05-30T00:00:30.000Z',
+        note: 'Alice traded 200 GP with [human] for life-force.',
+        importance: 'high',
+        evidenceLabels: ['coin-995', '200 GP', '50 AP', 'exchange apgp:res:alice:fixture-001'],
+      },
+      {
+        ref: 'goal-1',
+        kind: 'goal_completed',
+        residentName: 'res:bob',
+        note: 'Bob completed a bounded quest step for [human].',
+        importance: 'medium',
+        evidenceLabels: ['quest:cooks_assistant', 'evidence:quest_complete'],
+      },
+    ]);
+    expect(JSON.stringify(feed.items[0])).not.toContain('patron:james');
+    expect(JSON.stringify(feed.items[0])).not.toContain('demo@onion.test');
+  });
+
   test('honors limit and ignores empty malformed runs', async () => {
     const memoryRoot = await makeMemoryRoot();
     const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');

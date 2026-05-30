@@ -9,6 +9,7 @@ export interface StorytellerDigestSummary {
   windowStart?: string;
   windowEnd?: string;
   topEventCount: number;
+  topEvents: StorytellerDigestEventSummary[];
   residentCount: number;
   summary?: string;
   dispatch?: {
@@ -21,6 +22,16 @@ export interface StorytellerDigestSummary {
     eventRefCount: number;
     estimatedCostUsd?: number | null;
   };
+}
+
+export interface StorytellerDigestEventSummary {
+  ref: string;
+  kind: string;
+  residentName?: string;
+  ts?: string;
+  note?: string;
+  importance?: string;
+  evidenceLabels: string[];
 }
 
 export interface StorytellerDigestFeed {
@@ -84,9 +95,27 @@ async function readStorytellerRun(root: string, runId: string): Promise<Storytel
     windowStart: stringField(digest, 'windowStart'),
     windowEnd: stringField(digest, 'windowEnd'),
     topEventCount: topEvents.length,
+    topEvents: topEvents.map(readTopEvent).filter((event): event is StorytellerDigestEventSummary => event !== undefined),
     residentCount: residents.length,
     summary: summary || undefined,
     dispatch,
+  };
+}
+
+function readTopEvent(value: unknown): StorytellerDigestEventSummary | undefined {
+  const event = asRecord(value);
+  const ref = stringField(event, 'ref') || stringField(event, 'id');
+  const kind = stringField(event, 'kind');
+  if (!ref || !kind) return undefined;
+  const note = stringField(event, 'note');
+  return {
+    ref,
+    kind,
+    ...(stringField(event, 'residentName') !== undefined ? { residentName: stringField(event, 'residentName') } : {}),
+    ...(stringField(event, 'ts') !== undefined ? { ts: stringField(event, 'ts') } : {}),
+    ...(note !== undefined ? { note: redactPublicText(note) } : {}),
+    ...(stringField(event, 'importance') !== undefined ? { importance: stringField(event, 'importance') } : {}),
+    evidenceLabels: evidenceLabels(asRecord(event.evidence)),
   };
 }
 
@@ -118,4 +147,62 @@ function numberOrNullField(value: Record<string, unknown>, key: string): number 
 
 function arrayField(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function evidenceLabels(evidence: Record<string, unknown>): string[] {
+  const labels: string[] = [];
+  appendItemLabel(labels, evidence.gpItemId ?? evidence.itemId);
+  appendGpLabel(labels, evidence.gpBurned ?? evidence.amountEarned ?? evidence.amountTraded ?? evidence.amount);
+  appendApLabel(labels, evidence.apGranted ?? evidence.attentionCurrent ?? evidence.apDelta);
+  appendThresholdLabel(labels, evidence.threshold);
+  appendStringLabel(labels, 'exchange', evidence.exchangeId);
+  appendStringLabel(labels, 'ncri', evidence.ncriId);
+  appendStringLabel(labels, 'quest', evidence.questId, ':');
+  appendStringLabel(labels, 'evidence', evidence.evidenceSource, ':');
+  return labels;
+}
+
+function appendItemLabel(labels: string[], value: unknown): void {
+  const itemId = finiteNumber(value);
+  if (itemId === undefined) return;
+  labels.push(itemId === 995 ? 'coin-995' : `item-${itemId}`);
+}
+
+function appendGpLabel(labels: string[], value: unknown): void {
+  const amount = finiteNumber(value);
+  if (amount === undefined) return;
+  labels.push(`${Math.abs(amount).toLocaleString()} GP`);
+}
+
+function appendApLabel(labels: string[], value: unknown): void {
+  const amount = finiteNumber(value);
+  if (amount === undefined) return;
+  labels.push(`${Math.abs(amount).toLocaleString()} AP`);
+}
+
+function appendThresholdLabel(labels: string[], value: unknown): void {
+  const amount = finiteNumber(value);
+  if (amount === undefined) return;
+  labels.push(`threshold ${amount.toLocaleString()} AP`);
+}
+
+function appendStringLabel(labels: string[], prefix: string, value: unknown, separator = ' '): void {
+  if (typeof value !== 'string' || value.trim().length === 0) return;
+  if (isPrivateHumanValue(value)) return;
+  labels.push(`${prefix}${separator}${redactPublicText(value)}`);
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function redactPublicText(value: string): string {
+  return value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[human]')
+    .replace(/\b(?:patron|city-user|user):[A-Za-z0-9._:-]+\b/gi, '[human]');
+}
+
+function isPrivateHumanValue(value: string): boolean {
+  return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value) || /^(?:patron|city-user|user):/i.test(value);
 }

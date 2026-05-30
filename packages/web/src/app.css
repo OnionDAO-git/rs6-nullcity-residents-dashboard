@@ -1956,6 +1956,47 @@ pre {
   grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
 }
 
+.story-event-list.compact {
+  gap: 7px;
+}
+
+.story-event-card {
+  align-items: start;
+}
+
+.story-event-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.story-event-copy small {
+  grid-column: auto;
+  white-space: normal;
+}
+
+.story-event-copy p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.story-evidence-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.story-evidence-list span {
+  min-width: 0;
+  padding: 3px 7px;
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+  background: var(--ground-3);
+  border: 1px solid var(--ground-4);
+}
+
 .city-admin-row {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }

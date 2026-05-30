@@ -3,7 +3,7 @@
   import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { createDomCanvasAdapter, createForkedRuntimeLifecycleAdapter, createGameClient, createHttpSessionTicketAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
-  import { api, routeTo, type StorytellerDigestSummary } from './lib/api';
+  import { api, routeTo, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
@@ -1957,6 +1957,24 @@
     return residentBenchmarkSignal(latestBenchmarkForResident(cityBenchmarkRuns, row.name));
   }
 
+  function storytellerEventTone(event: StorytellerDigestEventSummary): string {
+    if (event.importance === 'high') return 'ok';
+    if (event.importance === 'medium') return 'warn';
+    if (event.importance === 'minimal') return '';
+    return '';
+  }
+
+  function storytellerEventTitle(event: StorytellerDigestEventSummary): string {
+    return labelize(event.kind.replace(/[_-]+/g, ' '))
+      .replace(/\bAp\b/gi, 'AP')
+      .replace(/\bGp\b/gi, 'GP')
+      .replace(/\bNcri\b/gi, 'NCRI');
+  }
+
+  function storytellerEventMeta(event: StorytellerDigestEventSummary): string {
+    return [event.residentName, event.ts ? timeAgo(event.ts) : undefined].filter(Boolean).join(' | ') || 'grounded event';
+  }
+
   function residentHealthTone(row: ResidentDashboardRow): string {
     const status = residentHealthSummary(row).status;
     if (status === 'stuck') return 'fail';
@@ -2889,6 +2907,7 @@
           <span><small>Residents</small><strong>{cityStoryDigests[0].residentCount}</strong></span>
           <span><small>Review</small><strong>{cityStoryDigests[0].dispatch?.needsReview ? 'needs review' : 'grounded'}</strong></span>
         </div>
+        {@render CityStoryEvents({ events: cityStoryDigests[0].topEvents.slice(0, 3), compact: true })}
       {:else}
         <div class="city-empty-state">
           <strong>No digest runs yet</strong>
@@ -2945,6 +2964,37 @@
   </section>
 {/snippet}
 
+{#snippet CityStoryEvents({ events, compact = false }: { events: StorytellerDigestEventSummary[]; compact?: boolean })}
+  {#if events.length}
+    <div class="city-record-list story-event-list" class:compact>
+      {#each events as event (event.ref)}
+        <article class="story-event-card">
+          <span class={`tag ${storytellerEventTone(event)}`}>{event.importance || 'event'}</span>
+          <div class="story-event-copy">
+            <strong>{storytellerEventTitle(event)}</strong>
+            <small>{storytellerEventMeta(event)}</small>
+            {#if event.note}
+              <p>{event.note}</p>
+            {/if}
+            {#if event.evidenceLabels.length}
+              <div class="story-evidence-list" aria-label="Grounded evidence">
+                {#each event.evidenceLabels as label}
+                  <span>{label}</span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </article>
+      {/each}
+    </div>
+  {:else if !compact}
+    <div class="city-empty-state">
+      <strong>No grounded top events</strong>
+      <span>This digest only has counts and operator summary text.</span>
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet CityStory()}
   <section class="city-page-head">
     <p class="kicker">Storyteller</p>
@@ -2988,6 +3038,7 @@
           <strong>{cityStoryDigest.dispatch?.publicTitle || 'No model dispatch title yet'}</strong>
           <p>{cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>
         </div>
+        {@render CityStoryEvents({ events: cityStoryDigest.topEvents })}
         {#if cityStoryDigest.dispatch?.needsReview}
           <div class="notice">Dispatch flagged for review before public broadcast.</div>
         {/if}
