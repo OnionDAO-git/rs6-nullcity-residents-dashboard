@@ -969,23 +969,6 @@
     return 'Residents appear here after the public dashboard snapshot reports them.';
   }
 
-  function residentMissingState() {
-    return residentDetailEmptyState({
-      loading,
-      residentCount: cityResidents.length,
-      hasLiveHints: residentRosterHasLiveHints(),
-      cityDataError,
-    });
-  }
-
-  function residentMissingTitle(): string {
-    return residentMissingState().title;
-  }
-
-  function residentMissingDetail(): string {
-    return residentMissingState().detail;
-  }
-
   function residentLoopLine(signal: string, limit = 78): string {
     if (!signal || signal === '-') return '-';
     if (signal.length <= limit) return signal;
@@ -4008,10 +3991,16 @@
       </div>
     </section>
   {:else}
+    {@const missingState = residentDetailEmptyState({
+      loading,
+      residentCount: cityResidents.length,
+      hasLiveHints: residentRosterHasLiveHints(),
+      cityDataError,
+    })}
     <section class="city-panel">
       <div class="city-empty-state resident-sync-state">
-        <strong>{residentMissingTitle()}</strong>
-        <span>{residentMissingDetail()}</span>
+        <strong>{missingState.title}</strong>
+        <span>{missingState.detail}</span>
         <div class="resident-sync-actions">
           <button onclick={() => cityNav('/story')}>Story</button>
           <button onclick={() => debugNav('/residents')}>Ops Roster</button>
