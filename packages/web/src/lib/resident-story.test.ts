@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerMythCard } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -112,5 +112,51 @@ describe('residentStoryDigestSignal', () => {
     expect(signal.tone).toBe('ok');
     expect(signal.summary).toContain('Grounded Storyteller events found');
     expect(signal.detail).toContain('12m old');
+  });
+});
+
+describe('storytellerMythCard', () => {
+  test('turns AP/GP exchange events into public story copy while preserving evidence', () => {
+    expect(storytellerMythCard({
+      ref: 'exchange-1',
+      kind: 'city_ap_gp_exchange',
+      residentName: 'res:hans',
+      note: 'burned 25 GP for 50 AP',
+      evidenceLabels: ['coin-995', '25 GP', '50 AP'],
+    })).toEqual({
+      title: 'Hans traded GP for attention',
+      body: 'burned 25 GP for 50 AP',
+      evidenceLabels: ['coin-995', '25 GP', '50 AP'],
+    });
+  });
+
+  test('summarizes attention, goal, and unknown events without dropping notes', () => {
+    expect(storytellerMythCard({
+      ref: 'credit-1',
+      kind: 'city_attention_credit',
+      residentName: 'res:pip',
+      note: 'received AP grant',
+      evidenceLabels: ['100 AP'],
+    }).title).toBe('Pip received attention');
+
+    expect(storytellerMythCard({
+      ref: 'goal-1',
+      kind: 'goal_completed',
+      residentName: 'res:duke',
+      note: 'completed a bounded goal in Lumbridge',
+      evidenceLabels: ['goal:lamp-route'],
+    }).title).toBe('Duke completed a goal');
+
+    expect(storytellerMythCard({
+      ref: 'mystery-1',
+      kind: 'strange_new_signal',
+      residentName: 'res:ada',
+      note: 'saw something new near the square',
+      evidenceLabels: ['ref:mystery-1'],
+    })).toEqual({
+      title: 'Ada left evidence',
+      body: 'saw something new near the square',
+      evidenceLabels: ['ref:mystery-1'],
+    });
   });
 });

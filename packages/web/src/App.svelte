@@ -26,7 +26,7 @@
     residentStackSummary,
     type ResidentLoopFact,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, type ResidentStoryEvent } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, debugPath, isDebugPath, isProtectedCityRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -3368,17 +3368,18 @@
   {#if events.length}
     <div class="city-record-list story-event-list" class:compact>
       {#each events as event (event.ref)}
+        {@const myth = storytellerMythCard(event)}
         <article class="story-event-card">
           <span class={`tag ${storytellerEventTone(event)}`}>{event.importance || 'event'}</span>
           <div class="story-event-copy">
-            <strong>{storytellerEventTitle(event)}</strong>
+            <strong>{myth.title}</strong>
             <small>{storytellerEventMeta(event)}</small>
-            {#if event.note}
-              <p>{event.note}</p>
+            {#if myth.body}
+              <p>{myth.body}</p>
             {/if}
-            {#if event.evidenceLabels.length}
+            {#if myth.evidenceLabels.length}
               <div class="story-evidence-list" aria-label="Grounded evidence">
-                {#each event.evidenceLabels as label}
+                {#each myth.evidenceLabels as label}
                   <span>{label}</span>
                 {/each}
               </div>
@@ -3925,11 +3926,15 @@
               </div>
             </article>
             {#each cityResidentStoryEvents as evidence (evidence.digest.runId + ':' + evidence.event.ref)}
+              {@const myth = storytellerMythCard(evidence.event)}
               <article>
-                <span class={`tag ${storytellerEventTone(evidence.event)}`}>{evidence.event.kind}</span>
+                <span class={`tag ${storytellerEventTone(evidence.event)}`}>{evidence.event.importance || 'event'}</span>
                 <div>
-                  <strong>{storytellerEventTitle(evidence.event)}</strong>
+                  <strong>{myth.title}</strong>
                   <small>{storytellerEventMeta(evidence.event)} · {evidence.digest.runId} · {evidence.event.ts ? timeAgo(evidence.event.ts) : evidence.digest.builtAt ? timeAgo(evidence.digest.builtAt) : '-'}</small>
+                  {#if myth.body}
+                    <p>{myth.body}</p>
+                  {/if}
                 </div>
               </article>
             {:else}
