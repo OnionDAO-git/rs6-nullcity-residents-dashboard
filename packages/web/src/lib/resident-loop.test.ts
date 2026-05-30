@@ -8,6 +8,7 @@ import {
   residentLoopSummaryLine,
   residentNeedsAp,
   residentOperatorWarnings,
+  residentProofPulse,
   residentPrimaryWarning,
   residentStackSummary,
 } from './resident-loop';
@@ -147,5 +148,51 @@ describe('resident loop helpers', () => {
     })).toEqual([
       { tone: 'ok', summary: 'No immediate AP/feed/strategy warnings detected.', detail: 'Resident has current AP, GP, plan, feed, story, and benchmark signals.' },
     ]);
+  });
+
+  test('builds a compact resident proof pulse from live loop checkpoints', () => {
+    const pulse = residentProofPulse(row({
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking' },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+    }), {
+      benchmark: { tone: 'ok', summary: 'pass', detail: 'score 1' },
+      storyteller: { tone: 'ok', summary: 'story grounded' },
+      goalContract: { tone: 'ok', summary: 'goal condition present' },
+    });
+
+    expect(pulse).toEqual({
+      tone: 'ok',
+      summary: '8/8 loop proofs live',
+      detail: 'all tracked proof signals are live',
+    });
+  });
+
+  test('flags missing proof checkpoints and offline residents', () => {
+    expect(residentProofPulse(row({
+      online: false,
+      attention: 1,
+      thinking: { mode: 'idle', activePlan: '' },
+    }), {
+      benchmark: { tone: 'warn', summary: 'stale', detail: 'old run' },
+      storyteller: { tone: 'warn', summary: 'no digest' },
+    })).toEqual({
+      tone: 'fail',
+      summary: '0/7 loop proofs live',
+      detail: 'offline · AP, Plan, Action',
+    });
   });
 });

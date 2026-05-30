@@ -2443,6 +2443,18 @@ pre {
   white-space: nowrap;
 }
 
+.city-resident-loop-line.tone-ok {
+  color: var(--s-green);
+}
+
+.city-resident-loop-line.tone-warn {
+  color: var(--s-amber);
+}
+
+.city-resident-loop-line.tone-fail {
+  color: var(--s-rose);
+}
+
 .city-resident-list em {
   grid-column: 4;
   grid-row: 1 / span 2;

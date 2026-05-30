@@ -21,6 +21,18 @@ export interface ResidentLoopSignal {
   story: string;
 }
 
+export interface ResidentProofPulse {
+  tone: 'ok' | 'warn' | 'fail';
+  summary: string;
+  detail: string;
+}
+
+export interface ResidentProofPulseSignals {
+  benchmark?: ResidentBenchmarkSignal;
+  goalContract?: { tone: 'ok' | 'warn'; summary: string };
+  storyteller?: { tone: 'ok' | 'warn'; summary: string };
+}
+
 const LOW_AP_THRESHOLD = 10;
 const STALE_FEED_MS = 120_000;
 const GP_ITEM_ID = 995;
@@ -186,6 +198,59 @@ export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSigna
     action: row.body?.lastAction?.kind || row.lastEvent?.kind || '-',
     speech,
     story: storyLabel,
+  };
+}
+
+export function residentProofPulse(
+  row: ResidentDashboardRow | undefined,
+  signals: ResidentProofPulseSignals = {},
+): ResidentProofPulse {
+  if (!row) {
+    return {
+      tone: 'fail',
+      summary: '0/1 loop proofs live',
+      detail: 'Resident snapshot missing.',
+    };
+  }
+
+  const checks = [
+    { label: 'AP', ok: !residentNeedsAp(row) },
+    { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
+    { label: 'Action', ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) },
+    { label: 'Speech', ok: recentSpeech(row) !== '-' },
+    { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 },
+    {
+      label: 'Goal contract',
+      ok: signals.goalContract?.tone === 'ok',
+      optional: signals.goalContract === undefined,
+    },
+    {
+      label: 'Storyteller',
+      ok: signals.storyteller?.tone === 'ok',
+      optional: signals.storyteller === undefined,
+    },
+    {
+      label: 'Benchmark',
+      ok: signals.benchmark?.tone === 'ok',
+      optional: signals.benchmark === undefined,
+    },
+  ];
+
+  const requiredChecks = checks.filter(check => !check.optional);
+  const okCount = requiredChecks.filter(check => check.ok).length;
+  const missing = requiredChecks.filter(check => !check.ok).map(check => check.label);
+  const total = requiredChecks.length || 1;
+  const tone: ResidentProofPulse['tone'] = !row.online ? 'fail' : missing.length ? 'warn' : 'ok';
+  const detail = !row.online
+    ? `offline · ${missing.slice(0, 3).join(', ') || 'no live proofs'}`
+    : missing.length
+      ? `missing: ${missing.slice(0, 4).join(', ')}`
+      : 'all tracked proof signals are live';
+
+  return {
+    tone,
+    summary: `${okCount}/${total} loop proofs live`,
+    detail,
   };
 }
 

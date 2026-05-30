@@ -18,6 +18,7 @@
     residentLoopSummaryLine,
     residentNeedsAp,
     residentOperatorWarnings,
+    residentProofPulse,
     residentPrimaryWarning,
     residentStackSummary,
     type ResidentLoopFact,
@@ -193,6 +194,7 @@
   let cityResidentStorySignal = residentStoryDigestSignal(undefined, []);
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
   let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
+  let cityResidentProofPulse = residentProofPulse(undefined);
   let cityLoopPulse: CityLoopPulse = {
     online: 0,
     lowAp: 0,
@@ -362,6 +364,11 @@
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityResidentGoalContract = residentGoalContractSignal(cityResidentEconomy);
+  $: cityResidentProofPulse = residentProofPulse(cityResident, {
+    benchmark: cityResidentBenchmarkStatus,
+    goalContract: cityResidentGoalContract,
+    storyteller: cityResidentStorySignal,
+  });
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
   $: cityPrintStorySignal = printStoryDigestSignal({
@@ -3768,6 +3775,19 @@
           <EconomyPanel resident={cityResident.name} refreshMs={10000} />
         </div>
         <div class="city-panel">
+          <div class="panel-title">Proof Pulse</div>
+          <div class="city-record-list">
+            <article>
+              <span class={`tag ${cityResidentProofPulse.tone}`}>{cityResidentProofPulse.tone}</span>
+              <div>
+                <strong>{cityResidentProofPulse.summary}</strong>
+                <small>{cityResidentProofPulse.detail}</small>
+                <small>goal: {cityResidentGoalContract.summary} · story: {cityResidentStorySignal.summary} · benchmark: {cityResidentBenchmarkStatus.summary}</small>
+              </div>
+            </article>
+          </div>
+        </div>
+        <div class="city-panel">
           <div class="panel-title">Capability Warnings</div>
           <div class="city-record-list">
             {#each residentOperatorWarnings(cityResident, cityResidentBenchmarkStatus) as warning, index (warning.summary + index)}
@@ -4441,6 +4461,7 @@
       {@const benchmark = residentBenchmarkLabel(row)}
       {@const warning = residentPrimaryWarning(row, benchmark)}
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
+      {@const pulse = residentProofPulse(row, { benchmark, storyteller: storySignal })}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
@@ -4452,6 +4473,7 @@
         <small class="city-resident-loop-line">Action: {residentLoopLine(signal.action, 60)}</small>
         <small class="city-resident-loop-line">Speech: {residentLoopLine(signal.speech, 72)}</small>
         <small class="city-resident-loop-line">Story: {residentLoopLine(signal.story, 72)}</small>
+        <small class={`city-resident-loop-line tone-${pulse.tone}`}>Proof: {residentLoopLine(`${pulse.summary} · ${pulse.detail}`, 80)}</small>
         <small class="city-resident-loop-line">Capability: {residentLoopLine(warning.summary, 76)}</small>
         <small class="city-resident-loop-line">Storyteller: {residentLoopLine(storySignal.summary, 76)}</small>
         <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
