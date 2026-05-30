@@ -164,4 +164,61 @@ describe('readStorytellerDigestFeed', () => {
     expect(feed.items).toHaveLength(1);
     expect(feed.items[0]?.runId).toBe('run-2');
   });
+
+  test('merges canon and review queue artifacts with dry-run digests', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
+
+    await fs.mkdir(path.join(storytellerRoot, 'run-dry'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'run-dry', 'digest.json'), JSON.stringify({
+      digestId: 'run-dry',
+      builtAt: '2026-05-30T01:00:00.000Z',
+      topEvents: [],
+      residents: [],
+    }));
+
+    await fs.mkdir(path.join(storytellerRoot, 'review', 'digest-review'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'review', 'digest-review', 'digest.json'), JSON.stringify({
+      digestId: 'digest-review',
+      builtAt: '2026-05-30T01:02:00.000Z',
+      topEvents: [{ ref: 'review-event', kind: 'ap_topup' }],
+      residents: [{ residentName: 'res:hans' }],
+    }));
+    await fs.writeFile(path.join(storytellerRoot, 'review', 'digest-review', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-review',
+      generatedAt: '2026-05-30T01:03:00.000Z',
+      needsReview: true,
+      reviewReasons: ['operator_review'],
+      publicTitle: 'Review this dispatch',
+      publicBullets: [],
+      operatorWarnings: [],
+      eventRefsUsed: ['review-event'],
+    }));
+
+    await fs.mkdir(path.join(storytellerRoot, 'canon', 'digest-canon'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon', 'digest.json'), JSON.stringify({
+      digestId: 'digest-canon',
+      builtAt: '2026-05-30T01:04:00.000Z',
+      topEvents: [{ ref: 'canon-event', kind: 'goal_completed' }],
+      residents: [{ residentName: 'res:agent' }],
+    }));
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-canon',
+      generatedAt: '2026-05-30T01:05:00.000Z',
+      needsReview: false,
+      publicTitle: 'Canon dispatch',
+      publicBullets: ['A grounded canon line.'],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: ['canon-event'],
+    }));
+
+    const feed = await readStorytellerDigestFeed(memoryRoot);
+
+    expect(feed.items.map(item => [item.runId, item.queue, item.dispatch?.dispatchId])).toEqual([
+      ['canon/digest-canon', 'canon', 'dispatch-canon'],
+      ['review/digest-review', 'review', 'dispatch-review'],
+      ['run-dry', 'dry-run', undefined],
+    ]);
+  });
 });

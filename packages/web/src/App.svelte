@@ -3559,9 +3559,9 @@
         {#each cityStoryDigests as digest (digest.runId)}
           {@const status = storytellerDigestStatus(digest)}
           <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/story/${encodeURIComponent(digest.runId)}`)}>
-            <span class={`tag ${status.tone}`}>{status.label}</span>
+            <span class={`tag ${status.tone}`}>{digest.queue === 'canon' ? 'canon' : digest.queue === 'review' ? 'review' : status.label}</span>
             <strong>{digest.dispatch?.publicTitle || digest.digestId}</strong>
-            <small>{digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
+            <small>{digest.queue || 'dry-run'} · {digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
           </button>
         {:else}
           <div class="city-empty-state">
@@ -3582,6 +3582,7 @@
         {@const selectedStoryStatus = storytellerDigestStatus(cityStoryDigest)}
         <div class="city-resident-profile-grid">
           <span><small>Run</small><strong>{cityStoryDigest.runId}</strong></span>
+          <span><small>Queue</small><strong>{cityStoryDigest.queue || 'dry-run'}</strong></span>
           <span><small>Digest</small><strong>{cityStoryDigest.digestId}</strong></span>
           <span><small>Top Events</small><strong>{cityStoryDigest.topEventCount}</strong></span>
           <span><small>Residents</small><strong>{cityStoryDigest.residentCount}</strong></span>

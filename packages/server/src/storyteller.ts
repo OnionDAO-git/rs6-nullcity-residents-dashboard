@@ -5,6 +5,7 @@ import { asRecord, readJsonFile, readTextFile } from './util';
 export interface StorytellerDigestSummary {
   runId: string;
   digestId: string;
+  queue: StorytellerQueue;
   builtAt?: string;
   windowStart?: string;
   windowEnd?: string;
@@ -44,7 +45,10 @@ export interface StorytellerDigestFeed {
   items: StorytellerDigestSummary[];
 }
 
+export type StorytellerQueue = 'dry-run' | 'canon' | 'review';
+
 const DEFAULT_LIMIT = 12;
+const STORYTELLER_QUEUE_DIRS = ['canon', 'review'] as const;
 
 export async function readStorytellerDigestFeed(memoryRoot: string, limit = DEFAULT_LIMIT): Promise<StorytellerDigestFeed> {
   const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
@@ -56,11 +60,15 @@ export async function readStorytellerDigestFeed(memoryRoot: string, limit = DEFA
     return { items: [] };
   }
 
-  const rows = await Promise.all(
+  const dryRunRows = await Promise.all(
     entries
-      .filter(entry => entry.isDirectory())
-      .map(async entry => readStorytellerRun(storytellerRoot, entry.name)),
+      .filter(entry => entry.isDirectory() && !isStorytellerQueueDir(entry.name))
+      .map(async entry => readStorytellerRun(storytellerRoot, entry.name, 'dry-run')),
   );
+  const queueRows = await Promise.all(
+    STORYTELLER_QUEUE_DIRS.map(queue => readStorytellerQueue(storytellerRoot, queue)),
+  );
+  const rows = [...dryRunRows, ...queueRows.flat()];
 
   return {
     items: rows
@@ -70,8 +78,23 @@ export async function readStorytellerDigestFeed(memoryRoot: string, limit = DEFA
   };
 }
 
-async function readStorytellerRun(root: string, runId: string): Promise<StorytellerDigestSummary | undefined> {
-  const runRoot = path.join(root, runId);
+async function readStorytellerQueue(storytellerRoot: string, queue: Exclude<StorytellerQueue, 'dry-run'>): Promise<Array<StorytellerDigestSummary | undefined>> {
+  const queueRoot = path.join(storytellerRoot, queue);
+  let entries: Array<{ name: string; isDirectory(): boolean }> = [];
+  try {
+    entries = (await fs.readdir(queueRoot, { withFileTypes: true })) as Array<{ name: string; isDirectory(): boolean }>;
+  } catch {
+    return [];
+  }
+  return Promise.all(
+    entries
+      .filter(entry => entry.isDirectory())
+      .map(async entry => readStorytellerRun(queueRoot, `${queue}/${entry.name}`, queue, entry.name)),
+  );
+}
+
+async function readStorytellerRun(root: string, runId: string, queue: StorytellerQueue, directoryName = runId): Promise<StorytellerDigestSummary | undefined> {
+  const runRoot = path.join(root, directoryName);
   const digest = asRecord(await readJsonFile<unknown>(path.join(runRoot, 'digest.json')));
   const digestId = stringField(digest, 'digestId') || runId;
   const topEvents = arrayField(digest.topEvents);
@@ -103,6 +126,7 @@ async function readStorytellerRun(root: string, runId: string): Promise<Storytel
   return {
     runId,
     digestId,
+    queue,
     builtAt: stringField(digest, 'builtAt'),
     windowStart: stringField(digest, 'windowStart'),
     windowEnd: stringField(digest, 'windowEnd'),
@@ -112,6 +136,10 @@ async function readStorytellerRun(root: string, runId: string): Promise<Storytel
     summary: summary || undefined,
     dispatch,
   };
+}
+
+function isStorytellerQueueDir(name: string): boolean {
+  return STORYTELLER_QUEUE_DIRS.includes(name as Exclude<StorytellerQueue, 'dry-run'>);
 }
 
 function readTopEvent(value: unknown): StorytellerDigestEventSummary | undefined {

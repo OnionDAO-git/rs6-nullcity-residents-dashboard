@@ -150,6 +150,7 @@ export interface StorytellerDispatchSummary {
 export interface StorytellerDigestSummary {
   runId: string;
   digestId: string;
+  queue?: 'dry-run' | 'canon' | 'review';
   builtAt?: string;
   windowStart?: string;
   windowEnd?: string;
