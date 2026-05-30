@@ -75,7 +75,25 @@ export function residentStoryDigestSignal(
       detail: 'Run or review digest generation to capture resident-specific evidence.',
     };
   }
-  const age = Math.max(0, nowMs - eventTs(latest.event, latest.digest));
+  const ts = eventTs(latest.event, latest.digest);
+  if (ts <= 0) {
+    return {
+      tone: 'warn',
+      summary: 'Storyteller evidence exists, but event freshness is unknown.',
+      detail: `Latest event has no valid timestamp (${latest.event.ref || latest.event.kind}).`,
+    };
+  }
+
+  const status = storytellerDigestStatus(latest.digest, nowMs);
+  if (status.label === 'review' || status.label === 'stale') {
+    return {
+      tone: 'warn',
+      summary: 'Storyteller evidence exists, but latest digest still needs operator review.',
+      detail: `${status.summary} Latest event: ${latest.event.ref || latest.event.kind}.`,
+    };
+  }
+
+  const age = Math.max(0, nowMs - ts);
   const ageMinutes = Math.round(age / (60 * 1000));
   if (age > DAY_MS) {
     return {
@@ -103,7 +121,7 @@ export function storytellerMythCard(event: StorytellerDigestEventSummary): Story
 }
 
 export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs = Date.now()): StorytellerDigestStatus {
-  if (digest.dispatch?.needsReview) {
+  if (digest.dispatch?.needsReview || hasDispatchWarnings(digest)) {
     return {
       label: 'review',
       tone: 'warn',
@@ -174,6 +192,10 @@ function eventVerb(kind: string): string {
       return 'created an NCRI';
     case 'ncri_sale':
       return 'entered an NCRI sale';
+    case 'ncri_gift':
+      return 'received an NCRI gift';
+    case 'ncri_admin_transfer':
+      return 'received an admin NCRI transfer';
     case 'ncri_redeemed':
     case 'ncri_redemption':
       return 'redeemed an NCRI';
@@ -198,4 +220,13 @@ function digestTs(digest: StorytellerDigestSummary): number {
   if (!stamp) return 0;
   const ts = Date.parse(stamp);
   return Number.isFinite(ts) ? ts : 0;
+}
+
+function hasDispatchWarnings(digest: StorytellerDigestSummary): boolean {
+  const dispatch = digest.dispatch;
+  if (!dispatch) return false;
+  if (typeof dispatch.warningCount === 'number' && dispatch.warningCount > 0) return true;
+  if (Array.isArray(dispatch.reviewReasons) && dispatch.reviewReasons.length > 0) return true;
+  if ((typeof dispatch.eventRefCount === 'number' && dispatch.eventRefCount === 0) && digest.topEventCount > 0) return true;
+  return false;
 }

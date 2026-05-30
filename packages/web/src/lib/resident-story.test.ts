@@ -113,6 +113,53 @@ describe('residentStoryDigestSignal', () => {
     expect(signal.summary).toContain('Grounded Storyteller events found');
     expect(signal.detail).toContain('12m old');
   });
+
+  test('warns when latest digest dispatch is in operator-review state', () => {
+    const signal = residentStoryDigestSignal(
+      resident('res:hans'),
+      [digest({
+        dispatch: {
+          dispatchId: 'dispatch-review',
+          generatedAt: '2026-05-30T04:00:00.000Z',
+          modelProfile: 'default',
+          needsReview: false,
+          warningCount: 1,
+          publicBullets: [],
+          operatorWarnings: [],
+          reviewReasons: ['missing_link'],
+          eventRefCount: 1,
+          eventRefsUsed: ['e1'],
+          estimatedCostUsd: null,
+        },
+      })],
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    );
+
+    expect(signal.tone).toBe('warn');
+    expect(signal.summary).toContain('needs operator review');
+  });
+
+  test('warns when latest event timestamp is missing or invalid', () => {
+    const signal = residentStoryDigestSignal(
+      resident('res:hans'),
+      [digest({
+        topEvents: [{
+          ref: 'invalid-ts',
+          kind: 'city_ap_gp_exchange',
+          residentName: 'res:hans',
+          ts: 'not-a-date',
+          note: 'bad stamp',
+          importance: 'medium',
+          evidenceLabels: ['gp=1'],
+        }],
+      })],
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    );
+
+    expect(signal.tone).toBe('warn');
+    expect(signal.summary).toContain('freshness is unknown');
+    expect(signal.detail).toContain('invalid-ts');
+  });
 });
 
 describe('storytellerDigestStatus', () => {
@@ -147,6 +194,19 @@ describe('storytellerDigestStatus', () => {
     expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-30T04:10:00.000Z'))).toMatchObject({
       label: 'ready',
       tone: 'ok',
+    });
+    expect(storytellerDigestStatus(
+      digest({
+        dispatch: {
+          ...baseDispatch,
+          warningCount: 2,
+          reviewReasons: ['low_confidence'],
+        },
+      }),
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    )).toMatchObject({
+      label: 'review',
+      tone: 'warn',
     });
     expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-31T05:10:00.000Z'))).toMatchObject({
       label: 'stale',
@@ -186,6 +246,22 @@ describe('storytellerMythCard', () => {
       note: 'completed a bounded goal in Lumbridge',
       evidenceLabels: ['goal:lamp-route'],
     }).title).toBe('Duke completed a goal');
+
+    expect(storytellerMythCard({
+      ref: 'gift-1',
+      kind: 'ncri_gift',
+      residentName: 'res:ada',
+      note: 'admin gifted limited-edition sigil',
+      evidenceLabels: ['ncri:gilded-sigil'],
+    }).title).toBe('Ada received an NCRI gift');
+
+    expect(storytellerMythCard({
+      ref: 'admin-transfer-1',
+      kind: 'ncri_admin_transfer',
+      residentName: 'res:ada',
+      note: 'admin moved NCRI to resident',
+      evidenceLabels: ['ncri:gilded-sigil'],
+    }).title).toBe('Ada received an admin NCRI transfer');
 
     expect(storytellerMythCard({
       ref: 'mystery-1',
