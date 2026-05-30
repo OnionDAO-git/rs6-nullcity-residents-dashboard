@@ -218,6 +218,34 @@ export interface ResidentPost {
   createdAt: string;
 }
 
+export type ResidentTradeStatus =
+  | 'pending_nullcity'
+  | 'accepted'
+  | 'rejected'
+  | 'cancelled'
+  | 'failed';
+
+export interface ResidentTrade {
+  id: string;
+  cityUserId: string;
+  residentId: string;
+  status: ResidentTradeStatus;
+  offeredResource: PointResource;
+  offeredAmount: number;
+  requestedItem?: string;
+  idempotencyKey?: string;
+  pointLedgerEntryId: string;
+  nullcityTradeId?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResidentTradeSummary {
+  title: string;
+  detail: string;
+}
+
 export interface InboxThread {
   id: string;
   cityUserId: string;
@@ -328,6 +356,26 @@ function stringField(value: Record<string, unknown>, key: string): string | unde
   return typeof field === 'string' && field ? field : undefined;
 }
 
+export function residentTradeTone(status: ResidentTradeStatus): 'ok' | 'warn' | 'fail' {
+  if (status === 'accepted') return 'ok';
+  if (status === 'failed' || status === 'rejected' || status === 'cancelled') return 'fail';
+  return 'warn';
+}
+
+export function residentTradeSummary(trade: ResidentTrade): ResidentTradeSummary {
+  const request = trade.requestedItem?.trim() ? `Request: ${trade.requestedItem.trim()}` : 'No requested item recorded';
+  const status = trade.status === 'pending_nullcity'
+    ? 'pending with Null City'
+    : trade.status.replace(/_/g, ' ');
+  const settlement = trade.status === 'accepted' && trade.nullcityTradeId
+    ? `settled in-game as ${trade.nullcityTradeId}`
+    : 'settlement not yet proven in-game';
+  return {
+    title: `${trade.offeredAmount.toLocaleString()} ${trade.offeredResource} offered to ${trade.residentId}`,
+    detail: `${request} · ${status} · ${settlement}`,
+  };
+}
+
 export const cityApi = {
   session: () => request<CitySessionResponse>('/api/session'),
   profile: () => request<{ profile: CityProfile }>('/api/profile'),
@@ -382,7 +430,7 @@ export const cityApi = {
       `/api/city/residents/${encodeURIComponent(residentId)}/attention-grants`,
       { method: 'POST', body: jsonBody(body) },
     ),
-  trades: () => request<{ trades: unknown[] }>('/api/city/trades'),
+  trades: () => request<{ trades: ResidentTrade[] }>('/api/city/trades'),
   createTrade: (body: { residentId: string; offeredResource: PointResource; offeredAmount: number; requestedItem?: string; idempotencyKey?: string; metadata?: Record<string, unknown> }) =>
-    request<{ trade: unknown; ledger: PointLedgerEntry; mocked: boolean }>('/api/city/trades', { method: 'POST', body: jsonBody(body) }),
+    request<{ trade: ResidentTrade; ledger: PointLedgerEntry; mocked: boolean }>('/api/city/trades', { method: 'POST', body: jsonBody(body) }),
 };

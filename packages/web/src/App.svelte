@@ -6,7 +6,7 @@
   import { api, routeTo, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import { residentGoldEvidenceLabel, residentIntelligenceFacts, residentLoopSummaryLine, residentNeedsAp, type ResidentLoopFact } from './lib/resident-loop';
@@ -116,6 +116,8 @@
   let cityProposalQuote: SoulQuote | undefined;
   let cityInboxThreads: InboxThread[] = [];
   let citySelectedThread: InboxThreadDetail | undefined;
+  let cityTrades: ResidentTrade[] = [];
+  let cityResidentTrades: ResidentTrade[] = [];
   let cityPrintRequests: PrintRequest[] = [];
   let citySelectedPrint: PrintRequest | undefined;
   let cityPrinters: Printer[] = [];
@@ -206,6 +208,9 @@
   let contributionAp = '100';
   let grantAttentionAp = '100';
   let grantAttentionMemo = '';
+  let tradeOfferResource: PointResource = 'AP';
+  let tradeOfferAmount = '25';
+  let tradeRequestedItem = 'coin-995 GP';
   let printTitle = '';
   let printDescription = '';
   let printMaterial = 'PLA';
@@ -285,6 +290,7 @@
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
+  $: cityResidentTrades = tradesForResident(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId, cityTrades);
   $: embassyPageActive = isDebugRoute && embassyPages.some(page => browserPath === page.path || browserPath === page.path.replace(/\/$/, ''));
   $: rawVisibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
   $: visibleResidents = applyResidentHealthControls(rawVisibleResidents, {
@@ -569,6 +575,11 @@
       cityLibraryLives = (await cityLoad(cityApi.library(), { lives: [] })).lives;
     }
     if (activeRoute === '/library') souls = await api.souls().catch(() => []);
+    if (citySession.authenticated && cityRouteShowsTrades(activeRoute)) {
+      cityTrades = (await cityLoad(cityApi.trades(), { trades: [] })).trades;
+    } else if (!citySession.authenticated) {
+      cityTrades = [];
+    }
     await refreshInboxNotifications(activeRoute);
   }
 
@@ -617,11 +628,21 @@
       activeRoute.startsWith('/admin');
   }
 
+  function cityRouteShowsTrades(activeRoute: string): boolean {
+    return activeRoute === '/' ||
+      activeRoute === '/profile' ||
+      activeRoute === '/inbox' ||
+      activeRoute.startsWith('/inbox/') ||
+      activeRoute.startsWith('/residents/') ||
+      activeRoute.startsWith('/admin');
+  }
+
   function clearProtectedCityData() {
     cityProfileData = undefined;
     cityLedger = [];
     cityInboxThreads = [];
     citySelectedThread = undefined;
+    cityTrades = [];
     cityPrintRequests = [];
     citySelectedPrint = undefined;
     cityStoryDigests = [];
@@ -1382,6 +1403,23 @@
     });
   }
 
+  async function createResidentTradePrompt(residentId: string) {
+    await runAction(async () => {
+      const offeredAmount = positiveInt(tradeOfferAmount, `${tradeOfferResource} offer`);
+      const { trade } = await cityApi.createTrade({
+        residentId,
+        offeredResource: tradeOfferResource,
+        offeredAmount,
+        requestedItem: tradeRequestedItem.trim(),
+        idempotencyKey: crypto.randomUUID(),
+        metadata: { source: 'dashboard', route: browserPath },
+      });
+      cityActionNotice = `Trade prompt recorded: ${residentTradeSummary(trade).title}`;
+      await bootstrapSession();
+      await loadRoute(false);
+    });
+  }
+
   async function createPrintRequest() {
     await runAction(async () => {
       const { request } = await cityApi.createPrint({
@@ -1613,6 +1651,12 @@
     const record = cityDirectoryResidents.find(row => row.id === id || row.nullcityResidentId === id);
     const live = cityResidents.find(row => row.name === id || residentSlug(row.name) === residentSlug(id));
     return record?.displayName || (live ? residentDisplayName(live.name) : id);
+  }
+
+  function tradesForResident(id: string | undefined, trades: ResidentTrade[]): ResidentTrade[] {
+    if (!id) return [];
+    const slug = residentSlug(id);
+    return trades.filter(trade => trade.residentId === id || residentSlug(trade.residentId) === slug);
   }
 
   function selectedCityResidentDisplay(): string {
@@ -3268,6 +3312,44 @@
           {@render CityAuthCta({ label: 'Login to grant AP' })}
         {/if}
       </div>
+      <div class="city-panel">
+        <div class="panel-title">AP/GP Trade Prompt</div>
+        {#if citySession.authenticated}
+          <div class="city-form-grid single">
+            <label>Offer
+              <select bind:value={tradeOfferResource}>
+                <option value="AP">AP</option>
+                <option value="GP">GP</option>
+              </select>
+            </label>
+            <label>Amount <input bind:value={tradeOfferAmount} inputmode="numeric" /></label>
+            <label>Request <input bind:value={tradeRequestedItem} placeholder="coin-995 GP or NCRI" /></label>
+            <button disabled={actionBusy} onclick={() => createResidentTradePrompt(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>Send Prompt</button>
+          </div>
+          <div class="city-empty-state subtle">
+            <strong>Dashboard trade prompts debit city AP/GP immediately.</strong>
+            <span>Completed GP is trusted only when Null City reports accepted status or coin-995 evidence.</span>
+          </div>
+        {:else}
+          {@render CityAuthCta({ label: 'Login to trade AP/GP' })}
+        {/if}
+      </div>
+      <div class="city-panel span-2">
+        <div class="panel-title">Resident Trade History</div>
+        <div class="city-record-list">
+          {#each cityResidentTrades as trade (trade.id)}
+            <article>
+              <span class={`tag ${residentTradeTone(trade.status)}`}>{trade.status}</span>
+              <div>
+                <strong>{residentTradeSummary(trade).title}</strong>
+                <small>{residentTradeSummary(trade).detail} · {timeAgo(trade.updatedAt)}</small>
+              </div>
+            </article>
+          {:else}
+            <div class="city-empty-state"><strong>No AP/GP trade prompts</strong><span>Human support prompts and resident exchange requests will appear here.</span></div>
+          {/each}
+        </div>
+      </div>
       <div class="city-panel span-2">
         <div class="panel-title">Posts</div>
         <div class="city-record-list">
@@ -3346,6 +3428,23 @@
         {:else}
           <div class="city-empty-state"><strong>Select a thread</strong><span>Resident messages and AP-for-GP trade prompts appear in the conversation panel.</span></div>
         {/if}
+      </div>
+      <div class="city-panel span-2">
+        <div class="panel-title">AP/GP Trade Prompts</div>
+        <div class="city-record-list">
+          {#each cityTrades as trade (trade.id)}
+            <article>
+              <span class={`tag ${residentTradeTone(trade.status)}`}>{trade.status}</span>
+              <div>
+                <strong>{residentTradeSummary(trade).title}</strong>
+                <small>{residentTradeSummary(trade).detail} · {timeAgo(trade.updatedAt)}</small>
+              </div>
+              <button onclick={() => cityNav(`/residents/${encodeURIComponent(trade.residentId)}`)}>Resident</button>
+            </article>
+          {:else}
+            <div class="city-empty-state"><strong>No trade prompts</strong><span>AP-for-GP and NCRI exchange prompts appear here after a resident or attendee opens one.</span></div>
+          {/each}
+        </div>
       </div>
     </section>
   {/if}

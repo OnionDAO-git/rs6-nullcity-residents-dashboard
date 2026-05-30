@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { CityApiError, cityApi, setCityCsrfToken } from './city-api';
+import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken } from './city-api';
 
 const originalFetch = globalThis.fetch;
 
@@ -47,5 +47,27 @@ describe('cityApi', () => {
       message: 'unauthenticated',
       loginUrl: '/login?returnTo=%2Fprofile',
     } satisfies Partial<CityApiError>);
+  });
+
+  test('summarizes resident trades without claiming in-game coin settlement', () => {
+    const summary = residentTradeSummary({
+      id: 'trade-1',
+      cityUserId: 'city-user-1',
+      residentId: 'res:hans',
+      status: 'pending_nullcity',
+      offeredResource: 'AP',
+      offeredAmount: 25,
+      requestedItem: 'coin-995 GP',
+      pointLedgerEntryId: 'ledger-1',
+      metadata: { mocked: true },
+      createdAt: '2026-05-30T04:00:00.000Z',
+      updatedAt: '2026-05-30T04:00:00.000Z',
+    });
+
+    expect(summary.title).toBe('25 AP offered to res:hans');
+    expect(summary.detail).toBe('Request: coin-995 GP · pending with Null City · settlement not yet proven in-game');
+    expect(residentTradeTone('pending_nullcity')).toBe('warn');
+    expect(residentTradeTone('accepted')).toBe('ok');
+    expect(residentTradeTone('failed')).toBe('fail');
   });
 });
