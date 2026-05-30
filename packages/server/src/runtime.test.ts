@@ -199,6 +199,80 @@ describe('RuntimeRepository resident feeds', () => {
     expect(rows[0]?.stack).toEqual(model.stack);
   });
 
+  test('derives active plan from cognition goal and falls back to soul orientation', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-resident-intent-'));
+    const memoryRoot = path.join(root, 'memory');
+    const soulsRoot = path.join(root, 'souls');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      soulsRoot,
+    );
+
+    await fs.mkdir(path.join(memoryRoot, 'res-agent'), { recursive: true });
+    await fs.mkdir(path.join(memoryRoot, 'res-duke'), { recursive: true });
+    await fs.mkdir(soulsRoot, { recursive: true });
+    await fs.writeFile(
+      path.join(memoryRoot, 'res-agent', 'runtime-state.json'),
+      JSON.stringify({
+        resident: 'res:agent',
+        attention: 64,
+        tick: 17,
+        legacy: { kind: 'endurer', progress: {}, complete: false },
+        budgets: { minuteStartedAt: '2026-05-30T00:00:00.000Z', dayStartedAt: '2026-05-30T00:00:00.000Z', requestsThisMinute: 0, requestsToday: 0 },
+        cognition: { activeGoal: { id: 'master-woodcutting', description: 'Master woodcutting and document a reliable GP route.' } },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(memoryRoot, 'res-duke', 'runtime-state.json'),
+      JSON.stringify({
+        resident: 'res:duke',
+        attention: 64,
+        tick: 17,
+        legacy: { kind: 'endurer', progress: {}, complete: false },
+        budgets: { minuteStartedAt: '2026-05-30T00:00:00.000Z', dayStartedAt: '2026-05-30T00:00:00.000Z', requestsThisMinute: 0, requestsToday: 0 },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(soulsRoot, 'res-agent.md'),
+      ['---', 'name: res:agent', 'display: Agent', '---', '# Agent'].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(soulsRoot, 'res-duke.md'),
+      [
+        '---',
+        'name: res:duke',
+        'display: Duke',
+        'orientationGoal:',
+        '  id: keep-square-lit',
+        '  description: Keep the square lit and turn firemaking into public myth.',
+        '  tier: pursue',
+        '---',
+        '# Duke',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const liveGoal = await repository.residentRuntime('res:agent', { name: 'res:agent', online: true });
+    const orientationFallback = await repository.residentRuntime('res:duke', { name: 'res:duke', online: true });
+    const rows = await repository.enrichResidents([
+      { name: 'res:agent', online: true },
+      { name: 'res:duke', online: true },
+    ]);
+
+    expect(liveGoal.thinking.activePlan).toBe('Master woodcutting and document a reliable GP route.');
+    expect(orientationFallback.thinking.activePlan).toBe('Keep the square lit and turn firemaking into public myth.');
+    expect(rows.map(row => row.thinking?.activePlan)).toEqual([
+      'Master woodcutting and document a reliable GP route.',
+      'Keep the square lit and turn firemaking into public myth.',
+    ]);
+  });
+
   test('merges trajectory action_result evidence so final timeouts beat gateway acknowledgements', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-trajectory-results-'));

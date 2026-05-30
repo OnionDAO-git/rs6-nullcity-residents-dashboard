@@ -4,6 +4,7 @@ import {
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
   residentIntelligenceFacts,
+  residentIntentFacts,
   residentLoopCheckpoints,
   residentLoopSignal,
   residentLoopSummaryLine,
@@ -89,6 +90,45 @@ describe('resident loop helpers', () => {
       speech: 'I can trade once I get coin 995.',
       story: 'city_attention_credit @ 1337',
     });
+  });
+
+  test('builds a visitor-readable resident intent card from live proof signals', () => {
+    expect(residentIntentFacts(row({
+      attention: 2,
+      thinking: { mode: 'executing', activePlan: 'Earn GP to keep AP above the floor' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 2048 },
+        feed: {
+          attached: true,
+          tick: 2048,
+          ageMs: 5000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 2 },
+          events: 1,
+          availableActions: 6,
+          latestEventKind: 'say',
+          latestEventText: 'I need AP, but coin 995 is nearby.',
+        },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'The resident is turning patron support into visible progress.',
+        latestEventKind: 'city_attention_credit',
+        latestEventTick: 2048,
+      },
+    }), {
+      storyteller: {
+        tone: 'ok',
+        summary: 'City dispatch cited this resident.',
+        detail: 'Latest event is 3m old.',
+      },
+    })).toEqual([
+      { label: 'Wants', value: 'Earn GP to keep AP above the floor', detail: 'live plan', tone: 'ok' },
+      { label: 'Needs', value: 'AP support', detail: '2 AP · GP not observed', tone: 'warn' },
+      { label: 'Did', value: 'pickup_item', detail: 'success | thinking | goal:ap-gp | tick 2048 (current)', tone: 'ok' },
+      { label: 'Said', value: 'I need AP, but coin 995 is nearby.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
+      { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'City dispatch cited this resident.', tone: 'ok' },
+    ]);
   });
 
   test('builds resident loop checkpoints with tone and details for operator triage', () => {

@@ -103,6 +103,7 @@ export class RuntimeRepository {
       state,
       thinking: {
         mode: summary?.online ? inferThinkingMode(latestInference) : 'offline',
+        activePlan: activePlanFromStateOrSoul(state, soul),
         previousIntent: state?.previousIntent,
         lastInferenceCause: stringField(latestInference, 'cause'),
         hooksMarkdown,
@@ -366,6 +367,7 @@ export class RuntimeRepository {
       id: name,
       file,
       title: typeof frontmatter.display === 'string' ? frontmatter.display : heading || name,
+      orientationGoal: orientationGoalSummary(frontmatter.orientationGoal),
       model: modelSummary(frontmatter.model),
       behavior: behaviorSummary(frontmatter.behavior),
       modules: moduleSummariesFromText(text),
@@ -1385,6 +1387,34 @@ function buildResidentStack(soul: SoulSummary | undefined, spark: SparkRuntimeSu
     ...(soul?.behavior?.body ? { body: soul.behavior.body } : {}),
     configuredModules: soul?.modules || [],
     ...(spark.activeModule ? { activeModule: spark.activeModule } : {}),
+  };
+}
+
+function activePlanFromStateOrSoul(state: RuntimeState | undefined, soul: SoulSummary | undefined): string | undefined {
+  const cognition = asRecord(state?.cognition);
+  const activeGoal = asRecord(cognition.activeGoal);
+  const currentGoal = asRecord(cognition.currentGoal);
+  return (
+    cleanScalar(stringField(activeGoal, 'description')) ||
+    cleanScalar(stringField(activeGoal, 'goalText')) ||
+    cleanScalar(stringField(activeGoal, 'text')) ||
+    cleanScalar(stringField(currentGoal, 'description')) ||
+    cleanScalar(stringField(currentGoal, 'goalText')) ||
+    cleanScalar(stringField(cognition, 'activePlan')) ||
+    cleanScalar(soul?.orientationGoal?.description)
+  );
+}
+
+function orientationGoalSummary(value: unknown): SoulSummary['orientationGoal'] | undefined {
+  const record = asRecord(value);
+  const description = cleanScalar(stringField(record, 'description'));
+  if (!description) return undefined;
+  const id = cleanScalar(stringField(record, 'id'));
+  const tier = cleanScalar(stringField(record, 'tier'));
+  return {
+    ...(id ? { id } : {}),
+    description,
+    ...(tier ? { tier } : {}),
   };
 }
 

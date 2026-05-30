@@ -15,6 +15,7 @@
   import {
     residentCoinEvidenceAmount,
     residentIntelligenceFacts,
+    residentIntentFacts,
     residentLoopCheckpoints,
     residentLoopSignal,
     residentLoopSummaryLine,
@@ -3838,6 +3839,14 @@
           <div class="city-empty-state subtle">
             <strong>{residentLoopSummaryLine(cityResident)}</strong>
             <span>GP is shown only when coin-995 inventory evidence appears in the live dashboard snapshot.</span>
+          </div>
+        </div>
+        <div class="city-panel span-2">
+          <div class="panel-title">Resident Intent</div>
+          {@render ResidentLoopFactGrid({ facts: residentIntentFacts(cityResident, { goalContract: cityResidentGoalContract, storyteller: cityResidentStorySignal }) })}
+          <div class="city-empty-state subtle">
+            <strong>{selectedCityResidentDisplay()} in one glance</strong>
+            <span>Intent, support need, action, speech, and Library memory are read-only dashboard signals.</span>
           </div>
         </div>
         <div class="city-panel span-2">

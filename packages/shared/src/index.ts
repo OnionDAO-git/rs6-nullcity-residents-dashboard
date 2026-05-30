@@ -487,6 +487,11 @@ export interface SoulSummary {
   id: string;
   file: string;
   title: string;
+  orientationGoal?: {
+    id?: string;
+    description: string;
+    tier?: string;
+  };
   model?: {
     endpoint?: string;
     model?: string;

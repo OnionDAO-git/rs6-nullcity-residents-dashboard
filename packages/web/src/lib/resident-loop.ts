@@ -41,6 +41,11 @@ export interface ResidentProofPulseSignals {
   storyteller?: { tone: 'ok' | 'warn'; summary: string };
 }
 
+export interface ResidentIntentSignals {
+  goalContract?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
+  storyteller?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
+}
+
 const LOW_AP_THRESHOLD = 10;
 const STALE_FEED_MS = 120_000;
 const ACTION_STALE_TICK_GAP = 180;
@@ -119,6 +124,53 @@ export function residentStackSummary(row: ResidentDashboardRow): string {
   const modelLabel = model.value !== '-' ? model.value : 'model/endpoint unavailable';
   const moduleLabel = module ? `${module.id}${module.version ? `@${module.version}` : ''}` : 'SPARK unavailable';
   return `${modelLabel} | ${moduleLabel}`;
+}
+
+export function residentIntentFacts(row: ResidentDashboardRow, signals: ResidentIntentSignals = {}): ResidentLoopFact[] {
+  const speech = recentSpeechSignal(row);
+  const action = row.body?.lastAction?.kind || row.lastEvent?.kind;
+  const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
+  const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
+  const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
+  const gp = residentGoldEvidenceLabel(row);
+  const needsAp = residentNeedsAp(row);
+  const needsGpEvidence = gp.value === 'not observed';
+  const storyValue = row.storyArc?.summary || row.storyArc?.latestEventKind || signals.storyteller?.summary || '-';
+
+  return [
+    {
+      label: 'Wants',
+      value: residentGoalLabel(row),
+      detail: residentGoalDetail(row) === 'plan' ? 'live plan' : residentGoalDetail(row),
+      tone: row.thinking?.activePlan ? 'ok' : 'warn',
+    },
+    {
+      label: 'Needs',
+      value: needsAp ? 'AP support' : needsGpEvidence ? 'coin-995 evidence' : 'steady',
+      detail: `${attentionLabel(row)} · ${needsGpEvidence ? 'GP not observed' : gp.value}`,
+      tone: needsAp || needsGpEvidence ? 'warn' : 'ok',
+    },
+    {
+      label: 'Did',
+      value: action || '-',
+      detail: action ? [actionDetail(row), actionFreshness].filter(Boolean).join(' | ') : 'no recent action',
+      tone: action && !isTickStale(actionFreshness) ? 'ok' : 'warn',
+    },
+    {
+      label: 'Said',
+      value: speech.text,
+      detail: speech.text !== '-'
+        ? [speech.source === 'feed' ? 'live speech in feed' : 'latest say event', speechFreshness].filter(Boolean).join(' | ')
+        : 'no recent speech',
+      tone: speech.text !== '-' && !isTickStale(speechFreshness) ? 'ok' : 'warn',
+    },
+    {
+      label: 'Remembers',
+      value: storyValue,
+      detail: signals.storyteller?.summary || (row.storyArc ? ['Library evidence', storyFreshness].filter(Boolean).join(' | ') : 'no Library or Storyteller evidence yet'),
+      tone: signals.storyteller?.tone || (row.storyArc ? 'ok' : 'warn'),
+    },
+  ];
 }
 
 export function residentPrimaryWarning(
@@ -341,6 +393,10 @@ function residentGoalDetail(row: ResidentDashboardRow): string {
   if (row.stack?.soulTitle || row.stack?.soulId) return 'soul';
   if (row.storyArc?.summary) return 'library';
   return '-';
+}
+
+function attentionLabel(row: ResidentDashboardRow): string {
+  return row.attention === undefined ? 'AP unknown' : `${row.attention} AP`;
 }
 
 function actionDetail(row: ResidentDashboardRow): string {
