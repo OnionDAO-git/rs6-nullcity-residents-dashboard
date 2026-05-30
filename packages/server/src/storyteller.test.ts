@@ -32,7 +32,7 @@ describe('readStorytellerDigestFeed', () => {
         residents: [{ residentName: 'res:agent' }],
       }),
     );
-    await fs.writeFile(path.join(storytellerRoot, 'run-a', 'summary.txt'), 'Operator summary A\n');
+    await fs.writeFile(path.join(storytellerRoot, 'run-a', 'summary.txt'), 'Operator summary A for human:event-demo\n');
 
     await fs.mkdir(path.join(storytellerRoot, 'run-b'), { recursive: true });
     await fs.writeFile(
@@ -51,12 +51,12 @@ describe('readStorytellerDigestFeed', () => {
         generatedAt: '2026-05-30T00:03:00.000Z',
         modelProfile: 'openrouter:haiku',
         needsReview: true,
-        operatorWarnings: ['Do not broadcast patron:james yet.'],
+        operatorWarnings: ['Do not broadcast patron:james yet.', 'Keep human:event-demo private.'],
         reviewReasons: ['missing_ref'],
         publicTitle: 'Night in Lumbridge',
-        publicBody: 'Alice traded GP with patron:james and wrote to demo@onion.test.',
-        publicBullets: ['Alice traded 200 GP with patron:james.', 'Bob finished a bounded goal for demo@onion.test.'],
-        operatorSummary: 'Dispatch needs a human review from patron:james.',
+        publicBody: 'Alice traded GP with patron:james, human:event-demo, and wrote to demo@onion.test.',
+        publicBullets: ['Alice traded 200 GP with patron:james.', 'Bob finished a bounded goal for demo@onion.test and human:event-demo.'],
+        operatorSummary: 'Dispatch needs a human review from patron:james and human:event-demo.',
         eventRefsUsed: ['e2', 'e3'],
         estimatedCostUsd: 0.07,
       }),
@@ -68,18 +68,20 @@ describe('readStorytellerDigestFeed', () => {
     expect(feed.items[0]?.topEventCount).toBe(2);
     expect(feed.items[0]?.residentCount).toBe(2);
     expect(feed.items[0]?.dispatch?.dispatchId).toBe('dispatch-b');
-    expect(feed.items[0]?.dispatch?.warningCount).toBe(1);
+    expect(feed.items[0]?.dispatch?.warningCount).toBe(3);
     expect(feed.items[0]?.dispatch?.publicTitle).toBe('Night in Lumbridge');
-    expect(feed.items[0]?.dispatch?.publicBody).toBe('Alice traded GP with [human] and wrote to [human].');
-    expect(feed.items[0]?.dispatch?.publicBullets).toEqual(['Alice traded 200 GP with [human].', 'Bob finished a bounded goal for [human].']);
-    expect(feed.items[0]?.dispatch?.operatorSummary).toBe('Dispatch needs a human review from [human].');
-    expect(feed.items[0]?.dispatch?.operatorWarnings).toEqual(['Do not broadcast [human] yet.']);
+    expect(feed.items[0]?.dispatch?.publicBody).toBe('Alice traded GP with [human], [human], and wrote to [human].');
+    expect(feed.items[0]?.dispatch?.publicBullets).toEqual(['Alice traded 200 GP with [human].', 'Bob finished a bounded goal for [human] and [human].']);
+    expect(feed.items[0]?.dispatch?.operatorSummary).toBe('Dispatch needs a human review from [human] and [human].');
+    expect(feed.items[0]?.dispatch?.operatorWarnings).toEqual(['Do not broadcast [human] yet.', 'Keep [human] private.']);
     expect(feed.items[0]?.dispatch?.reviewReasons).toEqual(['missing_ref']);
     expect(feed.items[0]?.dispatch?.eventRefsUsed).toEqual(['e2', 'e3']);
     expect(JSON.stringify(feed.items[0]?.dispatch)).not.toContain('patron:james');
     expect(JSON.stringify(feed.items[0]?.dispatch)).not.toContain('demo@onion.test');
+    expect(JSON.stringify(feed.items[0]?.dispatch)).not.toContain('human:event-demo');
     expect(feed.items[1]?.runId).toBe('run-a');
-    expect(feed.items[1]?.summary).toBe('Operator summary A');
+    expect(feed.items[1]?.summary).toBe('Operator summary A for [human]');
+    expect(JSON.stringify(feed.items[1])).not.toContain('human:event-demo');
   });
 
   test('summarizes grounded top events with safe evidence labels and redacted public text', async () => {
@@ -98,10 +100,10 @@ describe('readStorytellerDigestFeed', () => {
             kind: 'ap_for_gp_exchange',
             residentName: 'res:alice',
             ts: '2026-05-30T00:00:30.000Z',
-            note: 'Alice traded 200 GP with patron:james for life-force.',
+            note: 'Alice traded 200 GP with patron:james and human:event-demo for life-force.',
             importance: 'high',
             evidence: {
-              cityUserId: 'patron:james',
+              cityUserId: 'human:event-demo',
               gpItemId: 995,
               gpBurned: 200,
               apGranted: 50,
@@ -132,7 +134,7 @@ describe('readStorytellerDigestFeed', () => {
         kind: 'ap_for_gp_exchange',
         residentName: 'res:alice',
         ts: '2026-05-30T00:00:30.000Z',
-        note: 'Alice traded 200 GP with [human] for life-force.',
+        note: 'Alice traded 200 GP with [human] and [human] for life-force.',
         importance: 'high',
         evidenceLabels: ['coin-995', '200 GP', '50 AP', 'exchange apgp:res:alice:fixture-001'],
       },
@@ -147,6 +149,7 @@ describe('readStorytellerDigestFeed', () => {
     ]);
     expect(JSON.stringify(feed.items[0])).not.toContain('patron:james');
     expect(JSON.stringify(feed.items[0])).not.toContain('demo@onion.test');
+    expect(JSON.stringify(feed.items[0])).not.toContain('human:event-demo');
   });
 
   test('honors limit and ignores empty malformed runs', async () => {

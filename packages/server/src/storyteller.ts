@@ -110,7 +110,7 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
         generatedAt: stringField(dispatchRecord, 'generatedAt'),
         modelProfile: stringField(dispatchRecord, 'modelProfile'),
         needsReview: Boolean(dispatchRecord.needsReview),
-        warningCount: arrayField(dispatchRecord.reviewReasons).length,
+        warningCount: arrayField(dispatchRecord.operatorWarnings).length + arrayField(dispatchRecord.reviewReasons).length,
         publicTitle: redactOptionalText(stringField(dispatchRecord, 'publicTitle')),
         publicBody: redactOptionalText(stringField(dispatchRecord, 'publicBody')),
         publicBullets: stringArrayField(dispatchRecord.publicBullets).map(redactPublicText),
@@ -133,7 +133,7 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
     topEventCount: topEvents.length,
     topEvents: topEvents.map(readTopEvent).filter((event): event is StorytellerDigestEventSummary => event !== undefined),
     residentCount: residents.length,
-    summary: summary || undefined,
+    summary: summary ? redactPublicText(summary) : undefined,
     dispatch,
   };
 }
@@ -244,7 +244,7 @@ function finiteNumber(value: unknown): number | undefined {
 function redactPublicText(value: string): string {
   return value
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[human]')
-    .replace(/\b(?:patron|city-user|user):[A-Za-z0-9._:-]+\b/gi, '[human]');
+    .replace(/\b(?:human|patron|city-user|user):[A-Za-z0-9._:-]+\b/gi, '[human]');
 }
 
 function redactOptionalText(value: string | undefined): string | undefined {
@@ -252,5 +252,5 @@ function redactOptionalText(value: string | undefined): string | undefined {
 }
 
 function isPrivateHumanValue(value: string): boolean {
-  return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value) || /^(?:patron|city-user|user):/i.test(value);
+  return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value) || /^(?:human|patron|city-user|user):/i.test(value);
 }

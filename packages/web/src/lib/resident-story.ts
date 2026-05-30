@@ -237,6 +237,7 @@ function hasDispatchWarnings(digest: StorytellerDigestSummary): boolean {
   const dispatch = digest.dispatch;
   if (!dispatch) return false;
   if (typeof dispatch.warningCount === 'number' && dispatch.warningCount > 0) return true;
+  if (Array.isArray(dispatch.operatorWarnings) && dispatch.operatorWarnings.length > 0) return true;
   if (Array.isArray(dispatch.reviewReasons) && dispatch.reviewReasons.length > 0) return true;
   if ((typeof dispatch.eventRefCount === 'number' && dispatch.eventRefCount === 0) && digest.topEventCount > 0) return true;
   return false;

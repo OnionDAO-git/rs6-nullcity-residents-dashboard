@@ -228,6 +228,18 @@ describe('storytellerDigestStatus', () => {
       digest({
         dispatch: {
           ...baseDispatch,
+          operatorWarnings: ['private handle still visible'],
+        },
+      }),
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    )).toMatchObject({
+      label: 'review',
+      tone: 'warn',
+    });
+    expect(storytellerDigestStatus(
+      digest({
+        dispatch: {
+          ...baseDispatch,
           warningCount: 2,
           reviewReasons: ['low_confidence'],
         },
