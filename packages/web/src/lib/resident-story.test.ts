@@ -93,6 +93,27 @@ describe('residentStoryEvents', () => {
     const events = residentStoryEvents(resident('res:hans'), [duplicated, digest()], 1);
     expect(events).toHaveLength(1);
   });
+
+  test('matches resident aliases emitted by queue and city wrappers', () => {
+    const aliased = digest({
+      runId: 'run-alias',
+      digestId: 'dig-alias',
+      topEvents: [
+        {
+          ref: 'alias-1',
+          kind: 'story_goal_progress',
+          residentName: 'city-user:res:hans',
+          ts: '2026-05-30T04:11:00.000Z',
+          note: 'alias wrapper',
+          importance: 'high',
+          evidenceLabels: ['plan'],
+        },
+      ],
+    });
+
+    const events = residentStoryEvents(resident('res:hans'), [aliased]);
+    expect(events.map(event => event.event.ref)).toEqual(['alias-1']);
+  });
 });
 
 describe('residentStoryDigestSignal', () => {
@@ -315,5 +336,15 @@ describe('storytellerMythCard', () => {
       body: 'saw something new near the square',
       evidenceLabels: ['ref:mystery-1'],
     });
+  });
+
+  test('falls back to a grounded evidence label when event labels are empty', () => {
+    expect(storytellerMythCard({
+      ref: 'empty-evidence-1',
+      kind: 'goal_progress',
+      residentName: 'res:ada',
+      note: 'kept moving toward the goal',
+      evidenceLabels: [],
+    }).evidenceLabels).toEqual(['grounded evidence']);
   });
 });

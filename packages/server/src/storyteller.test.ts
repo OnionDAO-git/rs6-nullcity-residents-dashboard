@@ -84,6 +84,37 @@ describe('readStorytellerDigestFeed', () => {
     expect(JSON.stringify(feed.items[1])).not.toContain('human:event-demo');
   });
 
+  test('treats warning-bearing dispatches as review-needed when needsReview is omitted', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
+
+    await fs.mkdir(path.join(storytellerRoot, 'run-review-fallback'), { recursive: true });
+    await fs.writeFile(
+      path.join(storytellerRoot, 'run-review-fallback', 'digest.json'),
+      JSON.stringify({
+        digestId: 'run-review-fallback',
+        builtAt: '2026-05-30T02:00:00.000Z',
+        topEvents: [{ ref: 'e1', kind: 'city_attention_credit' }],
+        residents: [{ residentName: 'res:agent' }],
+      }),
+    );
+    await fs.writeFile(
+      path.join(storytellerRoot, 'run-review-fallback', 'dispatch.json'),
+      JSON.stringify({
+        dispatchId: 'dispatch-review-fallback',
+        generatedAt: '2026-05-30T02:01:00.000Z',
+        operatorWarnings: ['missing evidence refs'],
+        reviewReasons: ['missing_refs'],
+        publicBullets: [],
+        eventRefsUsed: [],
+      }),
+    );
+
+    const feed = await readStorytellerDigestFeed(memoryRoot);
+    expect(feed.items[0]?.dispatch?.warningCount).toBe(2);
+    expect(feed.items[0]?.dispatch?.needsReview).toBe(true);
+  });
+
   test('summarizes grounded top events with safe evidence labels and redacted public text', async () => {
     const memoryRoot = await makeMemoryRoot();
     const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');

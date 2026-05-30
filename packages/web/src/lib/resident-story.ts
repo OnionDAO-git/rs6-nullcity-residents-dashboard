@@ -121,10 +121,11 @@ export function residentStoryDigestSignal(
 export function storytellerMythCard(event: StorytellerDigestEventSummary): StorytellerMythCard {
   const actor = residentDisplayName(event.residentName);
   const title = `${actor} ${eventVerb(event.kind)}`;
+  const evidenceLabels = event.evidenceLabels.filter(label => label.trim().length > 0);
   return {
     title,
     ...(event.note?.trim() ? { body: event.note.trim() } : {}),
-    evidenceLabels: [...event.evidenceLabels],
+    evidenceLabels: evidenceLabels.length ? evidenceLabels : ['grounded evidence'],
   };
 }
 
@@ -174,8 +175,23 @@ function residentMatches(wanted: string, residentName: string | undefined): bool
 }
 
 function normalizeResident(name: string): string {
-  const normalized = name.trim().toLowerCase();
-  return normalized.startsWith('res:') ? normalized.slice(4) : normalized;
+  let normalized = name.trim().toLowerCase();
+  for (;;) {
+    if (normalized.startsWith('city-user:')) {
+      normalized = normalized.slice('city-user:'.length);
+      continue;
+    }
+    if (normalized.startsWith('resident:')) {
+      normalized = normalized.slice('resident:'.length);
+      continue;
+    }
+    if (normalized.startsWith('res:')) {
+      normalized = normalized.slice('res:'.length);
+      continue;
+    }
+    break;
+  }
+  return normalized;
 }
 
 function residentDisplayName(name: string | undefined): string {

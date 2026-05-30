@@ -105,22 +105,31 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
 
   const dispatchRecord = asRecord(await readJsonFile<unknown>(path.join(runRoot, 'dispatch.json')));
   const dispatch = Object.keys(dispatchRecord).length
-    ? {
-        dispatchId: stringField(dispatchRecord, 'dispatchId') || `${runId}:dispatch`,
-        generatedAt: stringField(dispatchRecord, 'generatedAt'),
-        modelProfile: stringField(dispatchRecord, 'modelProfile'),
-        needsReview: Boolean(dispatchRecord.needsReview),
-        warningCount: arrayField(dispatchRecord.operatorWarnings).length + arrayField(dispatchRecord.reviewReasons).length,
-        publicTitle: redactOptionalText(stringField(dispatchRecord, 'publicTitle')),
-        publicBody: redactOptionalText(stringField(dispatchRecord, 'publicBody')),
-        publicBullets: stringArrayField(dispatchRecord.publicBullets).map(redactPublicText),
-        operatorSummary: redactOptionalText(stringField(dispatchRecord, 'operatorSummary')),
-        operatorWarnings: stringArrayField(dispatchRecord.operatorWarnings).map(redactPublicText),
-        reviewReasons: stringArrayField(dispatchRecord.reviewReasons).map(redactPublicText),
-        eventRefCount: arrayField(dispatchRecord.eventRefsUsed).length,
-        eventRefsUsed: stringArrayField(dispatchRecord.eventRefsUsed).map(redactPublicText),
-        estimatedCostUsd: numberOrNullField(dispatchRecord, 'estimatedCostUsd'),
-      }
+    ? (() => {
+        const operatorWarnings = stringArrayField(dispatchRecord.operatorWarnings).map(redactPublicText);
+        const reviewReasons = stringArrayField(dispatchRecord.reviewReasons).map(redactPublicText);
+        const warningCount = operatorWarnings.length + reviewReasons.length;
+        const needsReview = typeof dispatchRecord.needsReview === 'boolean'
+          ? dispatchRecord.needsReview
+          : warningCount > 0;
+
+        return {
+          dispatchId: stringField(dispatchRecord, 'dispatchId') || `${runId}:dispatch`,
+          generatedAt: stringField(dispatchRecord, 'generatedAt'),
+          modelProfile: stringField(dispatchRecord, 'modelProfile'),
+          needsReview,
+          warningCount,
+          publicTitle: redactOptionalText(stringField(dispatchRecord, 'publicTitle')),
+          publicBody: redactOptionalText(stringField(dispatchRecord, 'publicBody')),
+          publicBullets: stringArrayField(dispatchRecord.publicBullets).map(redactPublicText),
+          operatorSummary: redactOptionalText(stringField(dispatchRecord, 'operatorSummary')),
+          operatorWarnings,
+          reviewReasons,
+          eventRefCount: arrayField(dispatchRecord.eventRefsUsed).length,
+          eventRefsUsed: stringArrayField(dispatchRecord.eventRefsUsed).map(redactPublicText),
+          estimatedCostUsd: numberOrNullField(dispatchRecord, 'estimatedCostUsd'),
+        };
+      })()
     : undefined;
 
   return {
