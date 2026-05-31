@@ -109,6 +109,30 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('shows split Brain and Body profiles in the compact intelligence digest', () => {
+    const digest = residentIntelligenceDigestFacts(row({
+      attention: 75,
+      thinking: { mode: 'deciding', activePlan: 'Plan slowly while the body keeps acting' },
+      stack: {
+        brain: { endpoint: 'brain_q8', model: 'qwopus3.5-27b-v3@q8_0', thinking: true },
+        body: { endpoint: 'body_q4', model: 'qwopus3.5-27b-v3@q4_k_s', thinking: false },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: ['thinking', 'body'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'walk', result: 'success', source: 'body', cause: 'body_step', tick: 120 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 5 }] } },
+      },
+    }));
+
+    expect(digest.find(fact => fact.label === 'Stack')).toMatchObject({
+      value: 'Brain qwopus3.5-27b-v3@q8_0 via brain_q8 (thinking on); Body qwopus3.5-27b-v3@q4_k_s via body_q4 (thinking off) | onion.runescape.standard@0.3.0',
+      detail: 'Brain and Body inference profiles plus SPARK module identity',
+      tone: 'ok',
+    });
+  });
+
   test('summarizes model, SPARK, action, AP, and story from existing overview data', () => {
     const facts = residentIntelligenceFacts(row({
       attention: 42,
@@ -1495,6 +1519,19 @@ describe('resident loop helpers', () => {
     expect(residentStackSummary(row())).toBe('model/endpoint unavailable | SPARK unavailable');
   });
 
+  test('names split Brain and Body profiles in the stack summary', () => {
+    const split = row({
+      stack: {
+        brain: { endpoint: 'brain_q8', model: 'qwopus3.5-27b-v3@q8_0', thinking: true },
+        body: { endpoint: 'body_q4', model: 'qwopus3.5-27b-v3@q4_k_s', thinking: false },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: ['thinking'] },
+      },
+    });
+
+    expect(residentStackSummary(split)).toBe('Brain qwopus3.5-27b-v3@q8_0 via brain_q8 (thinking on); Body qwopus3.5-27b-v3@q4_k_s via body_q4 (thinking off) | onion.runescape.standard@0.3.0');
+  });
+
   test('returns the first operator warning as a compact triage signal', () => {
     expect(residentPrimaryWarning(row({
       attention: 1,
@@ -2781,6 +2818,34 @@ describe('resident loop helpers', () => {
     expect(detail.facts.find(fact => fact.label === 'Stack')).toMatchObject({
       value: 'openrouter/haiku | onion.runescape.standard@0.3.0',
       detail: 'model/endpoint and SPARK module identity',
+      tone: 'ok',
+    });
+  });
+
+  test('keeps resident detail honest about split Brain and Body endpoints', () => {
+    const resident = row({
+      name: 'res:split',
+      attention: 75,
+      thinking: { mode: 'deciding', activePlan: 'Plan slowly while the body keeps acting' },
+      stack: {
+        brain: { endpoint: 'brain_q8', model: 'qwopus3.5-27b-v3@q8_0', thinking: true },
+        body: { endpoint: 'body_q4', model: 'qwopus3.5-27b-v3@q4_k_s', thinking: false },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: ['thinking', 'body'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'walk', result: 'success', source: 'body', cause: 'body_step', tick: 120 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 5 }] } },
+      },
+      storyArc: { phase: 'progress', summary: 'Still moving while planning.', latestEventKind: 'move_to', latestEventTick: 120 },
+    });
+
+    const stack = residentLivenessDetail(resident).facts.find(fact => fact.label === 'Stack');
+
+    expect(stack).toMatchObject({
+      value: 'Brain qwopus3.5-27b-v3@q8_0 via brain_q8 (thinking on); Body qwopus3.5-27b-v3@q4_k_s via body_q4 (thinking off) | onion.runescape.standard@0.3.0',
+      detail: 'Brain and Body inference profiles plus SPARK module identity',
       tone: 'ok',
     });
   });

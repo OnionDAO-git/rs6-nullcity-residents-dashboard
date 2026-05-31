@@ -393,9 +393,10 @@ export function residentLoopSummaryLine(
 }
 
 export function residentStackSummary(row: ResidentDashboardRow): string {
-  const model = modelParts(row);
+  const split = splitInferenceStackSummary(row);
   const module = activeModule(row);
-  const modelLabel = model.value !== '-' ? model.value : 'model/endpoint unavailable';
+  const model = modelParts(row);
+  const modelLabel = split || (model.value !== '-' ? model.value : 'model/endpoint unavailable');
   const moduleLabel = module ? `${module.id}${module.version ? `@${module.version}` : ''}` : 'SPARK unavailable';
   return `${modelLabel} | ${moduleLabel}`;
 }
@@ -403,12 +404,31 @@ export function residentStackSummary(row: ResidentDashboardRow): string {
 function residentStackFact(row: ResidentDashboardRow): ResidentLoopFact {
   const model = modelParts(row);
   const module = activeModule(row);
+  const split = splitInferenceStackSummary(row);
   return {
     label: 'Stack',
     value: residentStackSummary(row),
-    detail: 'model/endpoint and SPARK module identity',
-    tone: model.value !== '-' && module ? 'ok' : 'warn',
+    detail: split ? 'Brain and Body inference profiles plus SPARK module identity' : 'model/endpoint and SPARK module identity',
+    tone: (split || model.value !== '-') && module ? 'ok' : 'warn',
   };
+}
+
+function splitInferenceStackSummary(row: ResidentDashboardRow): string {
+  const brain = row.stack?.brain;
+  const body = row.stack?.body;
+  if (!brain && !body) return '';
+
+  return [
+    brain ? inferenceProfileLabel('Brain', brain) : '',
+    body ? inferenceProfileLabel('Body', body) : '',
+  ].filter(Boolean).join('; ');
+}
+
+function inferenceProfileLabel(role: 'Brain' | 'Body', profile: { endpoint?: string; model?: string; thinking?: boolean }): string {
+  const identity = profile.model || profile.endpoint || 'profile unavailable';
+  const endpoint = profile.endpoint && profile.endpoint !== identity ? ` via ${profile.endpoint}` : '';
+  const thinking = profile.thinking === undefined ? '' : ` (thinking ${profile.thinking ? 'on' : 'off'})`;
+  return `${role} ${identity}${endpoint}${thinking}`;
 }
 
 export function residentIntelligenceDigestFacts(
@@ -441,13 +461,15 @@ export function residentIntelligenceDigestFacts(
   const warnCount = warnings.filter(warning => warning.tone === 'warn').length;
   const apGpTone = worstTone(ap.tone, gp.tone);
   const storyTone = signals.storyteller?.tone || story?.tone || 'warn';
+  const splitStack = splitInferenceStackSummary(row);
+  const moduleLabel = module ? `${module.id}${module.version ? `@${module.version}` : ''}` : 'SPARK unavailable';
 
   return [
     {
       label: 'Stack',
-      value: `${model.value !== '-' ? model.value : 'model unavailable'} | ${module ? `${module.id}${module.version ? `@${module.version}` : ''}` : 'SPARK unavailable'}`,
-      detail: `${endpoint.value !== '-' ? endpoint.value : 'endpoint unavailable'} | ${module?.source || 'module source unavailable'}`,
-      tone: model.value !== '-' && endpoint.value !== '-' && module ? 'ok' : 'warn',
+      value: splitStack ? `${splitStack} | ${moduleLabel}` : `${model.value !== '-' ? model.value : 'model unavailable'} | ${moduleLabel}`,
+      detail: splitStack ? 'Brain and Body inference profiles plus SPARK module identity' : `${endpoint.value !== '-' ? endpoint.value : 'endpoint unavailable'} | ${module?.source || 'module source unavailable'}`,
+      tone: (splitStack || (model.value !== '-' && endpoint.value !== '-')) && module ? 'ok' : 'warn',
     },
     {
       label: 'AP/GP',
