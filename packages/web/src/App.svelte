@@ -45,7 +45,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
-  import { buildReleaseReadiness, releaseReadinessMetricTiles, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
+  import { buildReleaseReadiness, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
@@ -3267,6 +3267,17 @@
       {/each}
     </div>
     <div class="city-record-list compact">
+      {#each releaseReadinessFirstFiveSteps(cityReleaseReadiness) as step (step.label)}
+        <article>
+          <span class={`tag ${step.tone}`}>{step.label}</span>
+          <div>
+            <strong>{step.detail}</strong>
+            <small>First five minutes</small>
+          </div>
+        </article>
+      {/each}
+    </div>
+    <div class="city-record-list compact">
       {#each cityReleaseReadiness.checks as check (check.id)}
         <article>
           <span class={`tag ${check.tone}`}>{check.tone}</span>
@@ -3277,13 +3288,6 @@
         </article>
       {/each}
     </div>
-    {#if cityReleaseReadiness.nextActions.length}
-      <div class="story-evidence-list city-readiness-actions" aria-label="Next operator actions">
-        {#each cityReleaseReadiness.nextActions.slice(0, 3) as action}
-          <span>{action}</span>
-        {/each}
-      </div>
-    {/if}
   </section>
 
   <section class="city-panel">

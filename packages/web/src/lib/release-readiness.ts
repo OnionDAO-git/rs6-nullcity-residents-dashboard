@@ -50,6 +50,12 @@ export interface ReleaseReadinessMetricTile {
   tone?: ReleaseReadinessTone;
 }
 
+export interface ReleaseReadinessFirstFiveStep {
+  label: 'Stabilize' | 'Act' | 'Capture';
+  tone: ReleaseReadinessTone;
+  detail: string;
+}
+
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
@@ -155,6 +161,31 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
       ...(metrics.capabilityMissing > 0 ? { tone: 'warn' as const } : {}),
     },
     { label: 'Story Age', value: metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${metrics.latestStorytellerAgeMinutes.toLocaleString()}m` },
+  ];
+}
+
+export function releaseReadinessFirstFiveSteps(summary: ReleaseReadinessSummary): ReleaseReadinessFirstFiveStep[] {
+  const stateTone = summary.status === 'blocked' ? 'fail' : summary.status === 'watch' ? 'warn' : 'ok';
+  const firstBlocker = summary.blockers[0];
+  const firstAction = summary.nextActions[0] || 'Keep the controller running and capture fresh screenshots/logs before a public demo.';
+  return [
+    {
+      label: 'Stabilize',
+      tone: stateTone,
+      detail: firstBlocker || summary.detail,
+    },
+    {
+      label: 'Act',
+      tone: stateTone,
+      detail: firstAction,
+    },
+    {
+      label: 'Capture',
+      tone: summary.status === 'ready' ? 'ok' : 'warn',
+      detail: summary.status === 'blocked'
+        ? 'After the blocker clears, capture fresh screenshots/logs before a public demo.'
+        : 'Capture fresh screenshots/logs before a public demo.',
+    },
   ];
 }
 

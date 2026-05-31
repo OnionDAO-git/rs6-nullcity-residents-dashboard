@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { buildReleaseReadiness, releaseReadinessMetricTiles } from './release-readiness';
+import { buildReleaseReadiness, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles } from './release-readiness';
 
 function resident(overrides: Partial<ResidentDashboardRow> = {}): ResidentDashboardRow {
   return {
@@ -352,5 +352,33 @@ describe('buildReleaseReadiness', () => {
       value: '1/5 fresh',
     });
     expect(summary.nextActions).toContain('Run missing or stale capability benchmarks before relying on unproven resident loops.');
+  });
+
+  test('builds a compact first-five-minutes operator step rail from readiness state', () => {
+    const summary = buildReleaseReadiness({
+      residents: [],
+      storyDigests: [],
+      printInsights: printInsights({ activeRequests: 0, inQueue: 0, ncriTrades: { pending: 0, accepted: 0, failed: 0, recent: [] } }),
+      benchmarkRuns: [],
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessFirstFiveSteps(summary)).toEqual([
+      {
+        label: 'Stabilize',
+        tone: 'fail',
+        detail: 'No residents are visible in the dashboard snapshot.',
+      },
+      {
+        label: 'Act',
+        tone: 'fail',
+        detail: 'Start or reconnect the controller before demoing the resident loop.',
+      },
+      {
+        label: 'Capture',
+        tone: 'warn',
+        detail: 'After the blocker clears, capture fresh screenshots/logs before a public demo.',
+      },
+    ]);
   });
 });
