@@ -60,10 +60,12 @@ describe('resident loop helpers', () => {
 
     expect(facts).toEqual([
       { label: 'Life force', value: '42 AP', detail: 'stable', tone: 'ok' },
-      { label: 'Model', value: 'spacetower', detail: 'qwopus3.5-27b-v3@q4_k_s' },
+      { label: 'Model', value: 'qwopus3.5-27b-v3@q4_k_s', detail: 'spacetower' },
+      { label: 'Endpoint', value: 'spacetower', detail: 'qwopus3.5-27b-v3@q4_k_s' },
       { label: 'SPARK', value: 'onion.runescape.standard@0.2.0', detail: 'soul' },
       { label: 'Goal', value: 'Find a way to buy AP with GP', detail: 'plan' },
       { label: 'Thinking', value: 'deciding', detail: '-' },
+      { label: 'Current plan', value: 'Find a way to buy AP with GP', detail: 'live thinking plan' },
       { label: 'Last action', value: 'say', detail: 'success | nervous-system | nervous:request-attention' },
       { label: 'Story', value: 'progress', detail: 'city_attention_credit @ 99' },
       { label: 'Feed', value: 'live', detail: '2s old | 8 actions | p1 n2 o3 i4', tone: 'ok' },

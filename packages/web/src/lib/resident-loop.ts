@@ -245,11 +245,13 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
 
 export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLoopFact[] {
   const module = activeModule(row);
-  const model = modelParts(row);
+  const model = modelIdentityParts(row);
+  const endpoint = endpointParts(row);
   const action = row.body?.lastAction;
   const story = row.storyArc;
   const feed = row.feed || row.body?.feed;
   const gp = residentGoldEvidenceLabel(row);
+  const currentPlan = row.thinking?.activePlan?.trim();
 
   return [
     {
@@ -259,6 +261,7 @@ export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLo
       tone: residentNeedsAp(row) ? 'warn' : row.attention === undefined ? undefined : 'ok',
     },
     { label: 'Model', value: model.value, detail: model.detail },
+    { label: 'Endpoint', value: endpoint.value, detail: endpoint.detail },
     {
       label: 'SPARK',
       value: module ? `${module.id}${module.version ? `@${module.version}` : ''}` : '-',
@@ -273,6 +276,11 @@ export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLo
       label: 'Thinking',
       value: row.thinking?.mode || 'unknown',
       detail: row.thinking?.lastInferenceCause || row.thinking?.inFlightRequest || '-',
+    },
+    {
+      label: 'Current plan',
+      value: currentPlan || '-',
+      detail: currentPlan ? 'live thinking plan' : 'No active plan published',
     },
     {
       label: 'Last action',
@@ -1535,6 +1543,30 @@ function modelParts(row: ResidentDashboardRow): { value: string; detail?: string
     row.thinking?.latestInference?.provider ||
     '-';
   const detail = profile?.model || row.thinking?.latestInference?.model;
+  return detail ? { value, detail } : { value };
+}
+
+function endpointParts(row: ResidentDashboardRow): { value: string; detail?: string } {
+  const profile = row.stack?.model || row.stack?.brain || row.stack?.body;
+  const value =
+    profile?.endpoint ||
+    stringField(row.thinking?.latestInference, 'endpoint') ||
+    row.thinking?.latestInference?.provider ||
+    '-';
+  const detail = profile?.model || stringField(row.thinking?.latestInference, 'model');
+  return detail ? { value, detail } : { value };
+}
+
+function modelIdentityParts(row: ResidentDashboardRow): { value: string; detail?: string } {
+  const profile = row.stack?.model || row.stack?.brain || row.stack?.body;
+  const value =
+    profile?.model ||
+    stringField(row.thinking?.latestInference, 'model') ||
+    '-';
+  const detail =
+    profile?.endpoint ||
+    stringField(row.thinking?.latestInference, 'endpoint') ||
+    row.thinking?.latestInference?.provider;
   return detail ? { value, detail } : { value };
 }
 
