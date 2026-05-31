@@ -3430,7 +3430,7 @@
       <div>
         <p class="kicker">Attendee Session</p>
         <strong>Guest mode</strong>
-        <span>Public residents and the Library are visible. AP, GP, inbox, Embassy actions, and prints unlock when `/api/session` returns an attendee.</span>
+        <span>Public residents and the Library are visible. Sign in as an attendee to unlock AP, GP, inbox, Embassy actions, and prints.</span>
       </div>
       <button class="primary" onclick={() => cityNav('/login')}>Login</button>
     </section>
@@ -5555,7 +5555,7 @@
   <section class="city-panel">
     <div class="city-empty-state">
       <strong>Login endpoint unavailable</strong>
-      <span>The shell will switch from guest mode when `/api/session` returns an authenticated attendee.</span>
+      <span>The shell switches from guest mode after attendee login succeeds.</span>
     </div>
     <a class="city-link-button" href={citySession.loginUrl}>Open Login</a>
   </section>
