@@ -30,6 +30,7 @@
     residentMemoryFreshness,
     residentNeedsApSupportSoon,
     residentNextStepCue,
+    residentNormalLifeAuditSignal,
     residentOperatorWarnings,
     residentProofPulse,
     residentProofRollup,
@@ -244,6 +245,7 @@
     observedGp: 0,
   };
   let cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
+  let cityNormalLifeAudit = residentNormalLifeAuditSignal(cityBenchmarkRuns);
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
@@ -455,6 +457,7 @@
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
   $: cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
+  $: cityNormalLifeAudit = residentNormalLifeAuditSignal(cityBenchmarkRuns);
   $: cityResidentProofRollup = residentProofRollup(cityResidents, row => ({
     benchmark: residentBenchmarkLabel(row),
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
@@ -3566,6 +3569,15 @@
       <div class="city-empty-state subtle">
         <strong>{cityGuestTrailGuide.headline}</strong>
         <span>{cityGuestTrailGuide.detail}</span>
+      </div>
+      <div class="city-record-list compact">
+        <article>
+          <span class={`tag ${cityNormalLifeAudit.tone}`}>Audit</span>
+          <div>
+            <strong>{cityNormalLifeAudit.summary}</strong>
+            <small>{cityNormalLifeAudit.detail}</small>
+          </div>
+        </article>
       </div>
       {@render CityResidentList({ rows: cityFeaturedResidents })}
     </div>

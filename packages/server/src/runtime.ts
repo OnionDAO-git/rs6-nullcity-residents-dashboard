@@ -1035,6 +1035,8 @@ function sumNumbers(values: number[]): number {
 function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifact | undefined {
   const record = asRecord(raw);
   const runId = stringField(record, 'runId') || path.basename(file, '.json');
+  const normalLifeAudit = normalizeNormalLifeAuditArtifact(record, runId);
+  if (normalLifeAudit) return normalLifeAudit;
   const task = benchmarkIdentity(record.task) || benchmarkTaskFromSoak(record, runId);
   const module = benchmarkIdentity(record.module) || benchmarkModuleFromSoak(record);
   const status = benchmarkStatus(record.status);
@@ -1063,6 +1065,93 @@ function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifa
     ...(stringField(record, 'failureReason') ? { failureReason: stringField(record, 'failureReason') } : {}),
     ...(stringField(record, 'generatedAt') ? { generatedAt: stringField(record, 'generatedAt') } : {}),
   };
+}
+
+function normalizeNormalLifeAuditArtifact(record: Record<string, unknown>, runId: string): BenchmarkArtifact | undefined {
+  const hasNormalLifeAuditShape = Boolean(
+    stringField(record, 'windowStart')
+      && stringField(record, 'windowEnd')
+      && numberField(record, 'activeResidents') !== undefined
+      && numberField(record, 'totalActionAttempts') !== undefined,
+  );
+  if (!/^normal_life_audit_/i.test(runId) && !hasNormalLifeAuditShape) return undefined;
+  const totalActionAttempts = numberField(record, 'totalActionAttempts');
+  const successfulActionSubmissions = numberField(record, 'successfulActionSubmissions') ?? 0;
+  const failedActionSubmissions = numberField(record, 'failedActionSubmissions') ?? 0;
+  const actionSuccessRate = numberField(record, 'actionSuccessRate') ?? (
+    totalActionAttempts && totalActionAttempts > 0
+      ? (successfulActionSubmissions / totalActionAttempts) * 100
+      : undefined
+  );
+  if (!runId || totalActionAttempts === undefined || actionSuccessRate === undefined) return undefined;
+
+  const timelineCounts = countPairMetrics('timeline', record.timelineKindCounts);
+  const notObservedTimelineKinds = stringArray(record.notObservedTimelineKinds) || [];
+  for (const kind of notObservedTimelineKinds) {
+    const key = metricCountKey('timeline', kind);
+    if (timelineCounts[key] === undefined) timelineCounts[key] = 0;
+  }
+
+  const apSummary = asRecord(record.apSummary);
+  const metrics: Record<string, number> = {
+    ...(numberField(record, 'activeResidents') !== undefined ? { activeResidents: numberField(record, 'activeResidents')! } : {}),
+    totalActionAttempts,
+    successfulActionSubmissions,
+    failedActionSubmissions,
+    actionSuccessRate,
+    ...countPairMetrics('action', record.actionKindCounts),
+    ...countPairMetrics('cause', record.causeCounts),
+    ...timelineCounts,
+    ...(numberField(apSummary, 'residentsWithAttention') !== undefined ? { apResidentsWithAttention: numberField(apSummary, 'residentsWithAttention')! } : {}),
+    ...(numberField(apSummary, 'residentsWithDrop') !== undefined ? { apResidentsWithDrop: numberField(apSummary, 'residentsWithDrop')! } : {}),
+    ...(numberField(apSummary, 'aggregateDrop') !== undefined ? { apAggregateDrop: numberField(apSummary, 'aggregateDrop')! } : {}),
+  };
+  const windowStart = stringField(record, 'windowStart');
+  const windowEnd = stringField(record, 'windowEnd');
+  const durationMs = windowStart && windowEnd ? timestampMs(windowEnd) - timestampMs(windowStart) : undefined;
+
+  return {
+    runId,
+    task: { id: 'normal-life-audit' },
+    module: { id: 'ordinary-life' },
+    mode: 'autonomous',
+    resident: 'multi-resident',
+    commits: [],
+    ...(windowStart ? { startedAt: windowStart } : {}),
+    ...(windowEnd ? { endedAt: windowEnd } : {}),
+    ...(durationMs !== undefined && durationMs >= 0 ? { durationMs } : {}),
+    status: failedActionSubmissions > 0 || actionSuccessRate < 95 ? 'failed' : 'passed',
+    score: Math.max(0, Math.min(1, actionSuccessRate / 100)),
+    metrics,
+    evidence: { summaries: [normalLifeAuditEvidenceSummary(metrics)] },
+    ...(stringField(record, 'generatedAt') ? { generatedAt: stringField(record, 'generatedAt') } : {}),
+  };
+}
+
+function countPairMetrics(prefix: string, value: unknown): Record<string, number> {
+  if (!Array.isArray(value)) return {};
+  return Object.fromEntries(value.flatMap(item => {
+    if (!Array.isArray(item) || item.length < 2) return [];
+    const key = typeof item[0] === 'string' ? metricCountKey(prefix, item[0]) : '';
+    const count = finiteNumber(item[1]);
+    return key && count !== undefined ? [[key, count]] : [];
+  }));
+}
+
+function metricCountKey(prefix: string, value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized ? `${prefix}_${normalized}` : '';
+}
+
+function normalLifeAuditEvidenceSummary(metrics: Record<string, number>): string {
+  const activeResidents = metrics.activeResidents ?? 0;
+  const total = metrics.totalActionAttempts ?? 0;
+  const successful = metrics.successfulActionSubmissions ?? 0;
+  const lowHealthWaits = metrics.cause_low_health_heal_wait ?? 0;
+  const apGpExchanges = metrics.timeline_city_ap_gp_exchange ?? 0;
+  const stuckDetected = metrics.timeline_stuck_detected ?? 0;
+  const stuckRecovered = metrics.timeline_stuck_recovered ?? 0;
+  return `normal-life audit: ${activeResidents} active residents, ${successful}/${total} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}, stuck recovered ${stuckRecovered}/${stuckDetected}`;
 }
 
 function benchmarkTaskFromSoak(record: Record<string, unknown>, runId: string): BenchmarkIdentity | undefined {

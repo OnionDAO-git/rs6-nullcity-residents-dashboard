@@ -1,4 +1,4 @@
-import type { ResidentDashboardRow, SparkModuleSummary } from '@nullcity-dashboard/shared';
+import type { BenchmarkArtifactSummary, ResidentDashboardRow, SparkModuleSummary } from '@nullcity-dashboard/shared';
 import type { ResidentBenchmarkSignal } from './resident-benchmark';
 
 export interface ResidentLoopFact {
@@ -151,6 +151,12 @@ export interface ResidentGuestTrailPulse {
 export interface ResidentGuestTrailGuideCopy {
   tone: 'ok' | 'warn';
   headline: string;
+  detail: string;
+}
+
+export interface ResidentNormalLifeAuditSignal {
+  tone: 'ok' | 'warn' | 'fail';
+  summary: string;
   detail: string;
 }
 
@@ -640,6 +646,58 @@ export function residentGuestTrailGuideCopy(pulse: ResidentGuestTrailPulse): Res
   };
 }
 
+export function residentNormalLifeAuditSignal(runs: BenchmarkArtifactSummary[]): ResidentNormalLifeAuditSignal {
+  const latest = latestNormalLifeAudit(runs);
+  if (!latest) {
+    return {
+      tone: 'warn',
+      summary: 'No normal-life audit visible yet.',
+      detail: 'Run or sync a CQA10 normal-life audit before treating resident recurrence as proven.',
+    };
+  }
+
+  const totalActions = auditMetric(latest, 'totalActionAttempts');
+  const successfulActions = auditMetric(latest, 'successfulActionSubmissions') || Math.max(0, totalActions - auditMetric(latest, 'failedActionSubmissions'));
+  const failedActions = auditMetric(latest, 'failedActionSubmissions');
+  const lowHealthWaits = auditMetric(latest, 'cause_low_health_heal_wait');
+  const apGpExchanges = auditMetric(latest, 'timeline_city_ap_gp_exchange');
+  const tradeClosures = auditMetric(latest, 'timeline_trade_completed');
+  const stuckDetected = auditMetric(latest, 'timeline_stuck_detected');
+  const stuckRecovered = auditMetric(latest, 'timeline_stuck_recovered');
+  const duration = auditDurationLabel(latest);
+  const detail = `${duration} audit: ${successfulActions}/${totalActions} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}, trade closures ${tradeClosures}, stuck recovered ${stuckRecovered}/${stuckDetected}.`;
+
+  if (failedActions > 0 || latest.status !== 'passed') {
+    return {
+      tone: 'fail',
+      summary: 'Normal-life audit has failed actions.',
+      detail,
+    };
+  }
+
+  if (lowHealthWaits > 0) {
+    return {
+      tone: 'warn',
+      summary: 'Recovery waits still visible in latest audit.',
+      detail,
+    };
+  }
+
+  if (apGpExchanges <= 0 && tradeClosures <= 0) {
+    return {
+      tone: 'warn',
+      summary: 'Recovery clear; AP/GP recurrence not observed.',
+      detail,
+    };
+  }
+
+  return {
+    tone: 'ok',
+    summary: 'Normal-life audit shows recovery and AP/GP recurrence.',
+    detail,
+  };
+}
+
 export function residentRosterScanLines(
   row: ResidentDashboardRow,
   signals: ResidentProofPulseSignals = {},
@@ -791,6 +849,32 @@ function demoPickToneRank(tone: ResidentDemoPickCue['tone']): number {
 
 function residentShortName(name: string): string {
   return name.replace(/^res:/, '') || name;
+}
+
+function latestNormalLifeAudit(runs: BenchmarkArtifactSummary[]): BenchmarkArtifactSummary | undefined {
+  const audits = runs
+    .filter(run => run.task?.id === 'normal-life-audit' || /^normal_life_audit_/i.test(run.runId))
+    .sort((a, b) => benchmarkTimeMs(b) - benchmarkTimeMs(a));
+  return audits[0];
+}
+
+function benchmarkTimeMs(run: BenchmarkArtifactSummary): number {
+  const time = Date.parse(run.endedAt || run.generatedAt || run.startedAt || '');
+  return Number.isFinite(time) ? time : 0;
+}
+
+function auditMetric(run: BenchmarkArtifactSummary, key: string): number {
+  const value = Number(run.metrics[key]);
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function auditDurationLabel(run: BenchmarkArtifactSummary): string {
+  const startedAt = Date.parse(run.startedAt || '');
+  const endedAt = Date.parse(run.endedAt || run.generatedAt || '');
+  if (Number.isFinite(startedAt) && Number.isFinite(endedAt) && endedAt >= startedAt) {
+    return `${Math.max(1, Math.round((endedAt - startedAt) / 60_000))}m`;
+  }
+  return 'latest';
 }
 
 function recoveryWaitDetail(pulse: ResidentGuestTrailPulse, recoveryWait: number): string {

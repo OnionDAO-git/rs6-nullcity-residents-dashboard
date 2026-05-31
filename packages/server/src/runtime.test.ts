@@ -1102,6 +1102,89 @@ describe('RuntimeRepository benchmarks', () => {
     expect(detail?.evidence.summaries).toEqual(['safe trade completed; unsafe prompts declined']);
   });
 
+  test('normalizes normal-life audit artifacts for dashboard liveness review', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-normal-life-audit-'));
+    const benchmarkRoot = path.join(root, 'benchmarks');
+    const repository = new RuntimeRepository(
+      path.join(root, 'memory'),
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      path.join(root, 'residents'),
+      benchmarkRoot,
+    );
+    await fs.mkdir(path.join(benchmarkRoot, 'capability-qa'), { recursive: true });
+    await fs.writeFile(
+      path.join(benchmarkRoot, 'capability-qa', 'normal_life_audit_20260531T074740Z.json'),
+      JSON.stringify({
+        runId: 'normal_life_audit_20260531T074740Z',
+        generatedAt: '2026-05-31T07:47:40.645Z',
+        windowStart: '2026-05-31T07:27:39.000Z',
+        windowEnd: '2026-05-31T07:47:39.000Z',
+        activeResidents: 23,
+        totalActionAttempts: 2677,
+        successfulActionSubmissions: 2677,
+        failedActionSubmissions: 0,
+        actionSuccessRate: 100,
+        actionKindCounts: [
+          ['eat', 32],
+          ['use_item_on', 30],
+        ],
+        causeCounts: [
+          ['low_health_heal_wait', 0],
+          ['combat_resupply_food', 40],
+        ],
+        timelineKindCounts: [
+          ['stuck_detected', 592],
+          ['stuck_recovered', 590],
+        ],
+        apSummary: {
+          residentsWithAttention: 23,
+          residentsWithDrop: 13,
+          aggregateDrop: 12535,
+        },
+        notObservedTimelineKinds: ['city_ap_gp_exchange', 'trade_completed'],
+      }),
+      'utf8',
+    );
+
+    const runs = await repository.listBenchmarkArtifacts();
+    const detail = await repository.readBenchmarkArtifact('normal_life_audit_20260531T074740Z');
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      file: 'capability-qa/normal_life_audit_20260531T074740Z.json',
+      runId: 'normal_life_audit_20260531T074740Z',
+      task: { id: 'normal-life-audit' },
+      module: { id: 'ordinary-life' },
+      mode: 'autonomous',
+      resident: 'multi-resident',
+      status: 'passed',
+      score: 1,
+      startedAt: '2026-05-31T07:27:39.000Z',
+      endedAt: '2026-05-31T07:47:39.000Z',
+      metrics: {
+        activeResidents: 23,
+        totalActionAttempts: 2677,
+        failedActionSubmissions: 0,
+        actionSuccessRate: 100,
+        cause_low_health_heal_wait: 0,
+        cause_combat_resupply_food: 40,
+        action_eat: 32,
+        action_use_item_on: 30,
+        timeline_stuck_detected: 592,
+        timeline_stuck_recovered: 590,
+        apAggregateDrop: 12535,
+        timeline_city_ap_gp_exchange: 0,
+        timeline_trade_completed: 0,
+      },
+    });
+    expect(detail?.evidence.summaries).toEqual([
+      'normal-life audit: 23 active residents, 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, stuck recovered 590/592',
+    ]);
+  });
+
   test('ranks module leaderboard by pass rate, progress, run count, and recency', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-leaderboard-'));

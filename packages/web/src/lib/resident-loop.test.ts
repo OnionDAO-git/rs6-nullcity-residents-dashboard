@@ -20,6 +20,7 @@ import {
   residentNeedsAp,
   residentNeedsApSupportSoon,
   residentNextStepCue,
+  residentNormalLifeAuditSignal,
   residentOperatorWarnings,
   residentProofPulse,
   residentProofRollup,
@@ -1545,6 +1546,107 @@ describe('resident loop helpers', () => {
       tone: 'warn',
       headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
       detail: 'Waiting for the live resident roster before reading recovery or demo liveness.',
+    });
+  });
+
+  test('summarizes the latest normal-life audit when recovery is clear but AP/GP recurrence is absent', () => {
+    expect(residentNormalLifeAuditSignal([
+      {
+        file: 'capability-qa/normal_life_audit_20260531T074740Z.json',
+        runId: 'normal_life_audit_20260531T074740Z',
+        task: { id: 'normal-life-audit' },
+        module: { id: 'ordinary-life' },
+        mode: 'autonomous',
+        resident: 'multi-resident',
+        startedAt: '2026-05-31T07:27:39.000Z',
+        endedAt: '2026-05-31T07:47:39.000Z',
+        status: 'passed',
+        score: 1,
+        metrics: {
+          totalActionAttempts: 2677,
+          successfulActionSubmissions: 2677,
+          failedActionSubmissions: 0,
+          cause_low_health_heal_wait: 0,
+          timeline_city_ap_gp_exchange: 0,
+          timeline_trade_completed: 0,
+          timeline_stuck_detected: 592,
+          timeline_stuck_recovered: 590,
+        },
+      },
+    ])).toEqual({
+      tone: 'warn',
+      summary: 'Recovery clear; AP/GP recurrence not observed.',
+      detail: '20m audit: 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, trade closures 0, stuck recovered 590/592.',
+    });
+  });
+
+  test('warns when the latest normal-life audit still has recovery waits', () => {
+    expect(residentNormalLifeAuditSignal([
+      {
+        file: 'capability-qa/normal_life_audit_20260531T070509Z.json',
+        runId: 'normal_life_audit_20260531T070509Z',
+        task: { id: 'normal-life-audit' },
+        module: { id: 'ordinary-life' },
+        mode: 'autonomous',
+        resident: 'multi-resident',
+        startedAt: '2026-05-31T06:45:09.000Z',
+        endedAt: '2026-05-31T07:05:09.000Z',
+        status: 'passed',
+        score: 1,
+        metrics: {
+          totalActionAttempts: 5285,
+          successfulActionSubmissions: 5285,
+          failedActionSubmissions: 0,
+          cause_low_health_heal_wait: 3021,
+          timeline_city_ap_gp_exchange: 0,
+          timeline_trade_completed: 0,
+          timeline_stuck_detected: 31,
+          timeline_stuck_recovered: 29,
+        },
+      },
+    ])).toEqual({
+      tone: 'warn',
+      summary: 'Recovery waits still visible in latest audit.',
+      detail: '20m audit: 5285/5285 actions, low-health waits 3021, AP/GP exchanges 0, trade closures 0, stuck recovered 29/31.',
+    });
+  });
+
+  test('marks normal-life audit signal healthy when recovery and AP/GP recurrence both appear', () => {
+    expect(residentNormalLifeAuditSignal([
+      {
+        file: 'capability-qa/normal_life_audit_20260531T080000Z.json',
+        runId: 'normal_life_audit_20260531T080000Z',
+        task: { id: 'normal-life-audit' },
+        module: { id: 'ordinary-life' },
+        mode: 'autonomous',
+        resident: 'multi-resident',
+        startedAt: '2026-05-31T07:40:00.000Z',
+        endedAt: '2026-05-31T08:00:00.000Z',
+        status: 'passed',
+        score: 1,
+        metrics: {
+          totalActionAttempts: 300,
+          successfulActionSubmissions: 300,
+          failedActionSubmissions: 0,
+          cause_low_health_heal_wait: 0,
+          timeline_city_ap_gp_exchange: 2,
+          timeline_trade_completed: 1,
+          timeline_stuck_detected: 5,
+          timeline_stuck_recovered: 5,
+        },
+      },
+    ])).toEqual({
+      tone: 'ok',
+      summary: 'Normal-life audit shows recovery and AP/GP recurrence.',
+      detail: '20m audit: 300/300 actions, low-health waits 0, AP/GP exchanges 2, trade closures 1, stuck recovered 5/5.',
+    });
+  });
+
+  test('keeps normal-life audit signal honest when no audit artifact is visible', () => {
+    expect(residentNormalLifeAuditSignal([])).toEqual({
+      tone: 'warn',
+      summary: 'No normal-life audit visible yet.',
+      detail: 'Run or sync a CQA10 normal-life audit before treating resident recurrence as proven.',
     });
   });
 
