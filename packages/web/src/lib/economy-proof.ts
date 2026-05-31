@@ -22,6 +22,27 @@ export interface EconomyProofSummary {
   total: number;
 }
 
+export interface EconomyProofNextAction {
+  label: string;
+  tone: EconomyProofTone;
+  detail: string;
+}
+
+const PROOF_ACTIONS: Record<EconomyProofCheck['id'], { label: string; command: string }> = {
+  'ap-topup-resume': {
+    label: 'Run top-up proof',
+    command: 'npm run controller:bench -- --task ap-topup-resume-5m --module onion.runescape.standard --mode autonomous',
+  },
+  'ap-gp-hierarchy': {
+    label: 'Run hierarchy proofs',
+    command: 'npm run controller:bench -- --task ap-gp-library-strategy-5m --module onion.runescape.standard --mode autonomous; npm run controller:bench -- --task ap-gp-honesty-5m --module onion.runescape.standard --mode autonomous',
+  },
+  'ap-for-gp-exchange': {
+    label: 'Run exchange proof',
+    command: 'npm run controller:bench -- --task ap-gp-exchange-5m --module onion.runescape.standard --mode autonomous',
+  },
+};
+
 export function buildEconomyProofSummary(
   runs: BenchmarkArtifactSummary[],
   nowMs = Date.now(),
@@ -40,6 +61,16 @@ export function buildEconomyProofSummary(
     ready,
     total: checks.length,
   };
+}
+
+export function economyProofNextActions(summary: EconomyProofSummary): EconomyProofNextAction[] {
+  return summary.checks
+    .filter(check => check.tone !== 'ok')
+    .map(check => ({
+      label: PROOF_ACTIONS[check.id].label,
+      tone: check.tone,
+      detail: PROOF_ACTIONS[check.id].command,
+    }));
 }
 
 function topupResumeProof(runs: BenchmarkArtifactSummary[], nowMs: number): EconomyProofCheck {

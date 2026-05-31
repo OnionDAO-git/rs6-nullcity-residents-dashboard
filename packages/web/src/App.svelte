@@ -8,7 +8,7 @@
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
-  import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
+  import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment } from './lib/resident-economy-evidence';
@@ -3312,6 +3312,19 @@
         </article>
       {/each}
     </div>
+    {#if economyProofNextActions(cityEconomyProofs).length}
+      <div class="city-record-list compact">
+        {#each economyProofNextActions(cityEconomyProofs) as action (action.label)}
+          <article>
+            <span class={`tag ${action.tone}`}>{action.tone}</span>
+            <div>
+              <strong>{action.label}</strong>
+              <small>{action.detail}</small>
+            </div>
+          </article>
+        {/each}
+      </div>
+    {/if}
     <div class="city-copy-block">
       <strong>{cityResidentProofRollup.headline}</strong>
       <p>{cityResidentProofRollup.detail}</p>

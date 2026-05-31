@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { BenchmarkArtifactSummary } from '@nullcity-dashboard/shared';
-import { buildEconomyProofSummary } from './economy-proof';
+import { buildEconomyProofSummary, economyProofNextActions } from './economy-proof';
 
 function run(overrides: Partial<BenchmarkArtifactSummary> = {}): BenchmarkArtifactSummary {
   return {
@@ -96,5 +96,25 @@ describe('buildEconomyProofSummary', () => {
     const exchange = summary.checks.find(check => check.id === 'ap-for-gp-exchange');
     expect(exchange?.detail).toBe('ap-gp-exchange-5m (2026-05...34567890)');
     expect(exchange?.detail).not.toContain(longRunId);
+  });
+
+  test('builds operator next actions for missing AP/GP proofs', () => {
+    const summary = buildEconomyProofSummary([
+      run({ runId: 'bench_strategy', task: { id: 'ap-gp-library-strategy-5m', version: '1' } }),
+      run({ runId: 'bench_honesty', task: { id: 'ap-gp-honesty-5m', version: '1' } }),
+    ], Date.parse('2026-05-30T12:00:00.000Z'));
+
+    expect(economyProofNextActions(summary)).toEqual([
+      {
+        label: 'Run top-up proof',
+        tone: 'warn',
+        detail: 'npm run controller:bench -- --task ap-topup-resume-5m --module onion.runescape.standard --mode autonomous',
+      },
+      {
+        label: 'Run exchange proof',
+        tone: 'warn',
+        detail: 'npm run controller:bench -- --task ap-gp-exchange-5m --module onion.runescape.standard --mode autonomous',
+      },
+    ]);
   });
 });
