@@ -19,6 +19,8 @@ export interface ReleaseReadinessCheck {
 export interface ReleaseReadinessMetrics {
   residents: number;
   onlineResidents: number;
+  modelEndpointResidents: number;
+  sparkModuleResidents: number;
   activePlans: number;
   lowApResidents: number;
   failedActionResidents: number;
@@ -70,6 +72,7 @@ export interface ReleaseReadinessActionQueueItem {
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
+const FIRST_FIVE_CAPTURE_EVIDENCE = 'resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence';
 
 type CapabilityGroupId = 'ap-gp' | 'trade' | 'combat' | 'gear' | 'memory';
 
@@ -97,7 +100,10 @@ const CAPABILITY_GROUPS: CapabilityGroup[] = [
 export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseReadinessSummary {
   const nowMs = input.nowMs ?? Date.now();
   const residents = input.residents;
-  const onlineResidents = residents.filter(row => row.online).length;
+  const onlineRows = residents.filter(row => row.online);
+  const onlineResidents = onlineRows.length;
+  const modelEndpointResidents = onlineRows.filter(row => residentHasModelEndpointSignal(row)).length;
+  const sparkModuleResidents = onlineRows.filter(row => residentHasSparkModuleSignal(row)).length;
   const lowApResidents = residents.filter(row => residentNeedsAp(row)).length;
   const failedActionResidents = residents.filter(row => row.online && residentActionOutcomeFailed(row)).length;
   const activePlans = residents.filter(row => {
@@ -136,6 +142,8 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     metrics: {
       residents: residents.length,
       onlineResidents,
+      modelEndpointResidents,
+      sparkModuleResidents,
       activePlans,
       lowApResidents,
       failedActionResidents,
@@ -153,6 +161,15 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
 export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): ReleaseReadinessMetricTile[] {
   const { metrics } = summary;
   const checksById = new Map(summary.checks.map(check => [check.id, check]));
+  const missingModelResidents = Math.max(0, metrics.onlineResidents - metrics.modelEndpointResidents);
+  const missingSparkResidents = Math.max(0, metrics.onlineResidents - metrics.sparkModuleResidents);
+  const identityCoverageValue = metrics.onlineResidents > 0
+    ? `${metrics.modelEndpointResidents.toLocaleString()}/${metrics.onlineResidents.toLocaleString()} model · ${metrics.sparkModuleResidents.toLocaleString()}/${metrics.onlineResidents.toLocaleString()} SPARK`
+    : '-';
+  const identityCoverageDetailParts = [
+    missingModelResidents > 0 ? `${missingModelResidents.toLocaleString()} online resident${missingModelResidents === 1 ? '' : 's'} missing model/endpoint` : '',
+    missingSparkResidents > 0 ? `${missingSparkResidents.toLocaleString()} online resident${missingSparkResidents === 1 ? '' : 's'} missing SPARK module` : '',
+  ].filter(Boolean);
   const economyTransport = checksById.get('economy-transport');
   const ncriPrint = checksById.get('ncri-print');
   const loop = checksById.get('loop');
@@ -162,6 +179,12 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
   const storyteller = checksById.get('storyteller');
   return [
     { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
+    {
+      label: 'Model+SPARK',
+      value: identityCoverageValue,
+      ...(identityCoverageDetailParts.length > 0 ? { tone: 'warn' as const } : {}),
+      ...(identityCoverageDetailParts.length > 0 ? { detail: `${identityCoverageDetailParts.join(' · ')}.` } : {}),
+    },
     ...(economyTransport
       ? [{
         label: 'Transport',
@@ -232,8 +255,8 @@ export function releaseReadinessFirstFiveSteps(summary: ReleaseReadinessSummary)
       label: 'Capture',
       tone: summary.status === 'ready' ? 'ok' : 'warn',
       detail: summary.status === 'blocked'
-        ? 'After the blocker clears, capture fresh screenshots/logs before a public demo.'
-        : 'Capture fresh screenshots/logs before a public demo.',
+        ? `After the blocker clears, capture ${FIRST_FIVE_CAPTURE_EVIDENCE} before the public demo.`
+        : `Capture ${FIRST_FIVE_CAPTURE_EVIDENCE} before the public demo.`,
     },
   ];
 }
@@ -677,4 +700,21 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
 
 function residentActionOutcomeFailed(row: ResidentDashboardRow): boolean {
   return residentLoopCheckpoints(row).some(checkpoint => checkpoint.key === 'action' && checkpoint.tone === 'fail');
+}
+
+function residentHasModelEndpointSignal(row: ResidentDashboardRow): boolean {
+  const profile = row.stack?.model || row.stack?.brain || row.stack?.body;
+  const latestInference = row.thinking?.latestInference;
+  const inferenceEndpoint = latestInference && typeof latestInference.endpoint === 'string' ? latestInference.endpoint : undefined;
+  const inferenceProvider = latestInference && typeof latestInference.provider === 'string' ? latestInference.provider : undefined;
+  return Boolean(profile?.endpoint || profile?.model || inferenceEndpoint || inferenceProvider);
+}
+
+function residentHasSparkModuleSignal(row: ResidentDashboardRow): boolean {
+  return Boolean(
+    row.stack?.activeModule?.id ||
+    row.spark?.activeModule?.id ||
+    row.stack?.configuredModules?.[0]?.id ||
+    row.spark?.modules?.[0]?.id,
+  );
 }

@@ -19,6 +19,21 @@ function resident(overrides: Partial<ResidentDashboardRow> = {}): ResidentDashbo
       availableActions: 7,
     },
     body: { controlHeld: true, latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } } },
+    stack: {
+      model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
+      configuredModules: [{
+        id: 'onion.runescape.standard',
+        version: '0.2.0',
+        source: 'soul',
+        activeFacets: ['thinking', 'nervous-rules'],
+      }],
+      activeModule: {
+        id: 'onion.runescape.standard',
+        version: '0.2.0',
+        source: 'soul',
+        activeFacets: ['thinking', 'nervous-rules'],
+      },
+    },
     storyArc: { phase: 'progress', summary: 'Working toward the city loop.' },
     ...overrides,
   };
@@ -171,6 +186,10 @@ describe('buildReleaseReadiness', () => {
     expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'NCRI Prints')).toEqual({
       label: 'NCRI Prints',
       value: '1 accepted',
+    });
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Model+SPARK')).toEqual({
+      label: 'Model+SPARK',
+      value: '1/1 model · 1/1 SPARK',
     });
   });
 
@@ -403,6 +422,7 @@ describe('buildReleaseReadiness', () => {
 
     expect(tiles.map(tile => tile.label)).toEqual([
       'Residents',
+      'Model+SPARK',
       'NCRI Prints',
       'Plans',
       'Action Risks',
@@ -417,6 +437,29 @@ describe('buildReleaseReadiness', () => {
       value: '1',
       tone: 'fail',
       detail: 'res:hans latest action outcome is failed, timed out, or cancelled.',
+    });
+  });
+
+  test('warns when online residents are missing model or SPARK identity signals', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({ name: 'res:model-missing', stack: { configuredModules: resident().stack!.configuredModules } }),
+        resident({ name: 'res:spark-missing', stack: { model: { endpoint: 'openrouter/qwen' }, configuredModules: [] } }),
+      ],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('ready');
+    expect(summary.metrics.modelEndpointResidents).toBe(1);
+    expect(summary.metrics.sparkModuleResidents).toBe(1);
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Model+SPARK')).toEqual({
+      label: 'Model+SPARK',
+      value: '1/2 model · 1/2 SPARK',
+      tone: 'warn',
+      detail: '1 online resident missing model/endpoint · 1 online resident missing SPARK module.',
     });
   });
 
@@ -722,9 +765,26 @@ describe('buildReleaseReadiness', () => {
       {
         label: 'Capture',
         tone: 'warn',
-        detail: 'After the blocker clears, capture fresh screenshots/logs before a public demo.',
+        detail: 'After the blocker clears, capture resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence before the public demo.',
       },
     ]);
+  });
+
+  test('names concrete demo evidence surfaces when the city is ready', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessFirstFiveSteps(summary)[2]).toEqual({
+      label: 'Capture',
+      tone: 'ok',
+      detail: 'Capture resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence before the public demo.',
+    });
   });
 
   test('keeps several readiness next actions visible with compact operator labels', () => {
