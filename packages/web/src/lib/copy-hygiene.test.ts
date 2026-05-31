@@ -72,4 +72,9 @@ describe('dashboard copy hygiene', () => {
   test('explains quiet economy windows without implying residents are offline', () => {
     expect(appSource).toContain('The economy-event window is quiet; residents may still be online, acting, or waiting for AP/GP events.');
   });
+
+  test('keeps resident Storyteller empty states visitor-facing instead of operator-commanding', () => {
+    expect(appSource).not.toContain('Run Storyteller digest generation to capture grounded resident events.');
+    expect(appSource).toContain('Once a Storyteller digest cites this resident, grounded public story evidence will appear here.');
+  });
 });

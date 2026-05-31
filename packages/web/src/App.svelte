@@ -4899,7 +4899,7 @@
                 </div>
               </article>
             {:else}
-              <div class="city-empty-state"><strong>No resident-specific digest refs</strong><span>Run Storyteller digest generation to capture grounded resident events.</span></div>
+              <div class="city-empty-state"><strong>No Storyteller moment for this resident yet</strong><span>Once a Storyteller digest cites this resident, grounded public story evidence will appear here.</span></div>
             {/each}
           </div>
         </div>
