@@ -469,6 +469,23 @@ describe('resident loop helpers', () => {
       tone: 'warn',
       headline: '1/2 residents have live loop proofs',
       detail: 'Top gaps: AP, Plan, Action',
+      actions: [
+        {
+          label: 'Top up AP',
+          tone: 'warn',
+          detail: 'Grant AP or pick a stable resident before demoing liveness.',
+        },
+        {
+          label: 'Wake planning',
+          tone: 'warn',
+          detail: 'Observe or restart thinking until an active plan publishes.',
+        },
+        {
+          label: 'Inspect action loop',
+          tone: 'warn',
+          detail: 'Open resident detail or runtime logs for failed or missing actions.',
+        },
+      ],
       healthy: 1,
       warn: 1,
       fail: 0,
@@ -717,6 +734,13 @@ describe('resident loop helpers', () => {
       tone: 'warn',
       headline: 'No online residents in current snapshot',
       detail: 'Waiting for live AP/GP proof signals.',
+      actions: [
+        {
+          label: 'Reconnect residents',
+          tone: 'warn',
+          detail: 'Start or reconnect the controller before treating this as live proof.',
+        },
+      ],
       healthy: 0,
       warn: 0,
       fail: 0,

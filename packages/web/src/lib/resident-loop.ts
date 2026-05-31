@@ -42,10 +42,17 @@ export interface ResidentProofPulse {
   detail: string;
 }
 
+export interface ResidentProofRollupAction {
+  label: string;
+  tone: 'warn' | 'fail';
+  detail: string;
+}
+
 export interface ResidentProofRollup {
   tone: 'ok' | 'warn' | 'fail';
   headline: string;
   detail: string;
+  actions: ResidentProofRollupAction[];
   healthy: number;
   warn: number;
   fail: number;
@@ -554,6 +561,11 @@ export function residentProofRollup(
       tone: 'warn',
       headline: 'No online residents in current snapshot',
       detail: 'Waiting for live AP/GP proof signals.',
+      actions: [{
+        label: 'Reconnect residents',
+        tone: 'warn',
+        detail: 'Start or reconnect the controller before treating this as live proof.',
+      }],
       healthy: 0,
       warn: 0,
       fail: 0,
@@ -595,16 +607,83 @@ export function residentProofRollup(
 
   const tone: ResidentProofRollup['tone'] = healthy === onlineRows.length ? 'ok' : fail > 0 && healthy === 0 ? 'fail' : 'warn';
   const detail = topGaps.length ? `Top gaps: ${topGaps.join(', ')}` : 'All tracked AP/GP loop proofs are live.';
+  const actions = topGaps.map(proofGapAction);
 
   return {
     tone,
     headline: `${healthy.toLocaleString()}/${onlineRows.length.toLocaleString()} residents have live loop proofs`,
     detail,
+    actions,
     healthy,
     warn,
     fail,
     online: onlineRows.length,
   };
+}
+
+function proofGapAction(label: string): ResidentProofRollupAction {
+  switch (label) {
+    case 'AP':
+      return {
+        label: 'Top up AP',
+        tone: 'warn',
+        detail: 'Grant AP or pick a stable resident before demoing liveness.',
+      };
+    case 'Plan':
+      return {
+        label: 'Wake planning',
+        tone: 'warn',
+        detail: 'Observe or restart thinking until an active plan publishes.',
+      };
+    case 'Action':
+      return {
+        label: 'Inspect action loop',
+        tone: 'warn',
+        detail: 'Open resident detail or runtime logs for failed or missing actions.',
+      };
+    case 'Action outcome':
+      return {
+        label: 'Inspect failed action',
+        tone: 'fail',
+        detail: 'Open resident detail or runtime logs before trusting liveness.',
+      };
+    case 'Speech':
+      return {
+        label: 'Prompt speech proof',
+        tone: 'warn',
+        detail: 'Ask for a short status line or wait for a fresh say event.',
+      };
+    case 'GP':
+      return {
+        label: 'Gather GP proof',
+        tone: 'warn',
+        detail: 'Run coin-995 or AP/GP exchange proof before claiming purchasing power.',
+      };
+    case 'Goal contract':
+      return {
+        label: 'Check goal contract',
+        tone: 'warn',
+        detail: 'Review resident goal contract before presenting intent as grounded.',
+      };
+    case 'Storyteller':
+      return {
+        label: 'Run Storyteller',
+        tone: 'warn',
+        detail: 'Generate or review Storyteller digest refs for this resident.',
+      };
+    case 'Benchmark':
+      return {
+        label: 'Run benchmark proof',
+        tone: 'warn',
+        detail: 'Capture a fresh focused capability benchmark for the weak resident.',
+      };
+    default:
+      return {
+        label: `Inspect ${label}`,
+        tone: 'warn',
+        detail: 'Open resident detail and capture fresh proof before demoing liveness.',
+      };
+  }
 }
 
 export function residentTriageSummary(

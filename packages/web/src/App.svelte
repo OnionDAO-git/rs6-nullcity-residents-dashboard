@@ -3335,6 +3335,19 @@
       <span><small>Warn</small><strong>{cityResidentProofRollup.warn}</strong></span>
       <span><small>Fail</small><strong>{cityResidentProofRollup.fail}</strong></span>
     </div>
+    {#if cityResidentProofRollup.actions.length}
+      <div class="city-record-list compact">
+        {#each cityResidentProofRollup.actions as action (action.label)}
+          <article>
+            <span class={`tag ${action.tone}`}>{action.tone}</span>
+            <div>
+              <strong>{action.label}</strong>
+              <small>{action.detail}</small>
+            </div>
+          </article>
+        {/each}
+      </div>
+    {/if}
   </section>
 
   <section class={`city-panel tone-${cityLiveEconomySummary.tone}`}>
