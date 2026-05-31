@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { DashboardOverview, GatewayStatus, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { ResidentReadModel } from './city-api';
 import {
   findResidentReadModel,
+  cityDataNoticeCopy,
+  loadCitySnapshotWithLiveFallback,
   residentRowsNeedLiveFallback,
   residentRowsForCityDirectory,
   residentDetailEmptyState,
@@ -23,6 +25,14 @@ function readModel(input: Partial<ResidentReadModel> & Pick<ResidentReadModel, '
     status: 'unknown',
     metadata: {},
     updatedAt: '2026-05-30T00:00:00.000Z',
+    ...input,
+  };
+}
+
+function gateway(input: Partial<GatewayStatus> = {}): GatewayStatus {
+  return {
+    configuredUrl: 'ws://127.0.0.1:8787',
+    connected: false,
     ...input,
   };
 }
@@ -51,6 +61,42 @@ describe('resident route helpers', () => {
     expect(residentRowsNeedLiveFallback([])).toBe(true);
     expect(residentRowsNeedLiveFallback(undefined)).toBe(true);
     expect(residentRowsNeedLiveFallback([row('res:agent')])).toBe(false);
+  });
+
+  test('falls back to live residents and gateway status when the city overview is slow', async () => {
+    const liveRows = [row('res:agent')];
+
+    const snapshot = await loadCitySnapshotWithLiveFallback({
+      overview: () => new Promise<DashboardOverview>(() => undefined),
+      residents: async () => liveRows,
+      gatewayStatus: async () => gateway({ connected: true }),
+    }, { overviewTimeoutMs: 1 });
+
+    expect(snapshot).toEqual({
+      overview: undefined,
+      gatewayStatus: gateway({ connected: true }),
+      residents: liveRows,
+      error: 'City overview unavailable; showing live resident fallback.',
+    });
+  });
+
+  test('keeps fallback error copy honest when live residents load after overview failure', async () => {
+    const liveRows = [row('res:agent')];
+
+    const snapshot = await loadCitySnapshotWithLiveFallback({
+      overview: async () => {
+        throw new Error('City data is not connected. Showing the shell with empty states.');
+      },
+      residents: async () => liveRows,
+      gatewayStatus: async () => gateway({ connected: true }),
+    }, { overviewTimeoutMs: 10 });
+
+    expect(snapshot.error).toBe('City overview unavailable; showing live resident fallback.');
+  });
+
+  test('shows fallback-specific city notice copy without exposing generic raw errors', () => {
+    expect(cityDataNoticeCopy('City overview unavailable; showing live resident fallback.')).toBe('City overview unavailable; showing live resident fallback.');
+    expect(cityDataNoticeCopy('500 Internal Server Error')).toBe('City data is not connected. Showing the shell with empty states.');
   });
 
   test('finds projected resident records from the loaded directory without a detail fetch', () => {

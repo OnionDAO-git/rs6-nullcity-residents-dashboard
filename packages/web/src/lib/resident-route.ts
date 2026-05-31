@@ -1,5 +1,8 @@
-import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { DashboardOverview, GatewayStatus, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { ResidentReadModel } from './city-api';
+
+const DEFAULT_CITY_OVERVIEW_TIMEOUT_MS = 2500;
+const LIVE_RESIDENT_FALLBACK_ERROR = 'City overview unavailable; showing live resident fallback.';
 
 export interface ResidentDetailEmptyStateInput {
   loading: boolean;
@@ -39,6 +42,23 @@ export interface ResidentLoopAvailabilityState {
   tone: 'ok' | 'warn' | 'fail';
   title: string;
   detail: string;
+}
+
+export interface CitySnapshotLoaders {
+  overview: () => Promise<DashboardOverview>;
+  residents: () => Promise<ResidentDashboardRow[]>;
+  gatewayStatus: () => Promise<GatewayStatus>;
+}
+
+export interface CitySnapshotLoadOptions {
+  overviewTimeoutMs?: number;
+}
+
+export interface CitySnapshotLoadResult {
+  overview: DashboardOverview | undefined;
+  gatewayStatus: GatewayStatus | undefined;
+  residents: ResidentDashboardRow[];
+  error: string;
 }
 
 export function residentRouteSlug(name: string): string {
@@ -91,6 +111,49 @@ export function residentRowsForCityDirectory(
 
 export function residentRowsNeedLiveFallback(overviewRows: ResidentDashboardRow[] | undefined): boolean {
   return !overviewRows || overviewRows.length === 0;
+}
+
+export function cityDataNoticeCopy(error: string): string {
+  return error === LIVE_RESIDENT_FALLBACK_ERROR
+    ? LIVE_RESIDENT_FALLBACK_ERROR
+    : 'City data is not connected. Showing the shell with empty states.';
+}
+
+export async function loadCitySnapshotWithLiveFallback(
+  loaders: CitySnapshotLoaders,
+  options: CitySnapshotLoadOptions = {},
+): Promise<CitySnapshotLoadResult> {
+  try {
+    const overview = await withTimeout(
+      loaders.overview(),
+      options.overviewTimeoutMs ?? DEFAULT_CITY_OVERVIEW_TIMEOUT_MS,
+      'City overview',
+    );
+    const residents = overview.residents || [];
+    return {
+      overview,
+      gatewayStatus: overview.gateway,
+      residents: residentRowsNeedLiveFallback(overview.residents)
+        ? await loaders.residents().catch(() => residents)
+        : residents,
+      error: '',
+    };
+  } catch (err) {
+    const [fallbackResidents, fallbackGateway] = await Promise.allSettled([
+      loaders.residents(),
+      loaders.gatewayStatus(),
+    ]);
+    const residents = fallbackResidents.status === 'fulfilled' ? fallbackResidents.value : [];
+
+    return {
+      overview: undefined,
+      gatewayStatus: fallbackGateway.status === 'fulfilled' ? fallbackGateway.value : undefined,
+      residents,
+      error: residents.length > 0
+        ? LIVE_RESIDENT_FALLBACK_ERROR
+        : err instanceof Error ? err.message : 'City data unavailable',
+    };
+  }
 }
 
 export function findResidentReadModel(rows: ResidentReadModel[], input: string): ResidentReadModel | undefined {
@@ -169,4 +232,19 @@ export function residentRosterEmptyState(input: ResidentRosterEmptyStateInput): 
     title: 'Resident roster is syncing',
     detail: 'Live resident evidence is present while the public roster catches up.',
   };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs)}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }

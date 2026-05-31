@@ -64,7 +64,7 @@
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
-  import { findResidentReadModel, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, residentRowsNeedLiveFallback, resolveResidentRouteId } from './lib/resident-route';
+  import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -921,21 +921,15 @@
   }
 
   async function loadCitySnapshot() {
-    try {
-      overview = await api.overview();
-      gatewayStatus = overview.gateway;
-      residents = overview.residents || [];
-      if (residentRowsNeedLiveFallback(overview.residents)) {
-        residents = await api.residents('all').catch(() => residents);
-      }
-      cityDataError = '';
-    } catch (err) {
-      const snapshotError = err instanceof Error ? err.message : 'City data unavailable';
-      const [fallbackResidents, fallbackGateway] = await Promise.allSettled([api.residents('all'), api.gatewayStatus()]);
-      residents = fallbackResidents.status === 'fulfilled' ? fallbackResidents.value : [];
-      if (fallbackGateway.status === 'fulfilled') gatewayStatus = fallbackGateway.value;
-      cityDataError = snapshotError;
-    }
+    const snapshot = await loadCitySnapshotWithLiveFallback({
+      overview: api.overview,
+      residents: () => api.residents('all'),
+      gatewayStatus: api.gatewayStatus,
+    });
+    overview = snapshot.overview;
+    if (snapshot.gatewayStatus) gatewayStatus = snapshot.gatewayStatus;
+    residents = snapshot.residents;
+    cityDataError = snapshot.error;
   }
 
   async function loadResidentGoalContracts(rows: ResidentDashboardRow[]): Promise<Record<string, ResidentGoalContractSignal>> {
@@ -3354,7 +3348,7 @@
       </div>
 
       {#if cityDataError}
-        <div class="notice city-notice">City data is not connected. Showing the shell with empty states.</div>
+        <div class="notice city-notice">{cityDataNoticeCopy(cityDataError)}</div>
       {/if}
       {#if actionError}
         <div class="notice rose">{actionError}</div>
