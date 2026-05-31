@@ -566,6 +566,67 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('prefers a demo-ready resident with an explicit goal-action link', () => {
+    const unlinked = row({
+      name: 'res:unlinked-ready',
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Earn GP safely' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 150 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 150,
+          ageMs: 2000,
+          latestEventKind: 'say',
+          latestEventText: 'Ready to demo.',
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 1 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof collected.', latestEventKind: 'gp_observed', latestEventTick: 150 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }],
+      },
+    });
+    const linked = row({
+      name: 'res:linked-ready',
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Earn GP safely' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 150 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 150,
+          ageMs: 2000,
+          latestEventKind: 'say',
+          latestEventText: 'Ready to demo.',
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 1 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof collected.', latestEventKind: 'gp_observed', latestEventTick: 150 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }],
+      },
+    });
+
+    expect(residentDemoPickCue([unlinked, linked])).toMatchObject({
+      tone: 'ok',
+      residentName: 'res:linked-ready',
+      target: 'Resident Detail',
+      action: 'Open demo-ready resident',
+      detail: 'linked-ready has 6/6 loop proofs live; all tracked proof signals are live.',
+    });
+  });
+
   test('falls back to a recovery cue when no resident is demo-ready', () => {
     expect(residentDemoPickCue([row({
       name: 'res:woodcutter',

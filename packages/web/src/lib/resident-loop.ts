@@ -1079,9 +1079,11 @@ export function residentDemoPickCue(
     const pulse = residentProofPulse(row, signals);
     const nextStep = residentNextStepCue(row, signals);
     const warning = residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
-    return { row, index, pulse, nextStep, warning };
+    const goalActionLink = residentGoalActionLink(row);
+    return { row, index, pulse, nextStep, warning, goalActionLink };
   });
-  const ready = evaluated.find(candidate => candidate.row.online && candidate.pulse.tone === 'ok');
+  const readyCandidates = evaluated.filter(candidate => candidate.row.online && candidate.pulse.tone === 'ok');
+  const ready = readyCandidates.find(candidate => candidate.goalActionLink.tone === 'ok') || readyCandidates[0];
 
   if (ready) {
     return {
