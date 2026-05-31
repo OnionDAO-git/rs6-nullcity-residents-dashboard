@@ -681,7 +681,8 @@ describe('resident loop helpers', () => {
       { label: 'Goal/action', value: '1/2 linked', detail: 'active goal tied to latest action cause', tone: 'warn', path: '/residents?triage=goal-link' },
       { label: 'Speech', value: '1/2 live', detail: 'recent say/feed line visible', tone: 'warn', path: '/residents?triage=quiet' },
       { label: 'Story digest', value: '1/2 cited', detail: 'resident-specific Storyteller evidence', tone: 'warn', path: '/residents?triage=story' },
-      { label: 'AP/GP', value: '1/2 AP · 1/2 GP', detail: 'AP runway stable and coin-995/economy GP proof visible', tone: 'warn', path: '/residents?triage=attention' },
+      { label: 'AP runway', value: '1/2 stable', detail: 'attention runway above support floor', tone: 'warn', path: '/residents?triage=attention' },
+      { label: 'GP proof', value: '1/2 visible', detail: 'coin-995/economy GP proof visible', tone: 'warn', path: '/residents?triage=gp' },
       { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn', path: '/residents?triage=benchmark' },
     ]);
   });
@@ -2891,7 +2892,7 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'ok', summary: 'Storyteller cited this resident', detail: 'digest run story-20260531' },
     });
 
-    expect(coverage.map(fact => fact.label)).toEqual(['Stack', 'Inference', 'Goal/Action', 'Speech', 'Story Digest', 'AP/GP', 'Capability']);
+    expect(coverage.map(fact => fact.label)).toEqual(['Stack', 'Inference', 'Goal/Action', 'Speech', 'Story Digest', 'AP runway', 'GP proof', 'Capability']);
     expect(coverage.find(fact => fact.label === 'Stack')).toMatchObject({
       value: 'openrouter/haiku | onion.runescape.standard@0.3.0',
       tone: 'ok',
@@ -2911,9 +2912,14 @@ describe('resident loop helpers', () => {
       detail: 'digest run story-20260531',
       tone: 'ok',
     });
-    expect(coverage.find(fact => fact.label === 'AP/GP')).toMatchObject({
-      value: '75 AP / recent GP proof',
-      detail: '65 AP above support floor. | ap_gp_exchange: exchanged 10 GP for 20 AP',
+    expect(coverage.find(fact => fact.label === 'AP runway')).toMatchObject({
+      value: '75 AP',
+      detail: '65 AP above support floor.',
+      tone: 'ok',
+    });
+    expect(coverage.find(fact => fact.label === 'GP proof')).toMatchObject({
+      value: 'recent GP proof',
+      detail: 'ap_gp_exchange: exchanged 10 GP for 20 AP',
       tone: 'ok',
     });
     expect(coverage.find(fact => fact.label === 'Capability')).toMatchObject({

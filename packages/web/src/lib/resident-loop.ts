@@ -964,7 +964,8 @@ export function residentLoopCoverageFacts(
       coverageFact('Goal/action', 'syncing', 'waiting for online residents before linking goals to actions', 'warn'),
       coverageFact('Speech', 'syncing', 'waiting for online residents before reading live speech', 'warn'),
       coverageFact('Story digest', 'syncing', 'waiting for online residents before matching Storyteller evidence', 'warn'),
-      coverageFact('AP/GP', 'syncing', 'waiting for online residents before reading AP or coin-995 proof', 'warn'),
+      coverageFact('AP runway', 'syncing', 'waiting for online residents before reading AP runway', 'warn'),
+      coverageFact('GP proof', 'syncing', 'waiting for online residents before reading coin-995 or economy proof', 'warn'),
       coverageFact('Capability warnings', 'syncing', 'waiting for proof pulse signals', 'warn'),
     ];
   }
@@ -998,21 +999,14 @@ export function residentLoopCoverageFacts(
     else proofWarn += 1;
   }
 
-  const apGpPath = apStable < online ? '/residents?triage=attention' : gpVisible < online ? '/residents?triage=gp' : undefined;
-
   return [
     coverageCountFact('Stack', stackReady, online, 'complete', 'model, endpoint, and SPARK visible'),
     coverageCountFact('Inference', inferenceHealthy, online, 'healthy', 'latest brain inference status is usable', '/residents?triage=inference'),
     coverageCountFact('Goal/action', goalLinked, online, 'linked', 'active goal tied to latest action cause', '/residents?triage=goal-link'),
     coverageCountFact('Speech', speechLive, online, 'live', 'recent say/feed line visible', '/residents?triage=quiet'),
     coverageCountFact('Story digest', storyCited, online, 'cited', 'resident-specific Storyteller evidence', '/residents?triage=story'),
-    coverageFact(
-      'AP/GP',
-      `${apStable.toLocaleString()}/${online.toLocaleString()} AP · ${gpVisible.toLocaleString()}/${online.toLocaleString()} GP`,
-      'AP runway stable and coin-995/economy GP proof visible',
-      apStable === online && gpVisible === online ? 'ok' : 'warn',
-      apGpPath,
-    ),
+    coverageCountFact('AP runway', apStable, online, 'stable', 'attention runway above support floor', '/residents?triage=attention'),
+    coverageCountFact('GP proof', gpVisible, online, 'visible', 'coin-995/economy GP proof visible', '/residents?triage=gp'),
     coverageFact(
       'Capability warnings',
       `${proofClear.toLocaleString()}/${online.toLocaleString()} clear`,
@@ -2137,7 +2131,6 @@ export function residentLoopCoverageStrip(
   const warningDensity = residentWarningDensityLine(warnings);
   const capabilityTone = signals.benchmark?.tone || warningDensity.tone;
   const goalActionTone = worstTone(plan?.tone || 'warn', actionOutcome.failed ? 'fail' : actionOutcome.ok ? 'ok' : 'warn');
-  const apGpTone = worstTone(ap.tone, gp.tone);
 
   return [
     residentStackFact(row),
@@ -2164,11 +2157,18 @@ export function residentLoopCoverageStrip(
       ...((signals.storyteller?.tone || story?.tone || 'warn') === 'ok' ? {} : { path: '/residents?triage=story' }),
     },
     {
-      label: 'AP/GP',
-      value: `${ap.value} / ${gp.value}`,
-      detail: `${ap.detail} | ${gp.detail}`,
-      tone: apGpTone,
-      ...(apGpTone === 'ok' ? {} : { path: ap.tone !== 'ok' ? '/residents?triage=attention' : '/residents?triage=gp' }),
+      label: 'AP runway',
+      value: ap.value,
+      detail: ap.detail,
+      tone: ap.tone,
+      ...(ap.tone === 'ok' ? {} : { path: '/residents?triage=attention' }),
+    },
+    {
+      label: 'GP proof',
+      value: gp.value,
+      detail: gp.detail,
+      tone: gp.tone,
+      ...(gp.tone === 'ok' ? {} : { path: '/residents?triage=gp' }),
     },
     {
       label: 'Capability',
