@@ -6,6 +6,15 @@ export interface ResidentBenchmarkSignal {
   detail: string;
 }
 
+export interface ResidentBenchmarkStackFallback {
+  hasEvidence: boolean;
+  modelProfile: string;
+  endpoint: string;
+  sparkModule: string;
+  moduleSource: string;
+  proof: string;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function latestBenchmarkForResident(
@@ -58,6 +67,34 @@ export function residentBenchmarkSignal(
     tone: 'ok',
     summary: `Latest benchmark passed on ${taskId}.`,
     detail: `Run ${run.runId} score ${run.score.toFixed(2)}.`,
+  };
+}
+
+export function residentBenchmarkStackFallback(
+  run: BenchmarkArtifactSummary | undefined,
+): ResidentBenchmarkStackFallback {
+  if (!run) {
+    return {
+      hasEvidence: false,
+      modelProfile: '-',
+      endpoint: '-',
+      sparkModule: '-',
+      moduleSource: '-',
+      proof: 'No resident benchmark artifact found.',
+    };
+  }
+
+  const module = run.module?.id
+    ? `${run.module.id}${run.module.version ? `@${run.module.version}` : ''}`
+    : '-';
+  const task = run.task?.id || 'unknown-task';
+  return {
+    hasEvidence: true,
+    modelProfile: run.modelProfile || '-',
+    endpoint: 'benchmark profile',
+    sparkModule: module,
+    moduleSource: 'benchmark artifact',
+    proof: `${run.runId} · ${task}`,
   };
 }
 

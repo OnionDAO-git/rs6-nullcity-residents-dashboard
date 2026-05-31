@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { BenchmarkArtifactSummary } from '@nullcity-dashboard/shared';
-import { latestBenchmarkForResident, residentBenchmarkSignal } from './resident-benchmark';
+import { latestBenchmarkForResident, residentBenchmarkSignal, residentBenchmarkStackFallback } from './resident-benchmark';
 
 function run(overrides: Partial<BenchmarkArtifactSummary> = {}): BenchmarkArtifactSummary {
   return {
@@ -62,5 +62,36 @@ describe('residentBenchmarkSignal', () => {
     );
     expect(signal.tone).toBe('ok');
     expect(signal.summary).toContain('passed');
+  });
+});
+
+describe('residentBenchmarkStackFallback', () => {
+  test('returns placeholder fallback when no benchmark exists', () => {
+    const fallback = residentBenchmarkStackFallback(undefined);
+    expect(fallback).toEqual({
+      hasEvidence: false,
+      modelProfile: '-',
+      endpoint: '-',
+      sparkModule: '-',
+      moduleSource: '-',
+      proof: 'No resident benchmark artifact found.',
+    });
+  });
+
+  test('returns stack identity fields from the latest benchmark run', () => {
+    const fallback = residentBenchmarkStackFallback(run({
+      runId: 'bench_42',
+      task: { id: 'goal-follow-through-5m', version: '2' },
+      modelProfile: 'openrouter/claude-haiku',
+      module: { id: 'onion.runescape.standard', version: '0.3.1' },
+    }));
+    expect(fallback).toEqual({
+      hasEvidence: true,
+      modelProfile: 'openrouter/claude-haiku',
+      endpoint: 'benchmark profile',
+      sparkModule: 'onion.runescape.standard@0.3.1',
+      moduleSource: 'benchmark artifact',
+      proof: 'bench_42 · goal-follow-through-5m',
+    });
   });
 });

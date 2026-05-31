@@ -11,7 +11,7 @@
   import { cityDemoPathSteps, type CityDemoApSupportSignal } from './lib/demo-path';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, selfFundedApResidentRows, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary, type SelfFundedApResidentRow } from './lib/live-economy';
-  import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
+  import { latestBenchmarkForResident, residentBenchmarkSignal, residentBenchmarkStackFallback } from './lib/resident-benchmark';
   import { residentEconomyGpEvidence, residentEconomyReceiptTrail, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment, type ResidentEconomyReceipt } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
@@ -4881,6 +4881,12 @@
           </div>
         </div>
       {:else if cityResidentReadModel}
+        {@const benchmarkFallback = residentBenchmarkStackFallback(
+          latestBenchmarkForResident(
+            cityBenchmarkRuns,
+            cityResidentReadModel.nullcityResidentId || cityResidentReadModel.id || cityResidentId,
+          ),
+        )}
         <div class="city-panel span-2">
           <div class="row">
             <div class="panel-title">Resident Intelligence Loop</div>
@@ -4889,13 +4895,20 @@
           <div class="city-copy-block">
             <strong>{cityResidentLoopAvailability.title}</strong>
             <p>{cityResidentLoopAvailability.detail}</p>
-            <small>Live model/endpoint/SPARK and checkpoint traces are pending from the runtime bridge.</small>
+            <small>{benchmarkFallback.hasEvidence
+              ? 'Live runtime row unavailable; showing the last benchmark-verified stack identity.'
+              : 'Live runtime row unavailable; run a focused resident benchmark to recover stack identity.'}</small>
           </div>
           <div class="city-resident-profile-grid">
             <span><small>Goal</small><strong>{cityResidentReadModel.goal || 'No public goal recorded'}</strong></span>
             <span><small>Attention</small><strong>{cityResidentReadModel.currentAttention ?? '-'}</strong></span>
             <span><small>Latest seen</small><strong>{cityResidentReadModel.latestSeenAt ? `${timeAgo(cityResidentReadModel.latestSeenAt)} ago` : '-'}</strong></span>
             <span><small>Latest post</small><strong>{cityResidentPosts[0]?.createdAt ? `${timeAgo(cityResidentPosts[0].createdAt)} ago` : '-'}</strong></span>
+            <span><small>Model profile</small><strong>{benchmarkFallback.modelProfile}</strong></span>
+            <span><small>Endpoint</small><strong>{benchmarkFallback.endpoint}</strong></span>
+            <span><small>SPARK module</small><strong>{benchmarkFallback.sparkModule}</strong></span>
+            <span><small>Module source</small><strong>{benchmarkFallback.moduleSource}</strong></span>
+            <span><small>Proof</small><strong>{benchmarkFallback.proof}</strong></span>
           </div>
         </div>
       {/if}
