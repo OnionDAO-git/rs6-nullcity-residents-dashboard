@@ -3863,6 +3863,7 @@
           <div class="city-empty-state">
             <strong>No AP/GP events in the live window</strong>
             <span>Top-ups, AP decay, coin-995 exchange, GP trades, and NCRI events appear here when the bridge reports them.</span>
+            <span>The economy-event window is quiet; residents may still be online, acting, or waiting for AP/GP events.</span>
           </div>
         {/each}
       </div>

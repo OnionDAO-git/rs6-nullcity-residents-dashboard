@@ -68,4 +68,8 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain("active · GP Δ");
     expect(appSource).toContain("economy events · GP Δ");
   });
+
+  test('explains quiet economy windows without implying residents are offline', () => {
+    expect(appSource).toContain('The economy-event window is quiet; residents may still be online, acting, or waiting for AP/GP events.');
+  });
 });
