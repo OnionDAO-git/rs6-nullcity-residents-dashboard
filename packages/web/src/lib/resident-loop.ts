@@ -28,6 +28,7 @@ export interface ResidentDemoPickCue {
   tone: 'ok' | 'warn' | 'fail';
   label: 'Demo pick';
   residentName?: string;
+  target: string;
   action: string;
   detail: string;
 }
@@ -648,6 +649,7 @@ export function residentDemoPickCue(
     return {
       tone: 'warn',
       label: 'Demo pick',
+      target: 'Residents',
       action: 'Wait for residents',
       detail: 'No resident roster loaded yet.',
     };
@@ -667,6 +669,7 @@ export function residentDemoPickCue(
       tone: 'ok',
       label: 'Demo pick',
       residentName: ready.row.name,
+      target: 'Resident Detail',
       action: 'Open demo-ready resident',
       detail: `${residentShortName(ready.row.name)} has ${ready.pulse.summary}; ${ready.pulse.detail}.`,
     };
@@ -683,6 +686,7 @@ export function residentDemoPickCue(
       tone: fallback.nextStep.tone,
       label: 'Demo pick',
       residentName: fallback.row.name,
+      target: fallback.nextStep.target,
       action: fallback.nextStep.action,
       detail: `${residentShortName(fallback.row.name)} needs attention first: ${fallback.warning.summary} Act from: ${fallback.nextStep.target}.`,
     };
@@ -691,6 +695,7 @@ export function residentDemoPickCue(
   return {
     tone: 'warn',
     label: 'Demo pick',
+    target: 'Residents',
     action: 'Wait for residents',
     detail: 'No resident roster loaded yet.',
   };

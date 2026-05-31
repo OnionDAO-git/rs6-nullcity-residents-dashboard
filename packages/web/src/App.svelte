@@ -4314,6 +4314,7 @@
           <span class={`tag ${cityResidentDemoPick.tone}`}>{cityResidentDemoPick.label}</span>
           <strong>{cityResidentDemoPick.action}</strong>
         </div>
+        <small>Act from: {cityResidentDemoPick.target}</small>
         <small>{cityResidentDemoPick.detail}</small>
         <div class="story-evidence-list resident-triage-residents" aria-label="Demo pick resident">
           {#if cityResidentDemoPick.residentName}

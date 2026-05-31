@@ -411,6 +411,7 @@ describe('resident loop helpers', () => {
       tone: 'ok',
       label: 'Demo pick',
       residentName: 'res:ready-resident',
+      target: 'Resident Detail',
       action: 'Open demo-ready resident',
       detail: 'ready-resident has 6/6 loop proofs live; all tracked proof signals are live.',
     });
@@ -425,8 +426,19 @@ describe('resident loop helpers', () => {
       tone: 'fail',
       label: 'Demo pick',
       residentName: 'res:woodcutter',
+      target: 'Grant Attention',
       action: 'Reconnect resident',
       detail: 'woodcutter needs attention first: Resident is offline in the live controller snapshot. Act from: Grant Attention.',
+    });
+  });
+
+  test('names the resident directory as the demo pick target while roster is empty', () => {
+    expect(residentDemoPickCue([])).toEqual({
+      tone: 'warn',
+      label: 'Demo pick',
+      target: 'Residents',
+      action: 'Wait for residents',
+      detail: 'No resident roster loaded yet.',
     });
   });
 
