@@ -142,6 +142,7 @@ export interface ResidentLivenessLedgerEntry {
   nextTarget: string;
   ap: string;
   gp: string;
+  stack: string;
   plan: string;
   story: string;
   memory: string;
@@ -1574,6 +1575,7 @@ export function residentLivenessLedger(
         nextTarget: nextStep.target,
         ap: ap.value,
         gp: gp.value,
+        stack: residentStackSummary(row),
         plan: plan?.value || '-',
         story: story?.value || '-',
         memory,

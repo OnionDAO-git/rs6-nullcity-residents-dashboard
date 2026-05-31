@@ -1249,6 +1249,11 @@ describe('resident loop helpers', () => {
     const ready = row({
       name: 'res:ready',
       attention: 75,
+      stack: {
+        model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: [] },
+      },
       thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
       body: {
         controlHeld: true,
@@ -1301,6 +1306,7 @@ describe('resident loop helpers', () => {
       displayName: 'low',
       ap: '1 AP',
       gp: 'not observed',
+      stack: 'model/endpoint unavailable | SPARK unavailable',
       memory: 'no qmd',
       nextAction: 'Top up AP',
       nextTarget: 'Grant Attention',
@@ -1310,6 +1316,7 @@ describe('resident loop helpers', () => {
       displayName: 'ready',
       proof: '8/8 loop proofs live',
       gp: '42 GP',
+      stack: 'openrouter/haiku | onion.runescape.standard@0.3.0',
       memory: 'routes',
       nextAction: 'Keep watching',
       nextTarget: 'Resident Intent',

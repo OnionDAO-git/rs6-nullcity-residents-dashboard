@@ -4442,6 +4442,7 @@
             <span class="resident-liveness-facts">
               <small>AP <strong>{entry.ap}</strong></small>
               <small>GP <strong>{entry.gp}</strong></small>
+              <small>Stack <strong>{entry.stack}</strong></small>
               <small>Plan <strong>{entry.plan}</strong></small>
               <small>Story <strong>{entry.story}</strong></small>
               <small>Memory <strong>{entry.memory}</strong></small>
