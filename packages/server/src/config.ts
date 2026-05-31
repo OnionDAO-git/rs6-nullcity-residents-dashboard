@@ -4,6 +4,7 @@ const repoRoot = path.resolve(import.meta.dir, '../../../..');
 const serverRoot = process.env.NULLCITY_SERVER_ROOT || defaultServerRoot(repoRoot);
 const defaultGatewayUrl = 'ws://127.0.0.1:43595';
 const defaultGatewayToken = 'nullcity-local-dev';
+export const dashboardRequestIdleTimeoutSeconds = 30;
 
 export interface DashboardConfig {
   host: string;

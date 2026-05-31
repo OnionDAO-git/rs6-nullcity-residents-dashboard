@@ -1,7 +1,7 @@
 import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
 import { routeCityApi } from './city/routes';
 import { createCityServicesFromEnv, initializeCityServices } from './city/services';
-import { config, parseRsClientHost } from './config';
+import { config, dashboardRequestIdleTimeoutSeconds, parseRsClientHost } from './config';
 import { readResidentEconomy } from './economy';
 import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
@@ -39,6 +39,7 @@ type RsProxyTcpData = {
 const server = Bun.serve<RsProxyWebSocketData>({
   hostname: config.host,
   port: config.port,
+  idleTimeout: dashboardRequestIdleTimeoutSeconds,
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname === '/rs' && request.headers.get('upgrade')?.toLowerCase() === 'websocket') {

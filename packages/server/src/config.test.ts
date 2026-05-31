@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
-import { dashboardDataRoots, defaultServerRoot, normalizeRsClientHost, parseRsClientHost } from './config';
+import { dashboardDataRoots, dashboardRequestIdleTimeoutSeconds, defaultServerRoot, normalizeRsClientHost, parseRsClientHost } from './config';
 
 describe('defaultServerRoot', () => {
   test('points at the sibling rs6-nullcity-server checkout used by the weekend automation', () => {
@@ -18,6 +18,12 @@ describe('dashboardDataRoots', () => {
     expect(roots.agentLogsRoot).toBe(path.join('/tmp/rs6-nullcity-server', 'data/agent-logs'));
     expect(roots.residentSaveRoot).toBe(path.join('/tmp/rs6-nullcity-server', 'data/residents'));
     expect(roots.benchmarkRoot).toBe(path.join('/tmp/rs6-nullcity-server', 'data/benchmarks'));
+  });
+});
+
+describe('dashboardRequestIdleTimeoutSeconds', () => {
+  test('keeps slow live overview reads above the default 10s Bun cutoff', () => {
+    expect(dashboardRequestIdleTimeoutSeconds).toBeGreaterThanOrEqual(30);
   });
 });
 
