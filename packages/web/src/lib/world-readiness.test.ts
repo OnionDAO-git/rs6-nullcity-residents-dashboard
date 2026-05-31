@@ -55,6 +55,27 @@ describe('buildWorldReadiness', () => {
     expect(summary.canStartClient).toBe(false);
   });
 
+  test('blocks world access when attendee login wiring is unavailable', () => {
+    const summary = buildWorldReadiness({
+      authenticated: false,
+      loginUrlReady: false,
+      gateway: connectedGateway,
+      onlineResidents: [resident()],
+      gameClientStatus: 'idle',
+    });
+
+    expect(summary.status).toBe('blocked');
+    expect(summary.headline).toBe('World route blocked until attendee login is connected.');
+    expect(summary.detail).toBe('Ask staff to connect attendee login before using the world route.');
+    expect(summary.checks.find(check => check.id === 'session')).toMatchObject({
+      tone: 'fail',
+      value: 'login unavailable',
+      detail: 'Attendee login is not connected for this dashboard environment.',
+    });
+    expect(summary.nextActions).toContain('Connect attendee login first; world access stays blocked until auth wiring is configured.');
+    expect(summary.canStartClient).toBe(false);
+  });
+
   test('watches when no residents are online but lets an authenticated operator start the client', () => {
     const summary = buildWorldReadiness({
       authenticated: true,

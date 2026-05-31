@@ -23,6 +23,7 @@ export interface WorldReadinessSummary {
 
 export interface WorldReadinessInput {
   authenticated: boolean;
+  loginUrlReady?: boolean;
   gateway?: GatewayStatus | undefined;
   onlineResidents: ResidentDashboardRow[];
   gameClientStatus: GameClientStatus;
@@ -31,7 +32,7 @@ export interface WorldReadinessInput {
 
 export function buildWorldReadiness(input: WorldReadinessInput): WorldReadinessSummary {
   const checks = [
-    sessionCheck(input.authenticated),
+    sessionCheck(input.authenticated, input.loginUrlReady ?? true),
     gatewayCheck(input.gateway),
     residentsCheck(input.onlineResidents.length),
     clientCheck(input.gameClientStatus, input.ticketUser),
@@ -48,13 +49,22 @@ export function buildWorldReadiness(input: WorldReadinessInput): WorldReadinessS
     headline: headlineFor(status, input),
     detail: detailFor(status, input),
     checks,
-    nextActions: nextActionsFor(checks),
+    nextActions: nextActionsFor(checks, input.loginUrlReady ?? true),
     canStartClient,
   };
 }
 
-function sessionCheck(authenticated: boolean): WorldReadinessCheck {
+function sessionCheck(authenticated: boolean, loginUrlReady: boolean): WorldReadinessCheck {
   if (!authenticated) {
+    if (!loginUrlReady) {
+      return {
+        id: 'session',
+        label: 'Session',
+        tone: 'fail',
+        value: 'login unavailable',
+        detail: 'Attendee login is not connected for this dashboard environment.',
+      };
+    }
     return {
       id: 'session',
       label: 'Session',
@@ -157,6 +167,7 @@ function clientCheck(status: GameClientStatus, ticketUser: string | undefined): 
 }
 
 function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput): string {
+  if (!input.authenticated && input.loginUrlReady === false) return 'World route blocked until attendee login is connected.';
   if (!input.authenticated) return 'Login required to enter the RuneScape client.';
   if (!input.gateway?.connected) return 'RuneScape gateway unavailable.';
   if (input.gameClientStatus === 'error') return 'RuneScape client needs a restart.';
@@ -167,6 +178,9 @@ function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput): 
 }
 
 function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput): string {
+  if (!input.authenticated && input.loginUrlReady === false) {
+    return 'Ask staff to connect attendee login before using the world route.';
+  }
   if (!input.authenticated) return 'Authenticate first so the dashboard can request a city game session ticket.';
   if (!input.gateway?.connected) return 'Start the Null City game/controller stack before using the embedded client.';
   if (input.gameClientStatus === 'running') {
@@ -177,10 +191,14 @@ function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput): st
   return 'The dashboard is connected, but one readiness signal is still warming up.';
 }
 
-function nextActionsFor(checks: WorldReadinessCheck[]): string[] {
+function nextActionsFor(checks: WorldReadinessCheck[], loginUrlReady: boolean): string[] {
   const actions: string[] = [];
   if (checks.find(check => check.id === 'session' && check.tone === 'fail')) {
-    actions.push('Login before starting the embedded RuneScape client.');
+    if (!loginUrlReady) {
+      actions.push('Connect attendee login first; world access stays blocked until auth wiring is configured.');
+    } else {
+      actions.push('Login before starting the embedded RuneScape client.');
+    }
   }
   if (checks.find(check => check.id === 'gateway' && check.tone === 'fail')) {
     actions.push('Start the controller/game stack so the dashboard can reach the AgentGateway.');

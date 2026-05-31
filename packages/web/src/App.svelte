@@ -234,6 +234,7 @@
   let cityReleaseReadinessActions: ReleaseReadinessActionQueueItem[] = releaseReadinessActionQueue(cityReleaseReadiness);
   let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
     authenticated: false,
+    loginUrlReady: false,
     onlineResidents: [],
     gameClientStatus: 'idle',
   });
@@ -474,6 +475,7 @@
   $: cityReleaseReadinessActions = releaseReadinessActionQueue(cityReleaseReadiness);
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
+    loginUrlReady: cityLoginUrlReady,
     gateway: gatewayStatus,
     onlineResidents: cityOnlineResidents,
     gameClientStatus,
@@ -4371,35 +4373,42 @@
   {#if !citySession.authenticated}
     {@render CityAuthCta({ label: 'Login to enter the RuneScape client' })}
   {/if}
-  <section class="city-world-layout">
-    <div class="city-world-frame">
-      <div bind:this={gameClientMount} class:fullscreen-fallback={cityGameFullscreenFallback} class="city-game-mount">
-        <div class="city-game-status">
-          <div>
-            <strong>{cityWorldReadiness.checks.find(check => check.id === 'gateway')?.value || 'unknown gateway'}</strong>
-            <span>{cityOnlineResidents.length} online residents · game session {gameClientStatus}</span>
+  {#if citySession.authenticated}
+    <section class="city-world-layout">
+      <div class="city-world-frame">
+        <div bind:this={gameClientMount} class:fullscreen-fallback={cityGameFullscreenFallback} class="city-game-mount">
+          <div class="city-game-status">
+            <div>
+              <strong>{cityWorldReadiness.checks.find(check => check.id === 'gateway')?.value || 'unknown gateway'}</strong>
+              <span>{cityOnlineResidents.length} online residents · game session {gameClientStatus}</span>
+            </div>
+            <button
+              class="city-game-fullscreen"
+              disabled={!cityGameFullscreenAvailable}
+              aria-label={cityGameFullscreen ? 'Exit fullscreen client' : 'Fullscreen client'}
+              title={cityGameFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              onclick={toggleCityGameFullscreen}
+            >
+              {cityGameFullscreen ? 'Exit' : 'Fullscreen'}
+            </button>
           </div>
-          <button
-            class="city-game-fullscreen"
-            disabled={!cityGameFullscreenAvailable}
-            aria-label={cityGameFullscreen ? 'Exit fullscreen client' : 'Fullscreen client'}
-            title={cityGameFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            onclick={toggleCityGameFullscreen}
-          >
-            {cityGameFullscreen ? 'Exit' : 'Fullscreen'}
-          </button>
-        </div>
-        <div class="city-game-actions">
-          <button class="primary" disabled={actionBusy || !cityWorldReadiness.canStartClient} onclick={startCityGameClient}>Start Client</button>
-          <button disabled={actionBusy || !gameClientController} onclick={stopCityGameClient}>Stop</button>
+          <div class="city-game-actions">
+            <button class="primary" disabled={actionBusy || !cityWorldReadiness.canStartClient} onclick={startCityGameClient}>Start Client</button>
+            <button disabled={actionBusy || !gameClientController} onclick={stopCityGameClient}>Stop</button>
+          </div>
         </div>
       </div>
-    </div>
-    <aside class="city-panel">
-      <div class="panel-title">Online Residents</div>
-      {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8) })}
-    </aside>
-  </section>
+      <aside class="city-panel">
+        <div class="panel-title">Online Residents</div>
+        {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8) })}
+      </aside>
+    </section>
+  {:else}
+    <section class="city-panel">
+      <div class="panel-title">World Access</div>
+      <p>{cityLoginUrlReady ? 'Authenticate to unlock the embedded RuneScape client and resident presence view.' : 'Attendee login is not connected in this environment. Ask event staff for the login bridge.'}</p>
+    </section>
+  {/if}
 {/snippet}
 
 {#snippet CityEmbassy()}
