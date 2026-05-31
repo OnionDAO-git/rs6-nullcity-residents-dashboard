@@ -459,7 +459,7 @@ function detailFor(status: ReleaseReadinessStatus, checks: ReleaseReadinessCheck
   const failCount = checks.filter(check => check.tone === 'fail').length;
   if (status === 'ready') return 'Core resident, AP/GP, Storyteller, and NCRI/print signals are present.';
   if (status === 'blocked') return `${failCount.toLocaleString()} critical signal${failCount === 1 ? '' : 's'} missing. Fix before demo or live QA.`;
-  return `${warningCount.toLocaleString()} signal${warningCount === 1 ? '' : 's'} need operator attention before relying on the loop live.`;
+  return `${warningCount.toLocaleString()} signal${warningCount === 1 ? '' : 's'} ${warningCount === 1 ? 'needs' : 'need'} operator attention before relying on the loop live.`;
 }
 
 function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {

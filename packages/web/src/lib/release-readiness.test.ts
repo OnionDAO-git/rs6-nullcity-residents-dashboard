@@ -149,6 +149,19 @@ describe('buildReleaseReadiness', () => {
     expect(summary.nextActions[0]).toBe('Start or reconnect the controller before demoing the resident loop.');
   });
 
+  test('uses singular detail copy when exactly one readiness signal needs attention', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident({ body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } } })],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.detail).toBe('1 signal needs operator attention before relying on the loop live.');
+  });
+
   test('blocks when the latest capability proof fails despite other live signals', () => {
     const summary = buildReleaseReadiness({
       residents: [
