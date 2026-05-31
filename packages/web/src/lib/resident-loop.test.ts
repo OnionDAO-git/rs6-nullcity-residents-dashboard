@@ -288,6 +288,37 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('surfaces low-health heal wait as a resident live moment', () => {
+    expect(residentLiveMoment(row({
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Recover health before re-engaging.' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait', tick: 900 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 900,
+          ageMs: 2000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 5,
+        },
+      },
+      progress: {
+        samples: 4,
+        stuckTicks: 37,
+        latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
+      },
+      storyArc: { phase: 'progress', summary: 'Combat recovery in progress.', latestEventKind: 'combat_recovery', latestEventTick: 900 },
+    }))).toEqual({
+      label: 'Working',
+      title: 'Waiting to heal',
+      detail: 'low_health_heal_wait | stuck 37 ticks | tick 900 (current) | inspect food/cook/eat recovery before trusting combat liveness',
+      tone: 'warn',
+    });
+  });
+
   test('falls back to Library memory when speech and action are absent', () => {
     expect(residentLiveMoment(row({
       attention: 88,
@@ -490,6 +521,36 @@ describe('resident loop helpers', () => {
       action: 'Keep watching',
       target: 'Resident Intent',
       detail: 'Resident has current AP, GP, plan, feed, story, and benchmark signals.',
+    });
+
+    expect(residentNextStepCue(row({
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Recover health before re-engaging.' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait', tick: 900 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 900,
+          ageMs: 2000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 5,
+        },
+      },
+      progress: {
+        samples: 4,
+        stuckTicks: 37,
+        latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
+      },
+      storyArc: { phase: 'progress', summary: 'Combat recovery in progress.', latestEventKind: 'combat_recovery', latestEventTick: 900 },
+    }))).toEqual({
+      tone: 'warn',
+      label: 'Next step',
+      action: 'Inspect recovery loop',
+      target: 'Open Ops View',
+      detail: 'Low-health recovery wait is active. Latest action is noop with cause low_health_heal_wait; stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness.',
     });
   });
 
@@ -865,6 +926,42 @@ describe('resident loop helpers', () => {
     ]);
   });
 
+  test('prioritizes low-health wait in operator warnings', () => {
+    expect(residentOperatorWarnings(row({
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Recover health before re-engaging.' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait', tick: 900 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 900,
+          ageMs: 2000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 5,
+        },
+      },
+      progress: {
+        samples: 4,
+        stuckTicks: 37,
+        latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
+      },
+      storyArc: { phase: 'progress', summary: 'Combat recovery in progress.', latestEventKind: 'combat_recovery', latestEventTick: 900 },
+    }), {
+      tone: 'ok',
+      summary: 'Latest benchmark passed.',
+      detail: 'score 1',
+    })).toEqual([
+      {
+        tone: 'warn',
+        summary: 'Low-health recovery wait is active.',
+        detail: 'Latest action is noop with cause low_health_heal_wait; stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness.',
+      },
+    ]);
+  });
+
   test('builds stack summary from model/endpoint and SPARK module', () => {
     expect(residentStackSummary(row({
       stack: {
@@ -1080,6 +1177,14 @@ describe('resident loop helpers', () => {
           detail: 'Residents at or near the AP safety floor need support soon.',
         },
         {
+          key: 'recovery',
+          label: 'Recovery wait',
+          tone: 'ok',
+          count: 0,
+          residents: [],
+          detail: 'No residents in this bucket right now.',
+        },
+        {
           key: 'quiet',
           label: 'Quiet loop',
           tone: 'warn',
@@ -1188,8 +1293,87 @@ describe('resident loop helpers', () => {
       }),
     ]);
 
-    expect(triage.buckets.slice(0, 4).map(bucket => bucket.key)).toEqual(['offline', 'attention', 'quiet', 'action']);
+    expect(triage.buckets.slice(0, 4).map(bucket => bucket.key)).toEqual(['offline', 'attention', 'recovery', 'quiet']);
     expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['gp', 'story', 'offline', 'attention']);
+  });
+
+  test('buckets low-health wait separately from generic quiet-loop risk', () => {
+    const triage = residentTriageSummary([
+      row({
+        name: 'res:recovering',
+        attention: 80,
+        thinking: { mode: 'executing', activePlan: 'Recover health before re-engaging.' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait', tick: 900 },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+          feed: {
+            attached: true,
+            tick: 900,
+            ageMs: 2000,
+            nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 5,
+          },
+        },
+        progress: {
+          samples: 4,
+          stuckTicks: 37,
+          latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
+        },
+        storyArc: { phase: 'progress', summary: 'Combat recovery in progress.', latestEventKind: 'combat_recovery', latestEventTick: 900 },
+      }),
+    ], () => ({
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited recovery' },
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+    }));
+
+    expect(triage.tone).toBe('warn');
+    expect(triage.headline).toBe('1/1 residents need operator attention');
+    expect(triage.detail).toBe('Recovery wait: 1');
+    expect(triage.buckets.find(bucket => bucket.key === 'recovery')).toEqual({
+      key: 'recovery',
+      label: 'Recovery wait',
+      tone: 'warn',
+      count: 1,
+      residents: ['res:recovering'],
+      detail: 'Residents are waiting at low health; inspect food/cook/eat recovery before trusting combat liveness.',
+    });
+  });
+
+  test('does not invent low-health recovery risk for healthy action causes', () => {
+    const healthy = row({
+      name: 'res:moving',
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Walk back to the square.' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'move_to', result: 'success', source: 'thinking', cause: 'goal:patrol', tick: 900 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 900,
+          ageMs: 2000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 5,
+          latestEventKind: 'say',
+          latestEventText: 'Walking back.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Patrol route visible.', latestEventKind: 'movement_progress', latestEventTick: 900 },
+    });
+    const triage = residentTriageSummary([healthy], () => ({
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited movement' },
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+    }));
+
+    expect(triage.buckets.find(bucket => bucket.key === 'recovery')).toMatchObject({ count: 0, tone: 'ok' });
+    expect(residentOperatorWarnings(healthy)).not.toContainEqual(expect.objectContaining({
+      summary: 'Low-health recovery wait is active.',
+    }));
   });
 
   test('does not call an acting resident quiet just because no fresh speech line is visible', () => {

@@ -117,7 +117,7 @@ export interface ResidentProofRollup {
 }
 
 export interface ResidentTriageBucket {
-  key: 'offline' | 'attention' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'benchmark';
+  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'benchmark';
   label: string;
   tone: 'ok' | 'warn' | 'fail';
   count: number;
@@ -158,6 +158,15 @@ interface ResidentProofCheck {
   optional?: boolean;
 }
 
+interface ResidentRecoveryWaitSignal {
+  cause: string;
+  title: string;
+  summary: string;
+  detail: string;
+  momentDetail: string;
+  tone: 'warn';
+}
+
 export interface ResidentIntentSignals {
   goalContract?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
   storyteller?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
@@ -175,6 +184,12 @@ const STORY_STALE_TICK_GAP = 1200;
 const SHORT_AP_RUNWAY_THRESHOLD = LOW_AP_THRESHOLD + 15;
 const LONG_AP_RUNWAY_THRESHOLD = 100;
 const GP_ITEM_ID = 995;
+const LOW_HEALTH_RECOVERY_WAIT_CAUSES = new Set([
+  'low_health_heal_wait',
+  'low_health_hold_position',
+  'low_health_stranded',
+]);
+const LOW_HEALTH_RECOVERY_WAIT_GUIDANCE = 'inspect food/cook/eat recovery before trusting combat liveness';
 
 export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentGuestTrailPulse {
   const pulse: ResidentGuestTrailPulse = {
@@ -383,6 +398,16 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
       title: 'Waiting for reconnect',
       detail: ['offline live snapshot', causeDetail].filter(Boolean).join(' | '),
       tone: 'fail',
+    };
+  }
+
+  const recoveryWait = residentRecoveryWaitSignal(row);
+  if (recoveryWait) {
+    return {
+      label: 'Working',
+      title: recoveryWait.title,
+      detail: recoveryWait.momentDetail,
+      tone: recoveryWait.tone,
     };
   }
 
@@ -764,6 +789,10 @@ export function residentOperatorWarnings(
   const actionOutcome = residentActionOutcome(row);
   if (actionOutcome.failed) {
     warnings.push({ tone: 'fail', summary: actionOutcome.summary, detail: actionOutcome.detail });
+  }
+  const recoveryWait = residentRecoveryWaitSignal(row);
+  if (recoveryWait) {
+    warnings.push({ tone: recoveryWait.tone, summary: recoveryWait.summary, detail: recoveryWait.detail });
   }
   if (residentGoldEvidenceLabel(row).value === 'not observed' && signals.economyGp?.tone === 'ok') {
     warnings.push({
@@ -1206,6 +1235,7 @@ export function residentTriageSummary(
       buckets: [
         emptyTriageBucket('offline', 'Offline', 'fail', 'No resident snapshots are available yet.'),
         emptyTriageBucket('attention', 'Low AP', 'warn', 'No AP balances are available yet.'),
+        emptyTriageBucket('recovery', 'Recovery wait', 'warn', 'No recovery-wait signals are available yet.'),
         emptyTriageBucket('quiet', 'Quiet loop', 'warn', 'No loop cadence is available yet.'),
         emptyTriageBucket('action', 'Action outcome', 'fail', 'No action outcome data is available yet.'),
         emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
@@ -1218,6 +1248,7 @@ export function residentTriageSummary(
 
   const offlineRows = rows.filter(row => !row.online);
   const lowApRows = rows.filter(row => row.online && residentNeedsApSupportSoon(row));
+  const recoveryWaitRows = rows.filter(row => row.online && residentRecoveryWaitSignal(row));
   const quietRows = rows.filter(row => {
     if (!row.online) return false;
     const checkpoints = residentLoopCheckpoints(row);
@@ -1247,6 +1278,7 @@ export function residentTriageSummary(
   const buckets: ResidentTriageBucket[] = [
     makeTriageBucket('offline', 'Offline', 'fail', offlineRows, 'Login or AP top-up may be required before new action proof appears.'),
     makeTriageBucket('attention', 'Low AP', 'warn', lowApRows, 'Residents at or near the AP safety floor need support soon.'),
+    makeTriageBucket('recovery', 'Recovery wait', 'warn', recoveryWaitRows, 'Residents are waiting at low health; inspect food/cook/eat recovery before trusting combat liveness.'),
     makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
     makeTriageBucket('action', 'Action outcome', 'fail', actionOutcomeRows, 'Latest action result timed out or failed; inspect before trusting liveness.'),
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
@@ -1258,6 +1290,7 @@ export function residentTriageSummary(
   const urgentNames = new Set<string>([
     ...offlineRows,
     ...lowApRows,
+    ...recoveryWaitRows,
     ...quietRows,
     ...actionOutcomeRows,
     ...missingPlanRows,
@@ -1430,6 +1463,7 @@ function nextStepActionLabel(warning: ResidentOperatorWarning): string {
   if (warning.summary.startsWith('Resident is offline')) return 'Reconnect resident';
   if (warning.summary.startsWith('AP low')) return 'Top up AP';
   if (warning.summary.startsWith('No live feed') || warning.summary.startsWith('Feed stale')) return 'Attach live feed';
+  if (warning.summary.startsWith('Low-health recovery wait')) return 'Inspect recovery loop';
   if (warning.summary.startsWith('Latest action')) return 'Repair latest action';
   if (warning.summary.includes('GP')) return 'Capture GP proof';
   if (warning.summary.startsWith('No active plan')) return 'Publish active plan';
@@ -1442,12 +1476,68 @@ function nextStepTargetLabel(warning: ResidentOperatorWarning): string {
   if (warning.tone === 'ok') return 'Resident Intent';
   if (warning.summary.startsWith('Resident is offline') || warning.summary.startsWith('AP low')) return 'Grant Attention';
   if (warning.summary.startsWith('No live feed') || warning.summary.startsWith('Feed stale')) return 'Open Ops View';
+  if (warning.summary.startsWith('Low-health recovery wait')) return 'Open Ops View';
   if (warning.summary.startsWith('Latest action')) return 'Open Ops View';
   if (warning.summary.includes('GP')) return 'Resident Economy';
   if (warning.summary.startsWith('No active plan')) return 'Open Ops View';
   if (warning.summary.startsWith('Library strategy')) return 'Storyteller Grounded Events';
   if (warning.summary.toLowerCase().includes('benchmark')) return 'Capability Warnings';
   return 'Capability Warnings';
+}
+
+function residentRecoveryWaitSignal(row: ResidentDashboardRow | undefined): ResidentRecoveryWaitSignal | undefined {
+  if (!row?.online) return undefined;
+
+  const action = row.body?.lastAction;
+  const actionKind = action?.kind || row.lastEvent?.kind || 'action';
+  const cause = [action?.cause, action?.ruleId, row.thinking?.lastInferenceCause]
+    .find(rawCause => isLowHealthRecoveryWaitCause(rawCause));
+  if (!cause) return undefined;
+
+  const stuckLabel = residentRecoveryWaitStuckLabel(row);
+  const actionDetail = `Latest action is ${actionKind} with cause ${cause}`;
+  const tick = action?.tick ?? row.lastEvent?.tick;
+
+  return {
+    cause,
+    title: residentRecoveryWaitTitle(cause),
+    summary: 'Low-health recovery wait is active.',
+    detail: [actionDetail, stuckLabel, LOW_HEALTH_RECOVERY_WAIT_GUIDANCE].filter(Boolean).join('; ') + '.',
+    momentDetail: [
+      cause,
+      stuckLabel,
+      tickFreshness(row, tick, ACTION_STALE_TICK_GAP),
+      LOW_HEALTH_RECOVERY_WAIT_GUIDANCE,
+    ].filter(Boolean).join(' | '),
+    tone: 'warn',
+  };
+}
+
+function isLowHealthRecoveryWaitCause(rawCause: string | undefined): rawCause is string {
+  if (!rawCause) return false;
+  const normalized = normalizeRecoveryWaitCause(rawCause);
+  for (const cause of LOW_HEALTH_RECOVERY_WAIT_CAUSES) {
+    if (normalized === cause || normalized.endsWith(`_${cause}`)) return true;
+  }
+  return false;
+}
+
+function normalizeRecoveryWaitCause(rawCause: string): string {
+  return rawCause.trim().toLowerCase().replace(/[-\s:]+/g, '_');
+}
+
+function residentRecoveryWaitTitle(cause: string): string {
+  const normalized = normalizeRecoveryWaitCause(cause);
+  if (normalized.endsWith('low_health_stranded')) return 'Stranded while low-health';
+  if (normalized.endsWith('low_health_hold_position')) return 'Holding position to heal';
+  return 'Waiting to heal';
+}
+
+function residentRecoveryWaitStuckLabel(row: ResidentDashboardRow): string {
+  const stuckTicks = row.progress?.stuckTicks;
+  if (typeof stuckTicks !== 'number' || stuckTicks <= 0) return '';
+  const ticks = Math.floor(stuckTicks);
+  return `stuck ${ticks.toLocaleString()} ${ticks === 1 ? 'tick' : 'ticks'}`;
 }
 
 function compactMomentCauseDetail(cause: ResidentCauseSignal): string {
