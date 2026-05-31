@@ -229,7 +229,8 @@ export function selfFundedApResidentRows(
 
   const byResident = new Map<string, SelfFundedApResidentRow>();
   for (const event of selfFundedApEvents(snapshot.recentEvents)) {
-    const residentName = event.residentName || 'resident GP';
+    const residentName = event.residentName;
+    if (!residentName) continue;
     const existing = byResident.get(residentName);
     const apDelta = Math.max(0, event.apDelta ?? 0);
     const gpSpent = Math.abs(Math.min(0, event.gpDelta ?? 0));
@@ -271,7 +272,7 @@ function summarizeSelfFundedAp(events: NullCityLiveEconomyEvent[]): string {
   if (!exchanges.length) return 'no self-funded AP';
 
   const apTotal = exchanges.reduce((total, event) => total + Math.max(0, event.apDelta ?? 0), 0);
-  const latestResident = exchanges[0]?.residentName || 'resident GP';
+  const latestResident = exchanges[0]?.residentName || 'unknown resident';
   return `${apTotal.toLocaleString()} AP via ${latestResident}`;
 }
 

@@ -743,7 +743,7 @@
     if (activeRoute === '/economy') {
       const liveEconomyResidentLimit = Math.max(50, (overview?.residents || residents).length);
       const [liveEconomyPayload, heartbeatPayload, listingsPayload] = await Promise.all([
-        cityLoad(cityApi.nullcityEconomyLive({ limit: 30, residentLimit: liveEconomyResidentLimit }), { available: false, error: 'not_configured' }),
+        cityLoad(cityApi.nullcityEconomyLive({ limit: 200, residentLimit: liveEconomyResidentLimit }), { available: false, error: 'not_configured' }),
         cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
         citySession.admin
           ? cityLoad(cityApi.adminNullcityEconomyListings(), { available: false, listings: [], error: 'not_configured' })
@@ -1621,7 +1621,7 @@
     }
     if (activeRoute === '/economy') {
       const residentLimit = Math.max(50, (overview?.residents || residents).length);
-      return { key: `economy:30:${residentLimit}`, query: { limit: 30, residentLimit } };
+      return { key: `economy:200:${residentLimit}`, query: { limit: 200, residentLimit } };
     }
     return undefined;
   }
@@ -3680,7 +3680,7 @@
 
     <div class="city-panel">
       <div class="row">
-        <div class="panel-title">Self-funded AP</div>
+        <div class="panel-title">Recent Self-funded AP</div>
         <span class="tag">{cityLiveEconomySummary.selfFundedLabel}</span>
       </div>
       <div class="city-record-list compact">
@@ -3695,7 +3695,7 @@
         {:else}
           <div class="city-empty-state">
             <strong>No self-funded AP exchanges in this window</strong>
-            <span>Resident GP-to-AP conversions appear here once the live economy bridge reports them.</span>
+            <span>Recent resident GP-to-AP conversions appear here once the live economy bridge reports them.</span>
           </div>
         {/each}
       </div>

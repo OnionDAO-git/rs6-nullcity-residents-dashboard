@@ -152,6 +152,36 @@ describe('selfFundedApResidentRows', () => {
       'res:middle',
     ]);
   });
+
+  test('does not invent resident attribution for unattributed GP-to-AP exchange rows', () => {
+    const response: NullCityLiveEconomyBridgeResponse = {
+      available: true,
+      snapshot: {
+        asOf: '2026-05-31T06:50:00.000Z',
+        window: { since: '2026-05-31T06:35:00.000Z', windowMs: 900000 },
+        city: { residentCount: 23, activeResidentCount: 8, attentionTotal: 50000, attentionDelta: 150, gpNetDelta: -75 },
+        countsByKind: { ap_gp_exchange: 2 },
+        topResidentsByAttention: [],
+        residents: [],
+        recentEvents: [
+          { id: 'exchange-1', ts: '2026-05-31T06:44:00.000Z', kind: 'ap_gp_exchange', apDelta: 100, gpDelta: -50 },
+          { id: 'exchange-2', ts: '2026-05-31T06:49:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:known', apDelta: 50, gpDelta: -25 },
+        ],
+        pendingProposals: [],
+      },
+    };
+
+    expect(selfFundedApResidentRows(response)).toEqual([
+      {
+        residentName: 'res:known',
+        apTotal: 50,
+        gpSpent: 25,
+        exchangeCount: 1,
+        latestAt: '2026-05-31T06:49:00.000Z',
+        detail: '50 AP for 25 GP across 1 exchange',
+      },
+    ]);
+  });
 });
 
 describe('summarizeEconomyHeartbeat', () => {
