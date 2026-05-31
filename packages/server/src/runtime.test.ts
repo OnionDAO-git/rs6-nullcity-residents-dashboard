@@ -276,6 +276,13 @@ describe('RuntimeRepository resident feeds', () => {
       activeModule: { id: 'onion.runescape.standard', version: '0.1.0', source: 'inference-log' },
     });
     expect(rows[0]?.stack).toEqual(model.stack);
+    expect(rows[0]?.thinking?.latestInference).toMatchObject({
+      t: '2026-05-28T12:30:00.000Z',
+      status: 'ok',
+      provider: 'openrouter',
+      model: 'anthropic/claude-3.5-haiku',
+      endpoint: 'openrouter_haiku',
+    });
   });
 
   test('derives active plan from cognition goal and falls back to soul orientation', async () => {

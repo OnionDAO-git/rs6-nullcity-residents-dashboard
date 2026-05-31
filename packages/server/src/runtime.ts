@@ -1830,6 +1830,7 @@ function slimThinking(thinking: RuntimeReadModel['thinking']): RuntimeReadModel[
     previousIntent: thinking.previousIntent,
     inFlightRequest: thinking.inFlightRequest,
     lastInferenceCause: thinking.lastInferenceCause,
+    latestInference: thinking.latestInference,
   };
 }
 

@@ -166,7 +166,7 @@ export interface ResidentLivenessDetail {
 }
 
 export interface ResidentTriageBucket {
-  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'goal-link' | 'contract' | 'gp' | 'story' | 'memory' | 'benchmark';
+  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'inference' | 'plan' | 'goal-link' | 'contract' | 'gp' | 'story' | 'memory' | 'benchmark';
   label: string;
   tone: 'ok' | 'warn' | 'fail';
   count: number;
@@ -862,6 +862,7 @@ export function residentLoopCoverageFacts(
   if (online === 0) {
     return [
       coverageFact('Stack', 'syncing', 'waiting for online residents before reading model, endpoint, or SPARK', 'warn'),
+      coverageFact('Inference', 'syncing', 'waiting for online residents before reading latest brain output', 'warn'),
       coverageFact('Goal/action', 'syncing', 'waiting for online residents before linking goals to actions', 'warn'),
       coverageFact('Speech', 'syncing', 'waiting for online residents before reading live speech', 'warn'),
       coverageFact('Story digest', 'syncing', 'waiting for online residents before matching Storyteller evidence', 'warn'),
@@ -871,6 +872,7 @@ export function residentLoopCoverageFacts(
   }
 
   let stackReady = 0;
+  let inferenceHealthy = 0;
   let goalLinked = 0;
   let speechLive = 0;
   let storyCited = 0;
@@ -885,6 +887,7 @@ export function residentLoopCoverageFacts(
     const model = modelIdentityParts(row);
     const endpoint = endpointParts(row);
     if (model.value !== '-' && endpoint.value !== '-' && activeModule(row)) stackReady += 1;
+    if (residentInferenceHealthFact(row).tone === 'ok') inferenceHealthy += 1;
     if (residentGoalActionLink(row).tone === 'ok') goalLinked += 1;
     if (residentLoopCheckpoints(row).find(checkpoint => checkpoint.key === 'speech')?.tone === 'ok') speechLive += 1;
     if (signals.storyteller?.tone === 'ok') storyCited += 1;
@@ -901,6 +904,7 @@ export function residentLoopCoverageFacts(
 
   return [
     coverageCountFact('Stack', stackReady, online, 'complete', 'model, endpoint, and SPARK visible'),
+    coverageCountFact('Inference', inferenceHealthy, online, 'healthy', 'latest brain inference status is usable', '/residents?triage=inference'),
     coverageCountFact('Goal/action', goalLinked, online, 'linked', 'active goal tied to latest action cause', '/residents?triage=goal-link'),
     coverageCountFact('Speech', speechLive, online, 'live', 'recent say/feed line visible', '/residents?triage=quiet'),
     coverageCountFact('Story digest', storyCited, online, 'cited', 'resident-specific Storyteller evidence', '/residents?triage=story'),
@@ -1732,18 +1736,21 @@ export function residentProofPulse(
 
   const checks = residentProofChecks(row, signals);
   const actionOutcome = residentActionOutcome(row);
+  const inference = residentInferenceHealthFact(row);
   const requiredChecks = checks.filter(check => !check.optional);
   const okCount = requiredChecks.filter(check => check.ok).length;
   const missing = requiredChecks.filter(check => !check.ok).map(check => check.label);
   const total = requiredChecks.length || 1;
-  const tone: ResidentProofPulse['tone'] = !row.online || actionOutcome.failed ? 'fail' : missing.length ? 'warn' : 'ok';
+  const tone: ResidentProofPulse['tone'] = !row.online || actionOutcome.failed || inference.tone === 'fail' ? 'fail' : missing.length ? 'warn' : 'ok';
   const detail = !row.online
     ? `offline · ${missing.slice(0, 3).join(', ') || 'no live proofs'}`
     : actionOutcome.failed
       ? `action outcome: ${actionOutcome.outcome}`
-    : missing.length
-      ? `missing: ${missing.slice(0, 4).join(', ')}`
-      : 'all tracked proof signals are live';
+      : inference.tone === 'fail'
+        ? `brain inference: ${inference.value}`
+        : missing.length
+          ? `missing: ${missing.slice(0, 4).join(', ')}`
+          : 'all tracked proof signals are live';
 
   return {
     tone,
@@ -1923,12 +1930,97 @@ export function residentLivenessDetail(
   };
 }
 
+function residentInferenceHealthFact(row: ResidentDashboardRow): ResidentLoopFact {
+  const entry = row.thinking?.latestInference;
+  if (!entry) {
+    const cause = row.thinking?.lastInferenceCause?.trim();
+    return {
+      label: 'Inference',
+      value: 'not logged',
+      detail: cause ? `last cause ${cause}; no latest inference result in dashboard row` : 'No latest inference result in dashboard row.',
+      tone: 'warn',
+      path: '/residents?triage=inference',
+    };
+  }
+
+  const status = stringField(entry, 'status') || '';
+  const cause = stringField(entry, 'cause') || status || 'inference';
+  const error = stringField(entry, 'error') || '';
+  const actions = inferenceNumberField(entry, 'actions_emitted') ?? inferenceNumberField(entry, 'actionsEmitted');
+  const promptTokens = inferencePromptTokens(entry);
+  const parseOk = inferenceBooleanField(entry, 'parse_ok') ?? inferenceBooleanField(entry, 'parseOk');
+  const nooped = inferenceBooleanField(entry, 'nooped');
+  const haystack = [status, cause, error].join(' ').toLowerCase();
+  const normalizedCause = cause.toLowerCase().replace(/[_:-]+/g, ' ');
+  const normalizedError = error.toLowerCase().replace(/[_:-]+/g, ' ');
+  const detailParts = [
+    cause,
+    promptTokens > 0 ? `${promptTokens.toLocaleString()} prompt tokens` : '',
+    actions !== undefined ? `${Math.max(0, Math.floor(actions)).toLocaleString()} action${Math.floor(actions) === 1 ? '' : 's'}` : '',
+    error && !normalizedCause.includes(normalizedError) ? error : '',
+  ].filter(Boolean);
+
+  if (/timeout|timed out|time out/.test(haystack)) {
+    return inferenceFact('timeout', detailParts, 'fail');
+  }
+  if (/cancel/.test(haystack)) {
+    return inferenceFact('cancelled', detailParts, 'fail');
+  }
+  if (parseOk === false) {
+    return inferenceFact('parse failed', detailParts, 'fail');
+  }
+  if (/error|failed|failure/.test(haystack)) {
+    return inferenceFact('failed', detailParts, 'fail');
+  }
+  if (/deciding|thinking_started/.test(haystack)) {
+    return inferenceFact('thinking now', detailParts, 'ok');
+  }
+  if ((actions ?? 0) > 0) {
+    return inferenceFact(`${Math.floor(actions ?? 0).toLocaleString()} action${Math.floor(actions ?? 0) === 1 ? '' : 's'}`, detailParts, 'ok');
+  }
+  if (nooped === true || promptTokens === 0) {
+    return inferenceFact('idle', detailParts, 'ok');
+  }
+  return inferenceFact('no action', detailParts, 'warn');
+}
+
+function inferenceFact(value: string, detailParts: string[], tone: 'ok' | 'warn' | 'fail'): ResidentLoopFact {
+  return {
+    label: 'Inference',
+    value,
+    detail: detailParts.join(' | ') || 'No latest inference details.',
+    tone,
+    ...(tone === 'ok' ? {} : { path: '/residents?triage=inference' }),
+  };
+}
+
+function inferencePromptTokens(entry: Record<string, unknown>): number {
+  const candidates = [
+    inferenceNumberField(entry, 'promptTokens'),
+    inferenceNumberField(entry, 'prompt_tokens'),
+    inferenceNumberField(entry, 'perception_tokens'),
+    inferenceNumberField(entry, 'envelope_tokens'),
+  ].filter((value): value is number => value !== undefined);
+  return Math.max(0, ...candidates.map(value => Math.floor(value)));
+}
+
+function inferenceNumberField(entry: Record<string, unknown>, key: string): number | undefined {
+  const value = entry[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function inferenceBooleanField(entry: Record<string, unknown>, key: string): boolean | undefined {
+  const value = entry[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 export function residentLoopCoverageStrip(
   row: ResidentDashboardRow,
   signals: ResidentProofPulseSignals = {},
 ): ResidentLoopFact[] {
   const ap = residentAttentionRunway(row);
   const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
+  const inference = residentInferenceHealthFact(row);
   const checkpoints = residentLoopCheckpoints(row);
   const plan = checkpoints.find(checkpoint => checkpoint.key === 'plan');
   const speech = checkpoints.find(checkpoint => checkpoint.key === 'speech');
@@ -1943,6 +2035,7 @@ export function residentLoopCoverageStrip(
 
   return [
     residentStackFact(row),
+    inference,
     {
       label: 'Goal/Action',
       value: plan?.value || '-',
@@ -2082,6 +2175,7 @@ export function residentTriageSummary(
         emptyTriageBucket('recovery', 'Recovery wait', 'warn', 'No recovery-wait signals are available yet.'),
         emptyTriageBucket('quiet', 'Quiet loop', 'warn', 'No loop cadence is available yet.'),
         emptyTriageBucket('action', 'Action outcome', 'fail', 'No action outcome data is available yet.'),
+        emptyTriageBucket('inference', 'Brain output', 'fail', 'No brain inference status is available yet.'),
         emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
         emptyTriageBucket('goal-link', 'Goal link', 'warn', 'No goal/action link data is available yet.'),
         emptyTriageBucket('contract', 'Goal contract', 'warn', 'No active goal contract data is available yet.'),
@@ -2104,6 +2198,7 @@ export function residentTriageSummary(
     return feedTone(row) === 'warn' || (action?.tone === 'warn' && speech?.tone === 'warn');
   });
   const actionOutcomeRows = rows.filter(row => row.online && residentActionOutcome(row).failed);
+  const inferenceRows = rows.filter(row => row.online && row.thinking?.latestInference && residentInferenceHealthFact(row).tone !== 'ok');
   const missingPlanRows = rows.filter(row => row.online && !row.thinking?.activePlan?.trim());
   const goalLinkRows = rows.filter(row => {
     if (!row.online || !row.thinking?.activePlan?.trim()) return false;
@@ -2138,6 +2233,7 @@ export function residentTriageSummary(
     makeTriageBucket('recovery', 'Recovery wait', 'warn', recoveryWaitRows, 'Residents are waiting at low health; inspect food/cook/eat recovery before trusting combat liveness.'),
     makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
     makeTriageBucket('action', 'Action outcome', 'fail', actionOutcomeRows, 'Latest action result timed out or failed; inspect before trusting liveness.'),
+    makeTriageBucket('inference', 'Brain output', 'fail', inferenceRows, 'Latest brain inference timed out, failed, or emitted no usable action.'),
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
     makeTriageBucket('goal-link', 'Goal link', 'warn', goalLinkRows, 'Latest action is visible but not explicitly tied to the active plan.'),
     makeTriageBucket('contract', 'Goal contract', 'warn', missingContractRows, 'Active goal contracts are missing or lack binary completion evidence.'),
@@ -2153,6 +2249,7 @@ export function residentTriageSummary(
     ...recoveryWaitRows,
     ...quietRows,
     ...actionOutcomeRows,
+    ...inferenceRows,
     ...missingPlanRows,
     ...goalLinkRows,
     ...missingContractRows,
@@ -2197,6 +2294,7 @@ const residentTriageBucketKeys = new Set<ResidentTriageBucketKey>([
   'recovery',
   'quiet',
   'action',
+  'inference',
   'plan',
   'goal-link',
   'contract',
@@ -2559,9 +2657,11 @@ function recentSpeechSignal(row: ResidentDashboardRow): { text: string; source: 
 
 function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPulseSignals): ResidentProofCheck[] {
   const actionOutcome = residentActionOutcome(row);
+  const inference = residentInferenceHealthFact(row);
   return [
     { label: 'AP', ok: !residentNeedsApSupportSoon(row) },
     { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
+    { label: 'Inference', ok: inference.tone === 'ok', optional: !row.thinking?.latestInference },
     { label: actionOutcome.failed ? 'Action outcome' : 'Action', ok: actionOutcome.ok },
     { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
     { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok' },

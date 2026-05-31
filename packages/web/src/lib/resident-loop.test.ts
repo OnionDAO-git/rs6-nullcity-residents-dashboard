@@ -530,7 +530,17 @@ describe('resident loop helpers', () => {
     const ready = row({
       name: 'res:ready',
       attention: 80,
-      thinking: { mode: 'executing', activePlan: 'Trade GP for AP' },
+      thinking: {
+        mode: 'executing',
+        activePlan: 'Trade GP for AP',
+        latestInference: {
+          t: '2026-05-31T15:40:00.000Z',
+          status: 'executing',
+          cause: 'goal:ap-gp',
+          actions_emitted: 1,
+          perception_tokens: 6400,
+        },
+      },
       stack: {
         model: { endpoint: 'spacetower', model: 'qwopus3.5-27b-v3@q4_k_s' },
         configuredModules: [],
@@ -574,12 +584,82 @@ describe('resident loop helpers', () => {
         }
     ))).toEqual([
       { label: 'Stack', value: '1/2 complete', detail: 'model, endpoint, and SPARK visible', tone: 'warn' },
+      { label: 'Inference', value: '1/2 healthy', detail: 'latest brain inference status is usable', tone: 'warn', path: '/residents?triage=inference' },
       { label: 'Goal/action', value: '1/2 linked', detail: 'active goal tied to latest action cause', tone: 'warn', path: '/residents?triage=goal-link' },
       { label: 'Speech', value: '1/2 live', detail: 'recent say/feed line visible', tone: 'warn', path: '/residents?triage=quiet' },
       { label: 'Story digest', value: '1/2 cited', detail: 'resident-specific Storyteller evidence', tone: 'warn', path: '/residents?triage=story' },
       { label: 'AP/GP', value: '1/2 AP · 1/2 GP', detail: 'AP runway stable and coin-995/economy GP proof visible', tone: 'warn', path: '/residents?triage=attention' },
       { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn', path: '/residents?triage=benchmark' },
     ]);
+  });
+
+  test('routes failed brain inference to resident coverage and triage even when action proof exists', () => {
+    const resident = row({
+      name: 'res:cancelled',
+      attention: 80,
+      thinking: {
+        mode: 'idle',
+        activePlan: 'Answer patron memory and keep moving',
+        latestInference: {
+          t: '2026-05-31T15:41:00.000Z',
+          status: 'error',
+          cause: 'thinking_cancelled:nervous:patron-memory-acknowledge',
+          error: 'thinking cancelled',
+          actions_emitted: 0,
+          perception_tokens: 6400,
+        },
+      },
+      stack: {
+        model: { endpoint: 'default', model: 'qwopus3.5-27b-v3@q4_k_s' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.4.0', source: 'soul', activeFacets: ['thinking'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'say', result: 'success', source: 'nervous-system', cause: 'nervous:patron-memory-acknowledge', tick: 400 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 120 }] } },
+        feed: {
+          attached: true,
+          tick: 400,
+          ageMs: 5000,
+          latestEventKind: 'say',
+          latestEventText: 'I remember the patron gift.',
+          nearby: { players: 1, npcs: 0, objects: 3, worldItems: 0 },
+          events: 1,
+          availableActions: 5,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Acknowledged a patron memory.', latestEventKind: 'patron_memory', latestEventTick: 400 },
+      memory: { files: ['facts/patrons.md'], facts: [{ topic: 'patrons', path: 'facts/patrons.md', text: 'Patron memory acknowledged.' }] },
+    });
+
+    expect(residentLoopCoverageStrip(resident, {
+      benchmark: { tone: 'ok', summary: 'Latest benchmark passed.', detail: 'score 1' },
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited patron memory' },
+    }).find(fact => fact.label === 'Inference')).toEqual({
+      label: 'Inference',
+      value: 'cancelled',
+      detail: 'thinking_cancelled:nervous:patron-memory-acknowledge | 6,400 prompt tokens | 0 actions',
+      tone: 'fail',
+      path: '/residents?triage=inference',
+    });
+
+    const triage = residentTriageSummary([resident], () => ({
+      benchmark: { tone: 'ok', summary: 'Latest benchmark passed.', detail: 'score 1' },
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited patron memory' },
+    }));
+
+    expect(triage.detail).toBe('Brain output: 1');
+    expect(triage.buckets.find(bucket => bucket.key === 'inference')).toEqual({
+      key: 'inference',
+      label: 'Brain output',
+      tone: 'fail',
+      count: 1,
+      residents: ['res:cancelled'],
+      detail: 'Latest brain inference timed out, failed, or emitted no usable action.',
+    });
   });
 
   test('chooses a demo-ready resident before recovery cues', () => {
@@ -1780,6 +1860,14 @@ describe('resident loop helpers', () => {
           detail: 'No residents in this bucket right now.',
         },
         {
+          key: 'inference',
+          label: 'Brain output',
+          tone: 'ok',
+          count: 0,
+          residents: [],
+          detail: 'No residents in this bucket right now.',
+        },
+        {
           key: 'plan',
           label: 'Missing plan',
           tone: 'warn',
@@ -2632,7 +2720,17 @@ describe('resident loop helpers', () => {
     const coverage = residentLoopCoverageStrip(row({
       name: 'res:coverage',
       attention: 75,
-      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      thinking: {
+        mode: 'executing',
+        activePlan: 'Earn GP for AP',
+        latestInference: {
+          t: '2026-05-31T15:40:00.000Z',
+          status: 'executing',
+          cause: 'goal:ap-gp',
+          actions_emitted: 1,
+          perception_tokens: 6400,
+        },
+      },
       stack: {
         model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
         configuredModules: [],
@@ -2659,9 +2757,14 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'ok', summary: 'Storyteller cited this resident', detail: 'digest run story-20260531' },
     });
 
-    expect(coverage.map(fact => fact.label)).toEqual(['Stack', 'Goal/Action', 'Speech', 'Story Digest', 'AP/GP', 'Capability']);
+    expect(coverage.map(fact => fact.label)).toEqual(['Stack', 'Inference', 'Goal/Action', 'Speech', 'Story Digest', 'AP/GP', 'Capability']);
     expect(coverage.find(fact => fact.label === 'Stack')).toMatchObject({
       value: 'openrouter/haiku | onion.runescape.standard@0.3.0',
+      tone: 'ok',
+    });
+    expect(coverage.find(fact => fact.label === 'Inference')).toMatchObject({
+      value: '1 action',
+      detail: 'goal:ap-gp | 6,400 prompt tokens | 1 action',
       tone: 'ok',
     });
     expect(coverage.find(fact => fact.label === 'Goal/Action')).toMatchObject({
