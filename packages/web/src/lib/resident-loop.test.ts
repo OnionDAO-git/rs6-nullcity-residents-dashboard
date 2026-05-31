@@ -1300,6 +1300,7 @@ describe('resident loop helpers', () => {
         ? {
           benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
           storyteller: { tone: 'ok', summary: 'Storyteller cited this resident' },
+          goalContract: { tone: 'ok', summary: 'Earn 100 GP/hour' },
         }
         : {},
     );
@@ -1325,12 +1326,58 @@ describe('resident loop helpers', () => {
     expect(ledger[2]).toMatchObject({
       tone: 'ok',
       displayName: 'ready',
-      proof: '8/8 loop proofs live',
+      proof: '9/9 loop proofs live',
       gp: '42 GP',
       stack: 'openrouter/haiku | onion.runescape.standard@0.3.0',
+      contract: 'Earn 100 GP/hour',
       memory: 'routes',
       nextAction: 'Keep watching',
       nextTarget: 'Resident Intent',
+    });
+  });
+
+  test('triages residents whose active goal contract is missing or aspirational', () => {
+    const contractOnly = row({
+      name: 'res:contract',
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof is live.' }],
+      },
+    });
+
+    const triage = residentTriageSummary([contractOnly], () => ({
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited this resident' },
+      goalContract: { tone: 'warn', summary: 'No active goal contract published.' },
+    }));
+
+    expect(triage.tone).toBe('warn');
+    expect(triage.detail).toBe('Goal contract: 1');
+    expect(triage.buckets.find(bucket => bucket.key === 'contract')).toEqual({
+      key: 'contract',
+      label: 'Goal contract',
+      tone: 'warn',
+      count: 1,
+      residents: ['res:contract'],
+      detail: 'Active goal contracts are missing or lack binary completion evidence.',
     });
   });
 
@@ -1441,6 +1488,14 @@ describe('resident loop helpers', () => {
           count: 1,
           residents: ['res:low'],
           detail: 'Thinking has not published a current plan for these residents.',
+        },
+        {
+          key: 'contract',
+          label: 'Goal contract',
+          tone: 'ok',
+          count: 0,
+          residents: [],
+          detail: 'No residents in this bucket right now.',
         },
         {
           key: 'gp',

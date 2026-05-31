@@ -143,6 +143,7 @@ export interface ResidentLivenessLedgerEntry {
   ap: string;
   gp: string;
   stack: string;
+  contract: string;
   plan: string;
   story: string;
   memory: string;
@@ -162,7 +163,7 @@ export interface ResidentLivenessDetail {
 }
 
 export interface ResidentTriageBucket {
-  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'memory' | 'benchmark';
+  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'contract' | 'gp' | 'story' | 'memory' | 'benchmark';
   label: string;
   tone: 'ok' | 'warn' | 'fail';
   count: number;
@@ -1593,6 +1594,7 @@ export function residentLivenessLedger(
       const plan = checkpoints.find(checkpoint => checkpoint.key === 'plan');
       const story = checkpoints.find(checkpoint => checkpoint.key === 'story');
       const memory = residentLedgerMemoryLabel(row);
+      const contract = signals.goalContract?.summary || '-';
       return {
         residentName: row.name,
         displayName: residentShortName(row.name),
@@ -1605,6 +1607,7 @@ export function residentLivenessLedger(
         ap: ap.value,
         gp: gp.value,
         stack: residentStackSummary(row),
+        contract,
         plan: plan?.value || '-',
         story: story?.value || '-',
         memory,
@@ -1769,6 +1772,7 @@ export function residentTriageSummary(
         emptyTriageBucket('quiet', 'Quiet loop', 'warn', 'No loop cadence is available yet.'),
         emptyTriageBucket('action', 'Action outcome', 'fail', 'No action outcome data is available yet.'),
         emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
+        emptyTriageBucket('contract', 'Goal contract', 'warn', 'No active goal contract data is available yet.'),
         emptyTriageBucket('gp', 'Missing GP proof', 'warn', 'No coin-995 proof is available yet.'),
         emptyTriageBucket('story', 'Thin story', 'warn', 'No Library or Storyteller evidence is available yet.'),
         emptyTriageBucket('memory', 'Thin memory', 'warn', 'No qmd facts/*.md memory snippets are available yet.'),
@@ -1789,6 +1793,11 @@ export function residentTriageSummary(
   });
   const actionOutcomeRows = rows.filter(row => row.online && residentActionOutcome(row).failed);
   const missingPlanRows = rows.filter(row => row.online && !row.thinking?.activePlan?.trim());
+  const missingContractRows = rows.filter(row => {
+    if (!row.online) return false;
+    const contract = resolveSignals(row).goalContract;
+    return contract !== undefined && contract.tone !== 'ok';
+  });
   const missingGpRows = rows.filter(row => {
     if (!row.online) return false;
     const signals = resolveSignals(row);
@@ -1814,6 +1823,7 @@ export function residentTriageSummary(
     makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
     makeTriageBucket('action', 'Action outcome', 'fail', actionOutcomeRows, 'Latest action result timed out or failed; inspect before trusting liveness.'),
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
+    makeTriageBucket('contract', 'Goal contract', 'warn', missingContractRows, 'Active goal contracts are missing or lack binary completion evidence.'),
     makeTriageBucket('gp', 'Missing GP proof', 'warn', missingGpRows, 'Do not claim GP purchasing power until coin-995 or economy evidence appears.'),
     makeTriageBucket('story', 'Thin story', 'warn', thinStoryRows, 'Library or Storyteller evidence is not fresh enough to explain the resident.'),
     makeTriageBucket('memory', 'Thin memory', 'warn', missingMemoryRows, 'No qmd facts/*.md memory snippets are visible for these residents.'),
@@ -1827,6 +1837,7 @@ export function residentTriageSummary(
     ...quietRows,
     ...actionOutcomeRows,
     ...missingPlanRows,
+    ...missingContractRows,
     ...missingGpRows,
     ...thinStoryRows,
     ...missingMemoryRows,
@@ -1869,6 +1880,7 @@ const residentTriageBucketKeys = new Set<ResidentTriageBucketKey>([
   'quiet',
   'action',
   'plan',
+  'contract',
   'gp',
   'story',
   'memory',

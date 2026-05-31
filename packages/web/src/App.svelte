@@ -48,6 +48,7 @@
     visibleResidentTriageBuckets,
     type ResidentApSupportRecommendation,
     type ResidentLoopFact,
+    type ResidentProofPulseSignals,
     type ResidentProofRollup,
     type ResidentGuestTrailPulse,
     type ResidentTriageBucketKey,
@@ -189,6 +190,7 @@
   let cityResidentReadModel: ResidentReadModel | undefined;
   let cityResidentPosts: ResidentPost[] = [];
   let cityResidentEconomy: ResidentEconomy | undefined;
+  let cityResidentGoalContracts: Record<string, ResidentGoalContractSignal> = {};
   let cityLibraryLives: LibrarySoulLife[] = [];
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityStoryRunList: StorytellerDigestRunList = storytellerDigestRunList([]);
@@ -471,27 +473,21 @@
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
   $: cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
   $: cityNormalLifeAudit = residentNormalLifeAuditSignal(cityBenchmarkRuns);
-  $: cityResidentProofRollup = residentProofRollup(cityResidents, row => ({
-    benchmark: residentBenchmarkLabel(row),
-    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
-    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
-  }));
-  $: cityResidentTriage = residentTriageSummary(cityResidents, row => ({
-    benchmark: residentBenchmarkLabel(row),
-    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
-    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
-  }));
+  $: cityResidentProofRollup = residentProofRollup(cityResidents, cityResidentRosterSignals);
+  $: cityResidentTriage = residentTriageSummary(cityResidents, cityResidentRosterSignals);
   $: cityResidentTriageFocus = !isDebugRoute && route === '/residents' ? residentTriageFocusFromSearch(browserSearch) : '';
-  $: cityResidentLivenessLedger = residentLivenessLedger(cityResidents, row => ({
-    benchmark: residentBenchmarkLabel(row),
-    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
-    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
-  }), 8);
-  $: cityResidentDemoPick = residentDemoPickCue(cityResidents, row => ({
-    benchmark: residentBenchmarkLabel(row),
-    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
-    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
-  }));
+  $: cityResidentLivenessLedger = residentLivenessLedger(cityResidents, cityResidentRosterSignals, 8);
+  $: cityResidentDemoPick = residentDemoPickCue(cityResidents, cityResidentRosterSignals);
+
+  function cityResidentRosterSignals(row: ResidentDashboardRow): ResidentProofPulseSignals {
+    const goalContract = cityResidentGoalContracts[row.name];
+    return {
+      benchmark: residentBenchmarkLabel(row),
+      economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
+      ...(goalContract ? { goalContract } : {}),
+      storyteller: residentStoryDigestSignal(row, cityStoryDigests),
+    };
+  }
   $: cityDemoApSupport = cityDemoApSupportSignal();
   $: cityLatestStoryStatus = cityStoryDigests[0] ? storytellerDigestStatus(cityStoryDigests[0]) : undefined;
   $: cityDemoPath = cityDemoPathSteps({
@@ -825,8 +821,12 @@
       cityDirectoryResidents = directoryPayload.residents;
       cityBenchmarkRuns = benchmarkPayload;
       cityLiveEconomy = liveEconomyPayload;
+      if (activeRoute === '/residents') {
+        cityResidentGoalContracts = await loadResidentGoalContracts(residentRowsForCityDirectory(overview?.residents, residents));
+      }
     } else if (activeRoute !== '/') {
       cityBenchmarkRuns = [];
+      cityResidentGoalContracts = {};
     }
     if (cityResidentId) {
       const cityResidentApiId = resolveResidentRouteId(cityResidentId, overview?.residents || residents);
@@ -838,6 +838,10 @@
       cityResidentReadModel = projectedResident;
       cityResidentPosts = postsPayload.posts;
       cityResidentEconomy = economyPayload;
+      cityResidentGoalContracts = {
+        ...cityResidentGoalContracts,
+        [cityResidentApiId]: residentGoalContractSignal(economyPayload),
+      };
     } else {
       cityResidentReadModel = undefined;
       cityResidentPosts = [];
@@ -932,6 +936,18 @@
       if (fallbackGateway.status === 'fulfilled') gatewayStatus = fallbackGateway.value;
       cityDataError = snapshotError;
     }
+  }
+
+  async function loadResidentGoalContracts(rows: ResidentDashboardRow[]): Promise<Record<string, ResidentGoalContractSignal>> {
+    const entries = await Promise.all(rows.map(async row => {
+      try {
+        const economy = await api.residentEconomy(row.name);
+        return [row.name, residentGoalContractSignal(economy)] as const;
+      } catch {
+        return [row.name, residentGoalContractSignal(undefined)] as const;
+      }
+    }));
+    return Object.fromEntries(entries);
   }
 
   function cityRouteRequiresLogin(activeRoute: string): boolean {
@@ -4467,6 +4483,7 @@
               <small>AP <strong>{entry.ap}</strong></small>
               <small>GP <strong>{entry.gp}</strong></small>
               <small>Stack <strong>{entry.stack}</strong></small>
+              <small>Contract <strong>{entry.contract}</strong></small>
               <small>Plan <strong>{entry.plan}</strong></small>
               <small>Story <strong>{entry.story}</strong></small>
               <small>Memory <strong>{entry.memory}</strong></small>
