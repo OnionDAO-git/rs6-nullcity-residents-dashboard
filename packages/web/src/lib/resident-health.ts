@@ -1,6 +1,6 @@
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 
-export type ResidentHealthFilter = 'all' | 'needs-attention' | 'online' | 'offline' | 'active-inference' | 'stale' | 'stuck';
+export type ResidentHealthFilter = 'all' | 'needs-attention' | 'online' | 'offline' | 'active-inference' | 'stale' | 'stuck' | 'paused';
 export type ResidentSortMode = 'health' | 'attention' | 'model' | 'name';
 
 export interface ResidentHealthControls {
@@ -30,10 +30,11 @@ export function applyResidentHealthControls(rows: ResidentDashboardRow[], contro
 export function residentHealthSummary(row: ResidentDashboardRow): ResidentHealthSummary {
   const model = residentModelLabel(row);
   if (isStuck(row)) return { status: 'stuck', label: 'stuck', detail: stuckDetail(row), rank: 0, model };
+  if (isPaused(row)) return { status: 'paused', label: 'paused', detail: pausedDetail(row), rank: 4, model };
   if (isStale(row)) return { status: 'stale', label: 'stale', detail: staleDetail(row), rank: 1, model };
   if (isActiveInference(row)) return { status: 'active-inference', label: 'thinking', detail: inferenceDetail(row), rank: 2, model };
   if (row.online) return { status: 'online', label: 'online', detail: onlineDetail(row), rank: 3, model };
-  return { status: 'offline', label: 'offline', detail: row.controllerId || 'not connected', rank: 4, model };
+  return { status: 'offline', label: 'offline', detail: row.controllerId || 'not connected', rank: 5, model };
 }
 
 export function residentModelLabel(row: ResidentDashboardRow): string {
@@ -56,8 +57,9 @@ function compareResidents(a: ResidentDashboardRow, b: ResidentDashboardRow, sort
 
 function healthMatches(row: ResidentDashboardRow, filter: ResidentHealthFilter): boolean {
   if (filter === 'all') return true;
-  if (filter === 'needs-attention') return isStuck(row) || isStale(row);
-  return residentHealthSummary(row).status === filter;
+  const status = residentHealthSummary(row).status;
+  if (filter === 'needs-attention') return status === 'stuck' || status === 'stale';
+  return status === filter;
 }
 
 function isStuck(row: ResidentDashboardRow): boolean {
@@ -67,6 +69,10 @@ function isStuck(row: ResidentDashboardRow): boolean {
 function isStale(row: ResidentDashboardRow): boolean {
   if (!row.online) return false;
   return row.feed?.ageMs === undefined || row.feed.ageMs > STALE_FEED_MS;
+}
+
+function isPaused(row: ResidentDashboardRow): boolean {
+  return row.online === true && row.body?.controlHeld === false;
 }
 
 function isActiveInference(row: ResidentDashboardRow): boolean {
@@ -103,6 +109,10 @@ function stuckDetail(row: ResidentDashboardRow): string {
 
 function staleDetail(row: ResidentDashboardRow): string {
   return row.feed?.ageMs === undefined ? 'no live feed' : `${Math.round(row.feed.ageMs / 1000)}s since feed`;
+}
+
+function pausedDetail(row: ResidentDashboardRow): string {
+  return row.controllerId ? `cohort paused by ${row.controllerId}` : 'not in active controller cohort';
 }
 
 function inferenceDetail(row: ResidentDashboardRow): string {

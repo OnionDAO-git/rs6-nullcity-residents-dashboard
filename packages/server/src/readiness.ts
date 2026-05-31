@@ -74,6 +74,8 @@ function controllerCheck(controller: ControllerStatus): ReadinessCheckSummary {
 
 function residentCohortCheck(residents: ResidentDashboardRow[], controller: ControllerStatus): ReadinessCheckSummary {
   const known = residents.length > 0 ? residents.length : controller.residentsWithRuntime;
+  const hasControlSignal = residents.some(resident => typeof resident.body?.controlHeld === 'boolean');
+  const controlled = hasControlSignal ? residents.filter(resident => resident.body?.controlHeld).length : 0;
   const online = residents.filter(resident => resident.online).length;
   if (known === 0) {
     return {
@@ -82,6 +84,25 @@ function residentCohortCheck(residents: ResidentDashboardRow[], controller: Cont
       level: 'fail',
       count: 0,
       detail: 'No residents discovered by gateway or controller',
+    };
+  }
+  if (hasControlSignal) {
+    if (controlled === 0) {
+      return {
+        id: 'resident-cohort',
+        label: 'Resident cohort',
+        level: 'warn',
+        count: known,
+        detail: `${known} residents known, none controlled by active cohort`,
+      };
+    }
+    const paused = Math.max(0, known - controlled);
+    return {
+      id: 'resident-cohort',
+      label: 'Resident cohort',
+      level: 'ok',
+      count: controlled,
+      detail: `${controlled} active in controller cohort; ${paused} paused/cohort-excluded of ${known} known residents`,
     };
   }
   if (online === 0) {

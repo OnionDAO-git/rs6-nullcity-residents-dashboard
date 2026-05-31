@@ -141,4 +141,35 @@ describe('buildEventReadinessSummary', () => {
     });
     expect(summary.checks.find(check => check.id === 'letters')?.level).toBe('warn');
   });
+
+  test('reports the controlled cohort separately from paused online residents', () => {
+    const summary = buildEventReadinessSummary({
+      gateway: connectedGateway,
+      controller: { ...availableController, residentsWithRuntime: 25 },
+      residents: [
+        { name: 'res:agent', online: true, body: { controlHeld: true } },
+        { name: 'res:hans', online: true, body: { controlHeld: true } },
+        { name: 'res:wise-old-man', online: true, body: { controlHeld: false } },
+        { name: 'res:wren-calix', online: true, body: { controlHeld: false } },
+      ],
+      souls: [soul],
+      recentLetters: [
+        {
+          id: 'letter-1',
+          kind: 'patron_thanks',
+          subject: 'Thank you',
+          recipient: 'patron-001',
+          deliveryChannels: ['inbox'],
+        },
+      ],
+      patrons: patronSummary,
+    });
+
+    expect(summary.level).toBe('ok');
+    expect(summary.checks.find(check => check.id === 'resident-cohort')).toMatchObject({
+      level: 'ok',
+      count: 2,
+      detail: '2 active in controller cohort; 2 paused/cohort-excluded of 4 known residents',
+    });
+  });
 });

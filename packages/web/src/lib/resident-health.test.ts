@@ -15,6 +15,7 @@ describe('resident health controls', () => {
     expect(residentHealthSummary(row({ name: 'res:stale', online: true, feed: { attached: true, ageMs: 130_000, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 0 } })).label).toBe('stale');
     expect(residentHealthSummary(row({ name: 'res:thinking', online: true, feed: { attached: true, ageMs: 500, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 2 }, thinking: { mode: 'deciding' } })).label).toBe('thinking');
     expect(residentHealthSummary(row({ name: 'res:online', online: true, feed: { attached: true, ageMs: 500, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 2 } })).label).toBe('online');
+    expect(residentHealthSummary(row({ name: 'res:paused', online: true, body: { controlHeld: false } })).label).toBe('paused');
     expect(residentHealthSummary(row({ name: 'res:offline', online: false })).label).toBe('offline');
   });
 
@@ -23,11 +24,15 @@ describe('resident health controls', () => {
       row({ name: 'res:healthy', online: true, feed: { attached: true, ageMs: 500, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 2 } }),
       row({ name: 'res:stale', online: true, feed: { attached: true, ageMs: 180_000, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 2 } }),
       row({ name: 'res:stuck', online: true, progress: { samples: 2, stuckTicks: 12 } }),
+      row({ name: 'res:paused', online: true, body: { controlHeld: false } }),
     ];
 
     expect(applyResidentHealthControls(rows, { filter: 'needs-attention', sort: 'health', modelQuery: '' }).map(resident => resident.name)).toEqual([
       'res:stuck',
       'res:stale',
+    ]);
+    expect(applyResidentHealthControls(rows, { filter: 'paused', sort: 'health', modelQuery: '' }).map(resident => resident.name)).toEqual([
+      'res:paused',
     ]);
   });
 

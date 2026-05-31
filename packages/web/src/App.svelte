@@ -2562,6 +2562,7 @@
     if (status === 'stuck') return 'fail';
     if (status === 'stale') return 'warn';
     if (status === 'active-inference' || status === 'online') return 'ok';
+    if (status === 'paused') return '';
     return '';
   }
 
@@ -5829,6 +5830,7 @@
           <option value="needs-attention">needs attention</option>
           <option value="stuck">stuck</option>
           <option value="stale">stale feed</option>
+          <option value="paused">paused cohort</option>
           <option value="active-inference">thinking now</option>
           <option value="online">online</option>
           <option value="offline">offline</option>
