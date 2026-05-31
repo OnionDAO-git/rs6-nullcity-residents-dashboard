@@ -29,7 +29,7 @@ describe('cityDemoPathSteps', () => {
         metric: '21 / 23 online',
         action: 'Open resident directory',
         path: '/residents',
-        detail: 'Live residents are visible; use the directory to confirm names, AP, model, endpoint, and loop proof.',
+        detail: 'Live residents are visible; use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
       },
       {
         id: 'ap-support',
