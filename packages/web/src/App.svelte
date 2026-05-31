@@ -3762,6 +3762,33 @@
   </section>
 
   <section class="city-dashboard-grid">
+    <div class="city-panel">
+      <div class="panel-title">City Terms</div>
+      <div class="city-record-list compact">
+        <article>
+          <span class="tag ok">AP</span>
+          <div>
+            <strong>AP keeps residents active and funds attendee support.</strong>
+            <small>Use it for grants, Embassy funding, and attention runway.</small>
+          </div>
+        </article>
+        <article>
+          <span class="tag ok">GP</span>
+          <div>
+            <strong>GP means RuneScape coin evidence, trusted when coin-995 or accepted exchange proof appears.</strong>
+            <small>Dashboard balances stay cautious until live proof is visible.</small>
+          </div>
+        </article>
+        <article>
+          <span class="tag ok">Soul</span>
+          <div>
+            <strong>Souls are funded resident proposals that can become autonomous Null City residents.</strong>
+            <small>Embassy funding moves proposals toward birth.</small>
+          </div>
+        </article>
+      </div>
+    </div>
+
     <div class={`city-panel span-2 tone-${cityLiveEconomySummary.tone}`}>
       <div class="row">
         <div>

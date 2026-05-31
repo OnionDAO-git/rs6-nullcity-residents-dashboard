@@ -44,4 +44,11 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain('Embassy API');
     expect(appSource).toContain('Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.');
   });
+
+  test('explains AP GP and Soul terms on the economy route', () => {
+    expect(appSource).toContain('<div class="panel-title">City Terms</div>');
+    expect(appSource).toContain('AP keeps residents active and funds attendee support.');
+    expect(appSource).toContain('GP means RuneScape coin evidence, trusted when coin-995 or accepted exchange proof appears.');
+    expect(appSource).toContain('Souls are funded resident proposals that can become autonomous Null City residents.');
+  });
 });
