@@ -2677,6 +2677,30 @@ pre {
   margin-top: 0;
 }
 
+.resident-ap-support {
+  margin-bottom: 12px;
+  border-left: 3px solid var(--s-green);
+}
+
+.resident-ap-support.tone-warn {
+  border-left-color: var(--s-amber);
+}
+
+.resident-ap-support.tone-fail {
+  border-left-color: var(--s-rose);
+}
+
+.resident-ap-support-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.resident-ap-support-actions button {
+  color: var(--s-gold);
+  border-color: rgba(228, 184, 64, 0.5);
+}
+
 .resident-triage-strip {
   display: grid;
   gap: 14px;

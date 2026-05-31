@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import {
   residentAgencyCue,
+  residentApSupportRecommendation,
   residentAttentionRunway,
   residentCauseSignal,
   residentCoinEvidenceAmount,
@@ -159,6 +160,38 @@ describe('resident loop helpers', () => {
       value: '42 AP',
       detail: '32 AP above support floor.',
       tone: 'ok',
+    });
+  });
+
+  test('recommends concrete AP support amounts that restore a stable runway', () => {
+    expect(residentApSupportRecommendation(row({ name: 'res:empty', attention: 0 }))).toEqual({
+      tone: 'fail',
+      title: 'Grant 50 AP to restart action',
+      detail: 'Resident is at 0 AP; grant enough to reach the 50 AP stable runway target.',
+      suggestedAp: 50,
+      suggestedMemo: 'AP support: restore empty to 50 AP runway.',
+      actionLabel: 'Use 50 AP',
+    });
+    expect(residentApSupportRecommendation(row({ name: 'res:low', attention: 2 }))).toMatchObject({
+      tone: 'warn',
+      title: 'Grant 48 AP to restore runway',
+      suggestedAp: 48,
+      suggestedMemo: 'AP support: restore low to 50 AP runway.',
+      actionLabel: 'Use 48 AP',
+    });
+    expect(residentApSupportRecommendation(row({ name: 'res:watch', attention: 18 }))).toMatchObject({
+      tone: 'warn',
+      title: 'Grant 32 AP to restore runway',
+      suggestedAp: 32,
+      suggestedMemo: 'AP support: restore watch to 50 AP runway.',
+      actionLabel: 'Use 32 AP',
+    });
+    expect(residentApSupportRecommendation(row({ name: 'res:steady', attention: 50 }))).toMatchObject({
+      tone: 'ok',
+      title: 'No AP grant needed',
+      suggestedAp: 0,
+      suggestedMemo: 'AP stable: no support grant needed for steady.',
+      actionLabel: 'Keep watching',
     });
   });
 

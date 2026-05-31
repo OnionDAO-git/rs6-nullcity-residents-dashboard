@@ -16,6 +16,7 @@
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
     residentAgencyCue,
+    residentApSupportRecommendation,
     residentAttentionRunway,
     residentCauseSignal,
     residentDemoPickCue,
@@ -43,6 +44,7 @@
     residentStackSummary,
     residentTriageSummary,
     visibleResidentTriageBuckets,
+    type ResidentApSupportRecommendation,
     type ResidentLoopFact,
     type ResidentProofRollup,
     type ResidentGuestTrailPulse,
@@ -234,6 +236,7 @@
   let cityResidentEconomyGpEvidence: ResidentEconomyGpEvidence | undefined;
   let cityResidentEconomyMoment: ResidentEconomyMoment | undefined;
   let cityResidentProofPulse = residentProofPulse(undefined);
+  let cityResidentApSupport = residentApSupportRecommendation(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
   let cityResidentDemoPick = residentDemoPickCue([]);
@@ -426,6 +429,7 @@
     goalContract: cityResidentGoalContract,
     storyteller: cityResidentStorySignal,
   });
+  $: cityResidentApSupport = residentApSupportRecommendation(cityResident);
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
   $: cityPrintStorySignal = printStoryDigestSignal({
@@ -1817,6 +1821,13 @@
       await bootstrapSession();
       await loadRoute(false);
     });
+  }
+
+  function applyApSupportSuggestion(recommendation: ResidentApSupportRecommendation) {
+    if (recommendation.suggestedAp <= 0) return;
+    grantAttentionAp = String(recommendation.suggestedAp);
+    grantAttentionMemo = recommendation.suggestedMemo;
+    cityActionNotice = `${recommendation.suggestedAp.toLocaleString()} AP support suggestion staged`;
   }
 
   async function createResidentTradePrompt(residentId: string) {
@@ -4718,6 +4729,16 @@
       {/if}
       <div class="city-panel">
         <div class="panel-title">Grant Attention</div>
+        <div class={`city-copy-block resident-ap-support tone-${cityResidentApSupport.tone}`}>
+          <strong>{cityResidentApSupport.title}</strong>
+          <p>{cityResidentApSupport.detail}</p>
+          <small>{cityResidentApSupport.suggestedAp > 0 ? `${cityResidentApSupport.suggestedAp.toLocaleString()} AP suggested` : 'No AP grant suggested'} · {cityResidentApSupport.suggestedMemo}</small>
+          {#if citySession.authenticated && cityResidentApSupport.suggestedAp > 0}
+            <div class="resident-ap-support-actions">
+              <button type="button" onclick={() => applyApSupportSuggestion(cityResidentApSupport)}>{cityResidentApSupport.actionLabel}</button>
+            </div>
+          {/if}
+        </div>
         {#if citySession.authenticated}
           <div class="city-form-grid single">
             <label>AP <input bind:value={grantAttentionAp} inputmode="numeric" /></label>

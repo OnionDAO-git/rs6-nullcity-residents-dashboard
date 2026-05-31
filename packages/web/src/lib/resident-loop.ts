@@ -90,6 +90,15 @@ export interface ResidentAttentionRunway {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+export interface ResidentApSupportRecommendation {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  suggestedAp: number;
+  suggestedMemo: string;
+  actionLabel: string;
+}
+
 export interface ResidentMemoryFreshness {
   label: 'fresh' | 'stale' | 'thin';
   summary: string;
@@ -230,6 +239,7 @@ const ACTION_STALE_TICK_GAP = 180;
 const SPEECH_STALE_TICK_GAP = 300;
 const STORY_STALE_TICK_GAP = 1200;
 const SHORT_AP_RUNWAY_THRESHOLD = LOW_AP_THRESHOLD + 15;
+const STABLE_AP_RUNWAY_TARGET = 50;
 const LONG_AP_RUNWAY_THRESHOLD = 100;
 const GP_ITEM_ID = 995;
 const LOW_HEALTH_RECOVERY_WAIT_CAUSES = new Set([
@@ -1073,6 +1083,66 @@ export function residentNeedsAp(row: ResidentDashboardRow): boolean {
 export function residentNeedsApSupportSoon(row: ResidentDashboardRow): boolean {
   const runway = residentAttentionRunway(row);
   return runway.label === 'empty' || runway.label === 'floor' || runway.label === 'short';
+}
+
+export function residentApSupportRecommendation(row: ResidentDashboardRow | undefined): ResidentApSupportRecommendation {
+  if (!row) {
+    return {
+      tone: 'warn',
+      title: 'Wait for live AP reading',
+      detail: 'No live resident snapshot is loaded, so AP support cannot be sized yet.',
+      suggestedAp: STABLE_AP_RUNWAY_TARGET,
+      suggestedMemo: 'AP support: restore resident to stable runway.',
+      actionLabel: `Use ${STABLE_AP_RUNWAY_TARGET} AP`,
+    };
+  }
+
+  const name = residentShortName(row.name);
+  if (row.attention === undefined) {
+    return {
+      tone: 'warn',
+      title: 'Wait for live AP reading',
+      detail: 'No live AP reading is available for this resident yet.',
+      suggestedAp: STABLE_AP_RUNWAY_TARGET,
+      suggestedMemo: `AP support: restore ${name} to stable runway.`,
+      actionLabel: `Use ${STABLE_AP_RUNWAY_TARGET} AP`,
+    };
+  }
+
+  const currentAp = Math.max(0, Math.floor(row.attention));
+  const suggestedAp = Math.max(0, STABLE_AP_RUNWAY_TARGET - currentAp);
+  const suggestedMemo = `AP support: restore ${name} to ${STABLE_AP_RUNWAY_TARGET} AP runway.`;
+
+  if (suggestedAp <= 0) {
+    return {
+      tone: 'ok',
+      title: 'No AP grant needed',
+      detail: `${name} is at ${currentAp.toLocaleString()} AP, at or above the ${STABLE_AP_RUNWAY_TARGET} AP stable runway target.`,
+      suggestedAp: 0,
+      suggestedMemo: `AP stable: no support grant needed for ${name}.`,
+      actionLabel: 'Keep watching',
+    };
+  }
+
+  if (currentAp <= 0) {
+    return {
+      tone: 'fail',
+      title: `Grant ${suggestedAp.toLocaleString()} AP to restart action`,
+      detail: `Resident is at 0 AP; grant enough to reach the ${STABLE_AP_RUNWAY_TARGET} AP stable runway target.`,
+      suggestedAp,
+      suggestedMemo,
+      actionLabel: `Use ${suggestedAp.toLocaleString()} AP`,
+    };
+  }
+
+  return {
+    tone: currentAp <= SHORT_AP_RUNWAY_THRESHOLD ? 'warn' : 'ok',
+    title: `Grant ${suggestedAp.toLocaleString()} AP to restore runway`,
+    detail: `${name} has ${currentAp.toLocaleString()} AP; this restores the resident to the ${STABLE_AP_RUNWAY_TARGET} AP stable runway target.`,
+    suggestedAp,
+    suggestedMemo,
+    actionLabel: `Use ${suggestedAp.toLocaleString()} AP`,
+  };
 }
 
 export function residentAttentionRunway(row: ResidentDashboardRow): ResidentAttentionRunway {
