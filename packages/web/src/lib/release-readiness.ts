@@ -386,6 +386,7 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Inspect low-health recovery')) return 'Inspect recovery';
   if (action.startsWith('Fix failing normal-life audit')) return 'Fix audit';
   if (action.startsWith('Run or sync a CQA10 normal-life audit')) return 'Run audit';
+  if (action.startsWith('Inspect top stuck-churn residents')) return 'Inspect stuck churn';
   if (action.startsWith('Capture organic AP/GP recurrence evidence')) return 'Prove organic AP/GP';
   if (action.startsWith('Capture ordinary trade closure evidence')) return 'Prove trade closure';
   if (action.startsWith('Use the latest normal-life audit caveat')) return 'Use caveat';
@@ -417,6 +418,7 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.label === 'Confirm stack') return 25;
   if (action.label === 'Fix audit') return 28;
   if (action.label === 'Run audit') return 29;
+  if (action.label === 'Inspect stuck churn') return 31;
   if (action.label === 'Prove organic AP/GP') return 32;
   if (action.label === 'Prove trade closure') return 33;
   if (action.label === 'Use caveat') return 35;
@@ -982,7 +984,13 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'no audit') actions.push('Run or sync a CQA10 normal-life audit before claiming resident recurrence.');
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'controlled only') actions.push('Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.');
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'trade gap') actions.push('Capture ordinary trade closure evidence before claiming full AP/GP social loop.');
-  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'watch') actions.push('Use the latest normal-life audit caveat when describing AP/GP recurrence and stuck recovery.');
+  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'watch') {
+    actions.push('Use the latest normal-life audit caveat when describing AP/GP recurrence and stuck recovery.');
+    const stuckResidents = topStuckChurnResidents(byId.get('normal-life')?.detail || '');
+    if (stuckResidents.length > 0) {
+      actions.push(`Inspect top stuck-churn residents (${stuckResidents.join(', ')}) before the next normal-life recurrence claim.`);
+    }
+  }
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
   const economyTransport = byId.get('economy-transport');
@@ -1009,6 +1017,19 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   }
   if (byId.get('ncri-print')?.tone === 'warn') actions.push('Assign blocked print queue entries or avoid the print queue during the demo.');
   return actions.length ? actions : ['Keep the controller running and capture fresh screenshots/logs before a public demo.'];
+}
+
+function topStuckChurnResidents(detail: string): string[] {
+  const summaryMatch = detail.match(/Top stuck churn:\s*([^.]*)/i);
+  if (!summaryMatch?.[1]) return [];
+  const residents: string[] = [];
+  for (const chunk of summaryMatch[1].split(',')) {
+    const nameMatch = chunk.trim().match(/^([a-z0-9:-]+)\s+\d+/i);
+    if (!nameMatch?.[1]) continue;
+    residents.push(nameMatch[1]);
+    if (residents.length >= 3) break;
+  }
+  return residents;
 }
 
 function residentActionOutcomeFailed(row: ResidentDashboardRow): boolean {

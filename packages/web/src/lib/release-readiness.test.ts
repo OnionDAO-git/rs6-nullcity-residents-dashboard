@@ -725,6 +725,41 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('adds a dedicated stuck-churn action when normal-life audit includes top offenders', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks().map(run => run.task?.id === 'normal-life-audit'
+        ? normalLifeBenchmark({
+          runId: 'normal_life_audit_20260531T111938Z',
+          metrics: {
+            totalActionAttempts: 6914,
+            successfulActionSubmissions: 6914,
+            failedActionSubmissions: 0,
+            cause_low_health_heal_wait: 0,
+            timeline_city_ap_gp_exchange: 0,
+            timeline_trade_completed: 0,
+            timeline_stuck_detected: 542,
+            timeline_stuck_recovered: 435,
+          },
+          evidenceSummaries: [
+            'normal-life audit: 23 active residents, 6914/6914 actions, low-health waits 0, AP/GP exchanges 0, stuck recovered 435/542',
+            'top stuck churn: qa-trader 122 (61 detected/61 recovered), agent 119 (64 detected/55 recovered), qa-social 117 (62 detected/55 recovered)',
+          ],
+        })
+        : run),
+      nowMs: Date.parse('2026-05-31T11:22:00.000Z'),
+    });
+
+    expect(summary.nextActions).toContain('Inspect top stuck-churn residents (qa-trader, agent, qa-social) before the next normal-life recurrence claim.');
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Inspect stuck churn',
+      tone: 'warn',
+      detail: 'Inspect top stuck-churn residents (qa-trader, agent, qa-social) before the next normal-life recurrence claim.',
+    });
+  });
+
   test('surfaces controlled-only AP/GP recurrence as a dedicated normal-life watch item', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],
