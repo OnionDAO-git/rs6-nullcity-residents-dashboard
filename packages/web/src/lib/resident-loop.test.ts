@@ -475,7 +475,7 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'warn', summary: 'No grounded Storyteller events for this resident.' },
     });
 
-    expect(lines).toHaveLength(11);
+    expect(lines).toHaveLength(12);
     expect(lines.map(line => line.label)).toEqual([
       'Moment',
       'Need',
@@ -484,6 +484,7 @@ describe('resident loop helpers', () => {
       'Stack',
       'Plan',
       'Action',
+      'Goal Link',
       'Memory',
       'Proof',
       'Warnings',
@@ -507,6 +508,12 @@ describe('resident loop helpers', () => {
     expect(lines.find(line => line.label === 'Warnings')).toMatchObject({
       text: '1 fail · 2 warn · top Resident is offline in the live controller snapshot.',
       tone: 'fail',
+    });
+    expect(lines.find(line => line.label === 'Goal Link')).toMatchObject({
+      text: 'plan cause only · Thinking recorded evidence record failed, but latest action lacks an action cause for "Master woodcutting and supply the city with logs."',
+      tone: 'warn',
+      limit: 84,
+      priority: 'secondary',
     });
     expect(lines.find(line => line.label === 'Stack')).toMatchObject({
       text: 'openrouter/haiku | standard@0.3.0',
@@ -858,6 +865,45 @@ describe('resident loop helpers', () => {
       { key: 'speech', label: 'Speech', value: 'Trading once I have item 995.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
       { key: 'story', label: 'Story', value: 'city_attention_credit @ 2048', detail: 'latest Library/Storyteller signal | tick 2048 (current)', tone: 'ok' },
     ]);
+  });
+
+  test('links the latest action cause to the active goal in resident proof surfaces', () => {
+    const resident = row({
+      attention: 52,
+      thinking: { mode: 'executing', activePlan: 'Earn GP to keep AP above the floor' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 2048 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } },
+        feed: {
+          attached: true,
+          tick: 2048,
+          ageMs: 5000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 2 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'The resident is turning patron support into visible progress.',
+        latestEventKind: 'city_attention_credit',
+        latestEventTick: 2048,
+      },
+    });
+
+    expect(residentRosterScanLines(resident).find(line => line.label === 'Goal Link')).toMatchObject({
+      text: 'action tied to AP/GP goal · picked up coin-995 is tied to AP/GP goal for "Earn GP to keep AP above the floor"',
+      tone: 'ok',
+      limit: 84,
+      priority: 'secondary',
+    });
+
+    expect(residentLivenessDetail(resident).facts.find(fact => fact.label === 'Goal Link')).toMatchObject({
+      value: 'action tied to AP/GP goal',
+      detail: 'picked up coin-995 is tied to AP/GP goal for "Earn GP to keep AP above the floor"',
+      tone: 'ok',
+    });
   });
 
   test('marks missing loop checkpoints as warning signals', () => {
@@ -2309,7 +2355,7 @@ describe('resident loop helpers', () => {
       nextAction: 'Keep watching',
       nextTarget: 'Resident Intent',
     });
-    expect(detail.facts.map(fact => fact.label)).toEqual(['AP runway', 'GP proof', 'Stack', 'Plan', 'Action', 'Speech', 'Story', 'Memory']);
+    expect(detail.facts.map(fact => fact.label)).toEqual(['AP runway', 'GP proof', 'Stack', 'Plan', 'Action', 'Goal Link', 'Speech', 'Story', 'Memory']);
     expect(detail.facts.find(fact => fact.label === 'GP proof')).toMatchObject({
       value: '42 GP',
       tone: 'ok',

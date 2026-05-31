@@ -231,6 +231,12 @@ interface ResidentRecoveryWaitSignal {
   tone: 'warn';
 }
 
+type ResidentGoalActionLinkFact = ResidentLoopFact & {
+  label: 'Goal Link';
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+};
+
 export interface ResidentIntentSignals {
   goalContract?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
   economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
@@ -685,6 +691,69 @@ export function residentCauseSignal(row: ResidentDashboardRow): ResidentCauseSig
   };
 }
 
+function residentGoalActionLink(row: ResidentDashboardRow): ResidentGoalActionLinkFact {
+  const plan = row.thinking?.activePlan?.trim();
+  const action = row.body?.lastAction;
+  const actionKind = action?.kind || row.lastEvent?.kind;
+  const actionOutcome = residentActionOutcome(row);
+
+  if (!plan) {
+    return {
+      label: 'Goal Link',
+      value: 'no live goal',
+      detail: 'No active plan is visible to compare with the latest action.',
+      tone: 'warn',
+    };
+  }
+
+  const planLabel = `"${truncateAgencyText(plan, 72)}"`;
+  if (!actionKind) {
+    return {
+      label: 'Goal Link',
+      value: 'no action proof',
+      detail: `No latest action is visible for ${planLabel}`,
+      tone: 'warn',
+    };
+  }
+
+  if (actionOutcome.failed) {
+    return {
+      label: 'Goal Link',
+      value: 'action repair',
+      detail: `Latest ${actionKind} returned ${actionOutcome.outcome.replace(/^latest action\s+/i, '')} while working on ${planLabel}`,
+      tone: 'fail',
+    };
+  }
+
+  const rawCause = action?.cause || action?.ruleId;
+  if (rawCause) {
+    const cause = readableRawCause(rawCause, actionKind);
+    return {
+      label: 'Goal Link',
+      value: `action tied to ${cause.value}`,
+      detail: `${friendlyActionLabel(actionKind, row)} is tied to ${cause.value} for ${planLabel}`,
+      tone: 'ok',
+    };
+  }
+
+  const inferenceCause = row.thinking?.lastInferenceCause?.trim();
+  if (inferenceCause) {
+    return {
+      label: 'Goal Link',
+      value: 'plan cause only',
+      detail: `Thinking recorded ${readableCauseToken(inferenceCause)}, but latest action lacks an action cause for ${planLabel}`,
+      tone: 'warn',
+    };
+  }
+
+  return {
+    label: 'Goal Link',
+    value: 'action visible',
+    detail: `Latest ${friendlyActionLabel(actionKind, row)} is visible, but no action cause links it to ${planLabel}`,
+    tone: 'warn',
+  };
+}
+
 export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): ResidentLoopFact[] {
   const online = Math.max(0, pulse.online);
   const denominator = online > 0 ? `/${online}` : '';
@@ -880,6 +949,7 @@ export function residentRosterScanLines(
   const warnings = residentOperatorWarnings(row, signals.benchmark, { economyGp: signals.economyGp });
   const warning = warnings[0] || residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
   const warningDensity = residentWarningDensityLine(warnings);
+  const goalActionLink = residentGoalActionLink(row);
 
   return [
     {
@@ -929,6 +999,13 @@ export function residentRosterScanLines(
       text: loopSignal.action,
       tone: actionCheckpoint?.tone || 'warn',
       limit: 60,
+      priority: 'secondary',
+    },
+    {
+      label: 'Goal Link',
+      text: `${goalActionLink.value} · ${goalActionLink.detail}`,
+      tone: goalActionLink.tone,
+      limit: 84,
       priority: 'secondary',
     },
     {
@@ -1672,6 +1749,7 @@ export function residentLivenessDetail(
   const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
   const checkpoints = residentLoopCheckpoints(row);
   const memory = residentMemoryFreshness(row);
+  const goalActionLink = residentGoalActionLink(row);
 
   const checkpointFact = (key: ResidentLoopCheckpoint['key']): ResidentLoopFact => {
     const checkpoint = checkpoints.find(item => item.key === key);
@@ -1699,6 +1777,7 @@ export function residentLivenessDetail(
       residentStackFact(row),
       checkpointFact('plan'),
       checkpointFact('action'),
+      goalActionLink,
       checkpointFact('speech'),
       checkpointFact('story'),
       { label: 'Memory', value: memory.label, detail: `${memory.summary}; ${memory.detail}`, tone: memory.tone },
