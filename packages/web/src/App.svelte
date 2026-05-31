@@ -14,6 +14,7 @@
   import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
+    residentAgencyCue,
     residentGuestTrailFacts,
     residentGuestTrailPulse,
     residentIntelligenceFacts,
@@ -4227,6 +4228,12 @@
         {/if}
       </div>
       {#if cityResident}
+        {@const agencyCue = residentAgencyCue(cityResident, {
+          benchmark: cityResidentBenchmarkStatus,
+          economyGp: cityResidentEconomyGpEvidence,
+          goalContract: cityResidentGoalContract,
+          storyteller: cityResidentStorySignal,
+        })}
         <div class="city-panel span-2">
           <div class="row">
             <div class="panel-title">Resident Intelligence Loop</div>
@@ -4242,7 +4249,7 @@
           <div class="panel-title">Resident Intent</div>
           {@render ResidentLoopFactGrid({ facts: residentIntentFacts(cityResident, { goalContract: cityResidentGoalContract, storyteller: cityResidentStorySignal }) })}
           <div class="city-empty-state subtle">
-            <strong>{selectedCityResidentDisplay()} in one glance</strong>
+            <strong>{agencyCue.summary}</strong>
             <span>Intent, support need, action, speech, and Library memory are read-only dashboard signals.</span>
           </div>
         </div>
@@ -5107,12 +5114,14 @@
       {@const economyGp = residentLiveEconomyGpEvidence(cityLiveEconomy, row.name)}
       {@const warning = residentPrimaryWarning(row, benchmark, { economyGp })}
       {@const pulse = residentProofPulse(row, { benchmark, economyGp, storyteller: storySignal })}
+      {@const agencyCue = residentAgencyCue(row, { benchmark, economyGp, storyteller: storySignal })}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
         <small>
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
         </small>
+        <small class={`city-resident-loop-line tone-${agencyCue.tone}`}>{residentLoopLine(agencyCue.summary, 92)}</small>
         <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
         <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(planCheckpoint?.value || '-', 72)}</small>
         <small class={`city-resident-loop-line tone-${actionCheckpoint?.tone || 'warn'}`}>Action: {residentLoopLine(signal.action, 60)}</small>

@@ -42,6 +42,11 @@ export interface ResidentProofPulse {
   detail: string;
 }
 
+export interface ResidentAgencyCue {
+  tone: 'ok' | 'warn' | 'fail';
+  summary: string;
+}
+
 export interface ResidentProofRollupAction {
   label: string;
   tone: 'warn' | 'fail';
@@ -263,6 +268,37 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
       tone: signals.storyteller?.tone || (row.storyArc ? 'ok' : 'warn'),
     },
   ];
+}
+
+export function residentAgencyCue(row: ResidentDashboardRow, signals: ResidentProofPulseSignals = {}): ResidentAgencyCue {
+  const actionOutcome = residentActionOutcome(row);
+  const gpObserved = residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok';
+  const storyObserved = Boolean(row.storyArc?.summary || row.storyArc?.latestEventKind || signals.storyteller?.tone === 'ok');
+  const planLive = Boolean(row.thinking?.activePlan?.trim());
+  const workingOn = !row.online
+    ? 'Waiting for reconnect'
+    : planLive
+      ? `Working on "${truncateAgencyText(residentGoalLabel(row), 72)}"`
+      : 'Working on publishing a plan';
+  const just = residentAgencyActionLabel(row);
+  const need = !row.online
+    ? { tone: 'fail' as const, label: 'needs reconnect' }
+    : actionOutcome.failed
+      ? { tone: 'fail' as const, label: 'needs action repair' }
+      : residentNeedsAp(row)
+        ? { tone: 'warn' as const, label: 'needs AP support' }
+        : !planLive
+          ? { tone: 'warn' as const, label: 'needs a live plan' }
+          : !gpObserved
+            ? { tone: 'warn' as const, label: 'needs coin-995 proof' }
+            : !storyObserved
+              ? { tone: 'warn' as const, label: 'needs Storyteller proof' }
+              : { tone: 'ok' as const, label: 'needs no immediate operator action' };
+
+  return {
+    tone: need.tone,
+    summary: `${workingOn} · ${just} · ${need.label}`,
+  };
 }
 
 export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): ResidentLoopFact[] {
@@ -804,6 +840,46 @@ function modelParts(row: ResidentDashboardRow): { value: string; detail?: string
 
 function activeModule(row: ResidentDashboardRow): SparkModuleSummary | undefined {
   return row.stack?.activeModule || row.spark?.activeModule || row.stack?.configuredModules?.[0] || row.spark?.modules?.[0];
+}
+
+function residentAgencyActionLabel(row: ResidentDashboardRow): string {
+  const actionKind = row.body?.lastAction?.kind || row.lastEvent?.kind;
+  if (actionKind) {
+    return `just ${friendlyActionLabel(actionKind, row)}`;
+  }
+
+  const speech = recentSpeechSignal(row);
+  if (speech.text !== '-') {
+    return `just said "${truncateAgencyText(speech.text, 52)}"`;
+  }
+
+  return 'no recent action yet';
+}
+
+function friendlyActionLabel(kind: string, row: ResidentDashboardRow): string {
+  const normalized = kind.trim().toLowerCase().replace(/[-\s]+/g, '_');
+  if (normalized === 'pickup_item') {
+    return residentCoinEvidenceAmount(row) > 0 ? 'picked up coin-995' : 'picked up an item';
+  }
+
+  const labels: Record<string, string> = {
+    action: 'acted',
+    attack: 'attacked',
+    chat: 'chatted',
+    cook: 'cooked',
+    eat: 'ate',
+    exchange_gp_for_ap: 'exchanged GP for AP',
+    fish: 'fished',
+    move_to: 'moved',
+    say: 'spoke',
+    trade_with: 'traded',
+  };
+  return labels[normalized] || `did ${normalized.replace(/_/g, ' ')}`;
+}
+
+function truncateAgencyText(value: string, maxLength: number): string {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 1))}...` : normalized;
 }
 
 function residentGoalLabel(row: ResidentDashboardRow): string {

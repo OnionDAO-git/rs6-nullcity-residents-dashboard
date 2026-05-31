@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import {
+  residentAgencyCue,
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
   residentGuestTrailFacts,
@@ -147,6 +148,65 @@ describe('resident loop helpers', () => {
       { label: 'Said', value: 'I need AP, but coin 995 is nearby.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
       { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'City dispatch cited this resident.', tone: 'ok' },
     ]);
+  });
+
+  test('builds a compact agency cue from plan, action, and proof signals', () => {
+    expect(residentAgencyCue(row({
+      attention: 52,
+      thinking: { mode: 'executing', activePlan: 'Earn GP to keep AP above the floor' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 2048 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } },
+        feed: {
+          attached: true,
+          tick: 2048,
+          ageMs: 5000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 2 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'The resident is turning patron support into visible progress.',
+        latestEventKind: 'city_attention_credit',
+        latestEventTick: 2048,
+      },
+    }))).toEqual({
+      tone: 'ok',
+      summary: 'Working on "Earn GP to keep AP above the floor" · just picked up coin-995 · needs no immediate operator action',
+    });
+  });
+
+  test('prioritizes AP support in the agency cue before softer proof gaps', () => {
+    expect(residentAgencyCue(row({
+      attention: 2,
+      thinking: { mode: 'executing', activePlan: 'Earn GP to fund AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'say', result: 'success', source: 'thinking', tick: 2100 },
+      },
+    }))).toEqual({
+      tone: 'warn',
+      summary: 'Working on "Earn GP to fund AP" · just spoke · needs AP support',
+    });
+  });
+
+  test('raises failed action repair ahead of steady resident needs', () => {
+    expect(residentAgencyCue(row({
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Finish a safe combat action' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'attack', result: 'failed', source: 'body', tick: 512 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 11 }] } },
+      },
+      storyArc: { phase: 'progress', summary: 'Combat route under test.', latestEventKind: 'combat_started', latestEventTick: 512 },
+    }))).toEqual({
+      tone: 'fail',
+      summary: 'Working on "Finish a safe combat action" · just attacked · needs action repair',
+    });
   });
 
   test('builds resident loop checkpoints with tone and details for operator triage', () => {
