@@ -7,6 +7,7 @@ export interface ResidentLoopFact {
   value: string;
   detail?: string | undefined;
   tone?: 'ok' | 'warn' | 'fail' | undefined;
+  path?: string | undefined;
 }
 
 export interface ResidentRosterScanLine {
@@ -896,22 +897,26 @@ export function residentLoopCoverageFacts(
     else proofWarn += 1;
   }
 
+  const apGpPath = apStable < online ? '/residents?triage=attention' : gpVisible < online ? '/residents?triage=gp' : undefined;
+
   return [
     coverageCountFact('Stack', stackReady, online, 'complete', 'model, endpoint, and SPARK visible'),
-    coverageCountFact('Goal/action', goalLinked, online, 'linked', 'active goal tied to latest action cause'),
-    coverageCountFact('Speech', speechLive, online, 'live', 'recent say/feed line visible'),
-    coverageCountFact('Story digest', storyCited, online, 'cited', 'resident-specific Storyteller evidence'),
+    coverageCountFact('Goal/action', goalLinked, online, 'linked', 'active goal tied to latest action cause', '/residents?triage=goal-link'),
+    coverageCountFact('Speech', speechLive, online, 'live', 'recent say/feed line visible', '/residents?triage=quiet'),
+    coverageCountFact('Story digest', storyCited, online, 'cited', 'resident-specific Storyteller evidence', '/residents?triage=story'),
     coverageFact(
       'AP/GP',
       `${apStable.toLocaleString()}/${online.toLocaleString()} AP · ${gpVisible.toLocaleString()}/${online.toLocaleString()} GP`,
       'AP runway stable and coin-995/economy GP proof visible',
       apStable === online && gpVisible === online ? 'ok' : 'warn',
+      apGpPath,
     ),
     coverageFact(
       'Capability warnings',
       `${proofClear.toLocaleString()}/${online.toLocaleString()} clear`,
       `${proofFail.toLocaleString()} fail · ${proofWarn.toLocaleString()} warn from proof pulse`,
       proofFail > 0 ? 'fail' : proofWarn > 0 ? 'warn' : 'ok',
+      '/residents?triage=benchmark',
     ),
   ];
 }
@@ -922,12 +927,15 @@ function coverageCountFact(
   total: number,
   noun: string,
   detail: string,
+  path?: string,
 ): ResidentLoopFact {
+  const tone = count === total ? 'ok' : 'warn';
   return coverageFact(
     label,
     `${count.toLocaleString()}/${total.toLocaleString()} ${noun}`,
     detail,
-    count === total ? 'ok' : 'warn',
+    tone,
+    tone === 'ok' ? undefined : path,
   );
 }
 
@@ -936,8 +944,9 @@ function coverageFact(
   value: string,
   detail: string,
   tone: NonNullable<ResidentLoopFact['tone']>,
+  path?: string,
 ): ResidentLoopFact {
-  return { label, value, detail, tone };
+  return { label, value, detail, tone, ...(path ? { path } : {}) };
 }
 
 export function residentNormalLifeAuditSignal(runs: BenchmarkArtifactSummary[]): ResidentNormalLifeAuditSignal {
@@ -1929,6 +1938,8 @@ export function residentLoopCoverageStrip(
   const warnings = residentOperatorWarnings(row, signals.benchmark, { economyGp: signals.economyGp });
   const warningDensity = residentWarningDensityLine(warnings);
   const capabilityTone = signals.benchmark?.tone || warningDensity.tone;
+  const goalActionTone = worstTone(plan?.tone || 'warn', actionOutcome.failed ? 'fail' : actionOutcome.ok ? 'ok' : 'warn');
+  const apGpTone = worstTone(ap.tone, gp.tone);
 
   return [
     residentStackFact(row),
@@ -1936,31 +1947,36 @@ export function residentLoopCoverageStrip(
       label: 'Goal/Action',
       value: plan?.value || '-',
       detail: [action, actionDetailWithoutCause(row)].filter(Boolean).join(' | '),
-      tone: worstTone(plan?.tone || 'warn', actionOutcome.failed ? 'fail' : actionOutcome.ok ? 'ok' : 'warn'),
+      tone: goalActionTone,
+      ...(goalActionTone === 'ok' ? {} : { path: actionOutcome.failed ? '/residents?triage=action' : plan?.tone !== 'ok' ? '/residents?triage=plan' : '/residents?triage=goal-link' }),
     },
     {
       label: 'Speech',
       value: speech?.value || '-',
       detail: speech?.detail || 'no recent speech in feed',
       tone: speech?.tone || 'warn',
+      ...((speech?.tone || 'warn') === 'ok' ? {} : { path: '/residents?triage=quiet' }),
     },
     {
       label: 'Story Digest',
       value: signals.storyteller?.summary || story?.value || '-',
       detail: signals.storyteller?.detail || story?.detail || 'no Storyteller digest signal loaded',
       tone: signals.storyteller?.tone || story?.tone || 'warn',
+      ...((signals.storyteller?.tone || story?.tone || 'warn') === 'ok' ? {} : { path: '/residents?triage=story' }),
     },
     {
       label: 'AP/GP',
       value: `${ap.value} / ${gp.value}`,
       detail: `${ap.detail} | ${gp.detail}`,
-      tone: worstTone(ap.tone, gp.tone),
+      tone: apGpTone,
+      ...(apGpTone === 'ok' ? {} : { path: ap.tone !== 'ok' ? '/residents?triage=attention' : '/residents?triage=gp' }),
     },
     {
       label: 'Capability',
       value: signals.benchmark?.summary || (warningDensity.tone === 'ok' ? 'No active warnings' : warningDensity.text),
       detail: signals.benchmark?.detail || warningDensity.text,
       tone: capabilityTone,
+      ...(capabilityTone === 'ok' ? {} : { path: '/residents?triage=benchmark' }),
     },
   ];
 }

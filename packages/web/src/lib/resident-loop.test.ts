@@ -574,11 +574,11 @@ describe('resident loop helpers', () => {
         }
     ))).toEqual([
       { label: 'Stack', value: '1/2 complete', detail: 'model, endpoint, and SPARK visible', tone: 'warn' },
-      { label: 'Goal/action', value: '1/2 linked', detail: 'active goal tied to latest action cause', tone: 'warn' },
-      { label: 'Speech', value: '1/2 live', detail: 'recent say/feed line visible', tone: 'warn' },
-      { label: 'Story digest', value: '1/2 cited', detail: 'resident-specific Storyteller evidence', tone: 'warn' },
-      { label: 'AP/GP', value: '1/2 AP · 1/2 GP', detail: 'AP runway stable and coin-995/economy GP proof visible', tone: 'warn' },
-      { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn' },
+      { label: 'Goal/action', value: '1/2 linked', detail: 'active goal tied to latest action cause', tone: 'warn', path: '/residents?triage=goal-link' },
+      { label: 'Speech', value: '1/2 live', detail: 'recent say/feed line visible', tone: 'warn', path: '/residents?triage=quiet' },
+      { label: 'Story digest', value: '1/2 cited', detail: 'resident-specific Storyteller evidence', tone: 'warn', path: '/residents?triage=story' },
+      { label: 'AP/GP', value: '1/2 AP · 1/2 GP', detail: 'AP runway stable and coin-995/economy GP proof visible', tone: 'warn', path: '/residents?triage=attention' },
+      { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn', path: '/residents?triage=benchmark' },
     ]);
   });
 
@@ -2683,6 +2683,7 @@ describe('resident loop helpers', () => {
       value: 'Capability proof stale',
       detail: 'run is older than target window',
       tone: 'warn',
+      path: '/residents?triage=benchmark',
     });
   });
 
