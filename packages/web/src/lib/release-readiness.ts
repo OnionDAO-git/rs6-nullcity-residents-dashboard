@@ -2,6 +2,7 @@ import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-d
 import type { StorytellerDigestSummary } from './api';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
 import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp } from './resident-loop';
+import { storytellerGroundingAudit } from './resident-story';
 
 export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
 export type ReleaseReadinessTone = 'ok' | 'warn' | 'fail';
@@ -463,6 +464,19 @@ function storytellerCheck(
     };
   }
 
+  const audit = storytellerGroundingAudit(digest);
+  if (audit.missingRefs.length > 0) {
+    const names = audit.missingRefs.slice(0, 3).join(', ');
+    const overflow = audit.missingRefs.length > 3 ? `, and ${(audit.missingRefs.length - 3).toLocaleString()} more` : '';
+    return {
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: `${audit.missingRefs.length.toLocaleString()} missing ref${audit.missingRefs.length === 1 ? '' : 's'}`,
+      detail: `Latest Storyteller dispatch cites refs missing from digest top events: ${names}${overflow}.`,
+    };
+  }
+
   const needsReview = Boolean(digest.dispatch?.needsReview || (digest.dispatch?.warningCount ?? 0) > 0);
   const stale = ageMinutes !== undefined && ageMinutes * 60 * 1000 > STORYTELLER_STALE_MS;
   if (needsReview || stale) {
@@ -566,6 +580,8 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('storyteller')?.tone === 'warn') {
     if (byId.get('storyteller')?.value.includes('pending review')) {
       actions.push('Review and clear pending Storyteller dispatches before using public canon narration.');
+    } else if (byId.get('storyteller')?.value.includes('missing ref')) {
+      actions.push('Review Storyteller grounding audit before using public canon narration.');
     } else {
       actions.push('Run or review Storyteller before using public canon narration.');
     }

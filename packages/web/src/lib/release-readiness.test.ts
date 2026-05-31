@@ -30,7 +30,26 @@ function digest(overrides: Partial<StorytellerDigestSummary> = {}): StorytellerD
     builtAt: '2026-05-30T09:00:00.000Z',
     topEventCount: 2,
     residentCount: 1,
-    topEvents: [],
+    topEvents: [
+      {
+        ref: 'e1',
+        kind: 'city_attention_credit',
+        residentName: 'res:hans',
+        ts: '2026-05-30T08:58:00.000Z',
+        note: 'AP grant',
+        importance: 'high',
+        evidenceLabels: ['ap=50'],
+      },
+      {
+        ref: 'e2',
+        kind: 'city_ap_gp_exchange',
+        residentName: 'res:hans',
+        ts: '2026-05-30T08:59:00.000Z',
+        note: 'GP traded for AP',
+        importance: 'medium',
+        evidenceLabels: ['gp=25', 'ap=50'],
+      },
+    ],
     dispatch: {
       dispatchId: 'dispatch-1',
       generatedAt: '2026-05-30T09:00:00.000Z',
@@ -373,6 +392,48 @@ describe('buildReleaseReadiness', () => {
       value: '2',
       tone: 'warn',
     });
+  });
+
+  test('warns when the latest Storyteller dispatch cites refs missing from top events', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest({
+        topEvents: [{
+          ref: 'e1',
+          kind: 'city_attention_credit',
+          residentName: 'res:hans',
+          ts: '2026-05-30T09:00:00.000Z',
+          note: 'AP grant',
+          importance: 'high',
+          evidenceLabels: ['ap=50'],
+        }],
+        dispatch: {
+          dispatchId: 'dispatch-missing-ref',
+          generatedAt: '2026-05-30T09:05:00.000Z',
+          modelProfile: 'default',
+          needsReview: false,
+          warningCount: 0,
+          publicBullets: [],
+          operatorWarnings: [],
+          reviewReasons: [],
+          eventRefCount: 2,
+          eventRefsUsed: ['e1', 'ghost-ref'],
+        },
+      })],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'storyteller')).toEqual({
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: '1 missing ref',
+      detail: 'Latest Storyteller dispatch cites refs missing from digest top events: ghost-ref.',
+    });
+    expect(summary.nextActions).toContain('Review Storyteller grounding audit before using public canon narration.');
   });
 
   test('mentions overflow when more than three residents have failed latest actions', () => {
