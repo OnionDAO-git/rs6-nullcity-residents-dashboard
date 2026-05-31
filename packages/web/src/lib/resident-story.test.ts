@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -574,6 +574,45 @@ describe('storytellerReviewDensity', () => {
       detail: '1 uncited top event remains available for operator context.',
       chips: ['1 matched', '0 missing', '1 uncited', '0 review signals'],
     });
+  });
+});
+
+describe('storytellerRunListPressureLine', () => {
+  test('turns review density into a compact run-list line', () => {
+    expect(storytellerRunListPressureLine(digest({
+      dispatch: {
+        dispatchId: 'dispatch-run-list-pressure',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 2,
+        publicBullets: [],
+        operatorWarnings: ['unknown ref cited'],
+        reviewReasons: ['missing_ref'],
+        eventRefCount: 2,
+        eventRefsUsed: ['e1', 'ghost'],
+        estimatedCostUsd: null,
+      },
+    }))).toBe('Review load: 4 signals · 1 matched · 1 missing · 1 uncited · 2 warnings · 1 review reason');
+  });
+
+  test('keeps ready and dry-run pressure lines short enough for run cards', () => {
+    expect(storytellerRunListPressureLine(digest({
+      dispatch: {
+        dispatchId: 'dispatch-ready-run-list',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 0,
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: [],
+        eventRefCount: 1,
+        eventRefsUsed: ['e1'],
+        estimatedCostUsd: null,
+      },
+    }))).toBe('Ready: 1/2 top events cited · 1 matched · 0 missing · 1 uncited · 0 review signals');
+    expect(storytellerRunListPressureLine(digest())).toBe('Dry-run: 2 grounded events await dispatch · 0 matched · 0 missing · 2 uncited · dry-run');
   });
 });
 

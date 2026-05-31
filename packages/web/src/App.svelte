@@ -53,7 +53,7 @@
     type ResidentTriageBucketKey,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -3927,6 +3927,7 @@
             <span class={`tag ${status.tone}`}>{digest.queue === 'canon' ? 'canon' : digest.queue === 'review' ? 'review' : status.label}</span>
             <strong>{digest.dispatch?.publicTitle || digest.digestId}</strong>
             <small>{digest.queue || 'dry-run'} · {digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
+            <small class="city-run-pressure-line">{storytellerRunListPressureLine(digest)}</small>
           </button>
         {:else}
           <div class="city-empty-state">

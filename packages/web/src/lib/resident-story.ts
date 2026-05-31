@@ -397,6 +397,11 @@ export function storytellerReviewDensity(digest: StorytellerDigestSummary): Stor
   };
 }
 
+export function storytellerRunListPressureLine(digest: StorytellerDigestSummary): string {
+  const density = storytellerReviewDensity(digest);
+  return [density.headline, ...density.chips].join(' · ');
+}
+
 function residentMatches(wanted: string, residentName: string | undefined): boolean {
   if (!residentName) return false;
   return normalizeResident(residentName) === wanted;

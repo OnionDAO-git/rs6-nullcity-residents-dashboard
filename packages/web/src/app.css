@@ -2090,6 +2090,12 @@ pre {
   white-space: nowrap;
 }
 
+.city-card-list .city-run-pressure-line {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .city-record-list article {
   grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
 }
