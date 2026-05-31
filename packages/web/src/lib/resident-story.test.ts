@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -516,6 +516,63 @@ describe('storytellerGroundingAudit', () => {
       summary: '0 dispatch refs match top events; no top events selected; review signals present.',
       warningCount: 2,
       reviewReasonCount: 1,
+    });
+  });
+});
+
+describe('storytellerReviewDensity', () => {
+  test('keeps dry-run density copy readable while dispatch review is pending', () => {
+    expect(storytellerReviewDensity(digest())).toEqual({
+      tone: 'warn',
+      headline: 'Dry-run: 2 grounded events await dispatch',
+      detail: 'No dispatch refs to audit yet; 2 top events are available across 1 resident.',
+      chips: ['0 matched', '0 missing', '2 uncited', 'dry-run'],
+    });
+  });
+
+  test('summarizes review-heavy dispatches as compact operator pressure', () => {
+    expect(storytellerReviewDensity(digest({
+      dispatch: {
+        dispatchId: 'dispatch-review-density',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 2,
+        publicBullets: [],
+        operatorWarnings: ['unknown ref cited'],
+        reviewReasons: ['missing_ref'],
+        eventRefCount: 2,
+        eventRefsUsed: ['e1', 'ghost'],
+        estimatedCostUsd: null,
+      },
+    }))).toEqual({
+      tone: 'warn',
+      headline: 'Review load: 4 signals',
+      detail: '1 missing dispatch ref, 2 warnings, and 1 review reason across 2 dispatch refs and 2 top events.',
+      chips: ['1 matched', '1 missing', '1 uncited', '2 warnings', '1 review reason'],
+    });
+  });
+
+  test('summarizes ready dispatch density without turning uncited top events into blockers', () => {
+    expect(storytellerReviewDensity(digest({
+      dispatch: {
+        dispatchId: 'dispatch-ready-density',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 0,
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: [],
+        eventRefCount: 1,
+        eventRefsUsed: ['e1'],
+        estimatedCostUsd: null,
+      },
+    }))).toEqual({
+      tone: 'ok',
+      headline: 'Ready: 1/2 top events cited',
+      detail: '1 uncited top event remains available for operator context.',
+      chips: ['1 matched', '0 missing', '1 uncited', '0 review signals'],
     });
   });
 });

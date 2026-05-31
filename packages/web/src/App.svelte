@@ -53,7 +53,7 @@
     type ResidentTriageBucketKey,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -3946,6 +3946,7 @@
       {#if cityStoryDigest}
         {@const selectedStoryStatus = storytellerDigestStatus(cityStoryDigest)}
         {@const selectedStoryAudit = storytellerGroundingAudit(cityStoryDigest)}
+        {@const selectedStoryDensity = storytellerReviewDensity(cityStoryDigest)}
         {@const selectedStoryPreview = storytellerLatestPreview(cityStoryDigest)}
         <div class="city-resident-profile-grid">
           <span><small>Run</small><strong>{cityStoryDigest.runId}</strong></span>
@@ -3959,6 +3960,21 @@
           <span><small>Status</small><strong>{selectedStoryStatus.label}</strong></span>
         </div>
         <div class={`notice ${selectedStoryStatus.tone === 'warn' ? 'amber' : ''}`}>{selectedStoryStatus.summary}</div>
+        <div class={`city-review-block story-review-density tone-${selectedStoryDensity.tone}`}>
+          <div class="row">
+            <div>
+              <div class="panel-title">Review Density</div>
+              <strong>{selectedStoryDensity.headline}</strong>
+            </div>
+            <span class={`tag ${selectedStoryDensity.tone}`}>{selectedStoryDensity.tone}</span>
+          </div>
+          <small>{selectedStoryDensity.detail}</small>
+          <div class="story-evidence-list" aria-label="Storyteller review density">
+            {#each selectedStoryDensity.chips as chip}
+              <span>{chip}</span>
+            {/each}
+          </div>
+        </div>
         <div class={`city-copy-block story-latest-preview tone-${selectedStoryPreview.tone}`}>
           <div class="row">
             <div>

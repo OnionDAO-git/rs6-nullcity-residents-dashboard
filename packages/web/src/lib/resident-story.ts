@@ -44,6 +44,13 @@ export interface StorytellerGroundingAudit {
   reviewReasonCount: number;
 }
 
+export interface StorytellerReviewDensity {
+  tone: 'ok' | 'warn';
+  headline: string;
+  detail: string;
+  chips: string[];
+}
+
 export interface StorytellerLatestPreview {
   tone: 'ok' | 'warn';
   source: 'dispatch' | 'events' | 'summary' | 'empty';
@@ -332,6 +339,64 @@ export function storytellerGroundingAudit(digest: StorytellerDigestSummary): Sto
   };
 }
 
+export function storytellerReviewDensity(digest: StorytellerDigestSummary): StorytellerReviewDensity {
+  const audit = storytellerGroundingAudit(digest);
+  const dispatchRefs = uniqueRefs(digest.dispatch?.eventRefsUsed || []);
+  const topEventTotal = Math.max(digest.topEventCount || 0, digest.topEvents.length);
+  const residentTotal = digest.residentCount || 0;
+
+  if (!digest.dispatch) {
+    return {
+      tone: 'warn',
+      headline: `Dry-run: ${plural(topEventTotal, 'grounded event')} await dispatch`,
+      detail: `${withoutTrailingPeriod(audit.summary)}; ${plural(topEventTotal, 'top event')} ${topEventTotal === 1 ? 'is' : 'are'} available across ${plural(residentTotal, 'resident')}.`,
+      chips: ['0 matched', '0 missing', `${audit.uncitedTopRefs.length.toLocaleString()} uncited`, 'dry-run'],
+    };
+  }
+
+  const reviewSignals =
+    audit.missingRefs.length +
+    audit.warningCount +
+    audit.reviewReasonCount +
+    (digest.dispatch.needsReview ? 1 : 0);
+
+  if (reviewSignals > 0) {
+    const pressure = [
+      audit.missingRefs.length > 0 ? plural(audit.missingRefs.length, 'missing dispatch ref') : '',
+      audit.warningCount > 0 ? plural(audit.warningCount, 'warning') : '',
+      audit.reviewReasonCount > 0 ? plural(audit.reviewReasonCount, 'review reason') : '',
+      digest.dispatch.needsReview ? 'review flag' : '',
+    ].filter(Boolean);
+
+    return {
+      tone: 'warn',
+      headline: `Review load: ${plural(reviewSignals, 'signal')}`,
+      detail: `${joinHumanList(pressure)} across ${plural(dispatchRefs.length, 'dispatch ref')} and ${plural(topEventTotal, 'top event')}.`,
+      chips: [
+        `${audit.citedKnownRefs.length.toLocaleString()} matched`,
+        `${audit.missingRefs.length.toLocaleString()} missing`,
+        `${audit.uncitedTopRefs.length.toLocaleString()} uncited`,
+        `${audit.warningCount.toLocaleString()} warning${audit.warningCount === 1 ? '' : 's'}`,
+        `${audit.reviewReasonCount.toLocaleString()} review reason${audit.reviewReasonCount === 1 ? '' : 's'}`,
+      ],
+    };
+  }
+
+  return {
+    tone: 'ok',
+    headline: `Ready: ${audit.citedKnownRefs.length.toLocaleString()}/${topEventTotal.toLocaleString()} top events cited`,
+    detail: audit.uncitedTopRefs.length > 0
+      ? `${plural(audit.uncitedTopRefs.length, 'uncited top event')} remain${audit.uncitedTopRefs.length === 1 ? 's' : ''} available for operator context.`
+      : 'Every grounded top event is cited by the dispatch.',
+    chips: [
+      `${audit.citedKnownRefs.length.toLocaleString()} matched`,
+      `${audit.missingRefs.length.toLocaleString()} missing`,
+      `${audit.uncitedTopRefs.length.toLocaleString()} uncited`,
+      '0 review signals',
+    ],
+  };
+}
+
 function residentMatches(wanted: string, residentName: string | undefined): boolean {
   if (!residentName) return false;
   return normalizeResident(residentName) === wanted;
@@ -376,6 +441,17 @@ function uniqueRefs(refs: string[]): string[] {
 
 function plural(count: number, singular: string): string {
   return `${count.toLocaleString()} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+function joinHumanList(items: string[]): string {
+  if (items.length === 0) return '0 review signals';
+  if (items.length === 1) return items[0] || '';
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
+}
+
+function withoutTrailingPeriod(value: string): string {
+  return value.trim().replace(/\.$/, '');
 }
 
 function cleanBullets(bullets: string[]): string[] {
