@@ -644,6 +644,62 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('keeps brain-output triage queued when another loop risk is primary', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          name: 'res:mixed-risk',
+          thinking: {
+            mode: 'executing',
+            activePlan: 'Recover health before re-engaging.',
+            latestInference: {
+              t: '2026-05-31T15:53:00.000Z',
+              cause: 'thinking_cancelled:interrupted_by:addressed_by_chat',
+              actions_emitted: 0,
+            },
+          },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+            lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait', tick: 900 },
+          },
+          feed: {
+            attached: true,
+            tick: 900,
+            ageMs: 4_000,
+            nearby: { players: 0, npcs: 1, objects: 4, worldItems: 1 },
+            events: 3,
+            availableActions: 7,
+          },
+          progress: {
+            samples: 4,
+            stuckTicks: 37,
+            latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
+          },
+        }),
+      ],
+      storyDigests: [digest(), dryRunDigest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.checks.find(check => check.id === 'loop')?.value).toBe('1 recovery wait');
+    expect(summary.metrics.recoveryWaitResidents).toBe(1);
+    expect(summary.metrics.inferenceRiskResidents).toBe(1);
+    expect(releaseReadinessActionQueue(summary)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'Inspect recovery',
+        path: '/residents?triage=recovery',
+      }),
+      expect.objectContaining({
+        label: 'Inspect brain output',
+        path: '/residents?triage=inference',
+      }),
+    ]));
+  });
+
   test('watches release readiness when latest actions are not tied to active goals', () => {
     const summary = buildReleaseReadiness({
       residents: [

@@ -165,7 +165,11 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   ];
 
   const blockers = checks.filter(check => check.tone === 'fail').map(check => check.detail);
-  const nextActions = nextActionsFor(checks);
+  const nextActions = nextActionsFor(checks, {
+    recoveryWaitResidents,
+    inferenceRiskResidents,
+    goalLinkGapResidents,
+  });
   const status = blockers.length ? 'blocked' : checks.some(check => check.tone === 'warn') ? 'watch' : 'ready';
 
   return {
@@ -1071,16 +1075,22 @@ function detailFor(status: ReleaseReadinessStatus, checks: ReleaseReadinessCheck
   return `${warningCount.toLocaleString()} signal${warningCount === 1 ? '' : 's'} ${warningCount === 1 ? 'needs' : 'need'} operator attention before relying on the loop live.`;
 }
 
-function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
+interface ResidentLoopRiskCounts {
+  recoveryWaitResidents: number;
+  inferenceRiskResidents: number;
+  goalLinkGapResidents: number;
+}
+
+function nextActionsFor(checks: ReleaseReadinessCheck[], loopRisks: ResidentLoopRiskCounts): string[] {
   const actions: string[] = [];
   const byId = new Map(checks.map(check => [check.id, check]));
   if (byId.get('residents')?.tone === 'fail') actions.push('Start or reconnect the controller before demoing the resident loop.');
   if (byId.get('identity')?.tone === 'warn') actions.push('Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.');
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
   if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
-  if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('recovery wait')) actions.push('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
-  if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('brain output risk')) actions.push('Inspect latest brain inference output in Resident Triage before demoing cognition coverage.');
-  if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('goal link gap')) actions.push('Review residents whose latest action is not tied to the active goal before presenting them as intentional.');
+  if (loopRisks.recoveryWaitResidents > 0) actions.push('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
+  if (loopRisks.inferenceRiskResidents > 0) actions.push('Inspect latest brain inference output in Resident Triage before demoing cognition coverage.');
+  if (loopRisks.goalLinkGapResidents > 0) actions.push('Review residents whose latest action is not tied to the active goal before presenting them as intentional.');
   if (byId.get('normal-life')?.tone === 'fail') actions.push('Fix failing normal-life audit evidence before claiming resident recurrence.');
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'no audit') actions.push('Run or sync a CQA10 normal-life audit before claiming resident recurrence.');
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'controlled only') actions.push('Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.');
