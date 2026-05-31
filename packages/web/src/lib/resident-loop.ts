@@ -660,12 +660,25 @@ export function residentNormalLifeAuditSignal(runs: BenchmarkArtifactSummary[]):
   const successfulActions = auditMetric(latest, 'successfulActionSubmissions') || Math.max(0, totalActions - auditMetric(latest, 'failedActionSubmissions'));
   const failedActions = auditMetric(latest, 'failedActionSubmissions');
   const lowHealthWaits = auditMetric(latest, 'cause_low_health_heal_wait');
-  const apGpExchanges = auditMetric(latest, 'timeline_city_ap_gp_exchange');
-  const tradeClosures = auditMetric(latest, 'timeline_trade_completed');
+  const apGpExchanges = Math.max(
+    auditMetric(latest, 'timeline_city_ap_gp_exchange'),
+    auditMetric(latest, 'recurrence_ap_gp_exchange_events'),
+  );
+  const tradeClosures = Math.max(
+    auditMetric(latest, 'timeline_trade_completed'),
+    auditMetric(latest, 'recurrence_trade_completed'),
+  );
+  const hasApGpBreakdown = hasAuditMetric(latest, 'economy_organic_self_initiated_ap_gp_exchange_events')
+    || hasAuditMetric(latest, 'economy_controlled_ap_gp_exchange_events');
+  const organicApGp = auditMetric(latest, 'economy_organic_self_initiated_ap_gp_exchange_events');
+  const controlledApGp = auditMetric(latest, 'economy_controlled_ap_gp_exchange_events');
   const stuckDetected = auditMetric(latest, 'timeline_stuck_detected');
   const stuckRecovered = auditMetric(latest, 'timeline_stuck_recovered');
   const duration = auditDurationLabel(latest);
-  const detail = `${duration} audit: ${successfulActions}/${totalActions} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}, trade closures ${tradeClosures}, stuck recovered ${stuckRecovered}/${stuckDetected}.`;
+  const apGpBreakdown = hasApGpBreakdown
+    ? `, organic AP/GP ${organicApGp}, controlled AP/GP ${controlledApGp}`
+    : '';
+  const detail = `${duration} audit: ${successfulActions}/${totalActions} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}${apGpBreakdown}, trade closures ${tradeClosures}, stuck recovered ${stuckRecovered}/${stuckDetected}.`;
 
   if (failedActions > 0 || latest.status !== 'passed') {
     return {
@@ -687,6 +700,22 @@ export function residentNormalLifeAuditSignal(runs: BenchmarkArtifactSummary[]):
     return {
       tone: 'warn',
       summary: 'Recovery clear; AP/GP recurrence not observed.',
+      detail,
+    };
+  }
+
+  if (hasApGpBreakdown && apGpExchanges > 0 && organicApGp <= 0) {
+    return {
+      tone: 'warn',
+      summary: 'AP/GP recurrence is controlled-only in latest audit.',
+      detail,
+    };
+  }
+
+  if (hasApGpBreakdown && organicApGp > 0 && tradeClosures <= 0) {
+    return {
+      tone: 'warn',
+      summary: 'Organic AP/GP recurrence appears, but trade closures are still absent.',
       detail,
     };
   }
@@ -866,6 +895,10 @@ function benchmarkTimeMs(run: BenchmarkArtifactSummary): number {
 function auditMetric(run: BenchmarkArtifactSummary, key: string): number {
   const value = Number(run.metrics[key]);
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function hasAuditMetric(run: BenchmarkArtifactSummary, key: string): boolean {
+  return Number.isFinite(Number(run.metrics[key]));
 }
 
 function auditDurationLabel(run: BenchmarkArtifactSummary): string {

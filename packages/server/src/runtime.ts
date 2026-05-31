@@ -1093,6 +1093,8 @@ function normalizeNormalLifeAuditArtifact(record: Record<string, unknown>, runId
   }
 
   const apSummary = asRecord(record.apSummary);
+  const recurrenceSummary = asRecord(record.recurrenceSummary);
+  const economySummary = asRecord(record.economySummary);
   const metrics: Record<string, number> = {
     ...(numberField(record, 'activeResidents') !== undefined ? { activeResidents: numberField(record, 'activeResidents')! } : {}),
     totalActionAttempts,
@@ -1102,6 +1104,8 @@ function normalizeNormalLifeAuditArtifact(record: Record<string, unknown>, runId
     ...countPairMetrics('action', record.actionKindCounts),
     ...countPairMetrics('cause', record.causeCounts),
     ...timelineCounts,
+    ...recordMetricNumbers('recurrence', recurrenceSummary),
+    ...recordMetricNumbers('economy', economySummary),
     ...(numberField(apSummary, 'residentsWithAttention') !== undefined ? { apResidentsWithAttention: numberField(apSummary, 'residentsWithAttention')! } : {}),
     ...(numberField(apSummary, 'residentsWithDrop') !== undefined ? { apResidentsWithDrop: numberField(apSummary, 'residentsWithDrop')! } : {}),
     ...(numberField(apSummary, 'aggregateDrop') !== undefined ? { apAggregateDrop: numberField(apSummary, 'aggregateDrop')! } : {}),
@@ -1136,6 +1140,23 @@ function countPairMetrics(prefix: string, value: unknown): Record<string, number
     const count = finiteNumber(item[1]);
     return key && count !== undefined ? [[key, count]] : [];
   }));
+}
+
+function recordMetricNumbers(prefix: string, value: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .flatMap(([key, entry]) => {
+        const metricKey = metricCountKey(prefix, normalizeMetricKey(key));
+        const metricValue = finiteNumber(entry);
+        return metricKey && metricValue !== undefined ? [[metricKey, metricValue]] : [];
+      }),
+  );
+}
+
+function normalizeMetricKey(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2');
 }
 
 function metricCountKey(prefix: string, value: string): string {

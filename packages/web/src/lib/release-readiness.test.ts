@@ -725,6 +725,50 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('surfaces controlled-only AP/GP recurrence as a dedicated normal-life watch item', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks().map(run => run.task?.id === 'normal-life-audit'
+        ? normalLifeBenchmark({
+          runId: 'normal_life_audit_20260531T090612Z',
+          metrics: {
+            totalActionAttempts: 1283,
+            successfulActionSubmissions: 1283,
+            failedActionSubmissions: 0,
+            cause_low_health_heal_wait: 0,
+            timeline_city_ap_gp_exchange: 1,
+            timeline_trade_completed: 0,
+            timeline_stuck_detected: 79,
+            timeline_stuck_recovered: 76,
+            recurrence_ap_gp_exchange_events: 1,
+            recurrence_trade_completed: 0,
+            economy_organic_self_initiated_ap_gp_exchange_events: 0,
+            economy_controlled_ap_gp_exchange_events: 1,
+            durationMs: 20 * 60 * 1000,
+          },
+        })
+        : run),
+      nowMs: Date.parse('2026-05-31T09:12:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'normal-life')).toEqual({
+      id: 'normal-life',
+      label: 'Normal-life Audit',
+      tone: 'warn',
+      value: 'controlled only',
+      detail: 'latest audit: 1283/1283 actions, low-health waits 0, AP/GP exchanges 1, organic AP/GP 0, controlled AP/GP 1, trade closures 0, stuck recovered 76/79.',
+    });
+    expect(summary.nextActions).toContain('Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.');
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Prove organic AP/GP',
+      tone: 'warn',
+      detail: 'Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.',
+    });
+  });
+
   test('counts operator warnings and review reasons as Storyteller review backlog even with warningCount zero', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],

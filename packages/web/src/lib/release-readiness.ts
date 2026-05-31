@@ -386,6 +386,8 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Inspect low-health recovery')) return 'Inspect recovery';
   if (action.startsWith('Fix failing normal-life audit')) return 'Fix audit';
   if (action.startsWith('Run or sync a CQA10 normal-life audit')) return 'Run audit';
+  if (action.startsWith('Capture organic AP/GP recurrence evidence')) return 'Prove organic AP/GP';
+  if (action.startsWith('Capture ordinary trade closure evidence')) return 'Prove trade closure';
   if (action.startsWith('Use the latest normal-life audit caveat')) return 'Use caveat';
   if (action.startsWith('Top up')) return 'Top up AP';
   if (action.startsWith('Run an AP/GP')) return 'Prove GP';
@@ -415,6 +417,8 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.label === 'Confirm stack') return 25;
   if (action.label === 'Fix audit') return 28;
   if (action.label === 'Run audit') return 29;
+  if (action.label === 'Prove organic AP/GP') return 32;
+  if (action.label === 'Prove trade closure') return 33;
   if (action.label === 'Use caveat') return 35;
   if (action.label === 'Top up AP') return 30;
   if (action.label === 'Prove GP') return 40;
@@ -729,7 +733,7 @@ function normalLifeAuditCheck(signal: ReturnType<typeof residentNormalLifeAuditS
       id: 'normal-life',
       label: 'Normal-life Audit',
       tone: 'warn',
-      value: signal.summary.startsWith('No normal-life audit') ? 'no audit' : 'watch',
+      value: normalLifeAuditWatchValue(signal),
       detail: signal.detail,
     };
   }
@@ -741,6 +745,13 @@ function normalLifeAuditCheck(signal: ReturnType<typeof residentNormalLifeAuditS
     value: 'clear',
     detail: signal.detail,
   };
+}
+
+function normalLifeAuditWatchValue(signal: ReturnType<typeof residentNormalLifeAuditSignal>): string {
+  if (signal.summary.startsWith('No normal-life audit')) return 'no audit';
+  if (signal.summary.startsWith('AP/GP recurrence is controlled-only')) return 'controlled only';
+  if (signal.summary.startsWith('Organic AP/GP recurrence appears')) return 'trade gap';
+  return 'watch';
 }
 
 function residentNameOverflowList(names: string[], total: number): string {
@@ -969,7 +980,9 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('recovery wait')) actions.push('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
   if (byId.get('normal-life')?.tone === 'fail') actions.push('Fix failing normal-life audit evidence before claiming resident recurrence.');
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'no audit') actions.push('Run or sync a CQA10 normal-life audit before claiming resident recurrence.');
-  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value !== 'no audit') actions.push('Use the latest normal-life audit caveat when describing AP/GP recurrence and stuck recovery.');
+  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'controlled only') actions.push('Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.');
+  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'trade gap') actions.push('Capture ordinary trade closure evidence before claiming full AP/GP social loop.');
+  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'watch') actions.push('Use the latest normal-life audit caveat when describing AP/GP recurrence and stuck recovery.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
   const economyTransport = byId.get('economy-transport');

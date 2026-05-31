@@ -1580,6 +1580,76 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('keeps normal-life audit caveats honest when AP/GP recurrence is controlled-only', () => {
+    expect(residentNormalLifeAuditSignal([
+      {
+        file: 'capability-qa/normal_life_audit_20260531T090612Z.json',
+        runId: 'normal_life_audit_20260531T090612Z',
+        task: { id: 'normal-life-audit' },
+        module: { id: 'ordinary-life' },
+        mode: 'autonomous',
+        resident: 'multi-resident',
+        startedAt: '2026-05-31T08:50:00.000Z',
+        endedAt: '2026-05-31T09:10:00.000Z',
+        status: 'passed',
+        score: 1,
+        metrics: {
+          totalActionAttempts: 1283,
+          successfulActionSubmissions: 1283,
+          failedActionSubmissions: 0,
+          cause_low_health_heal_wait: 0,
+          timeline_city_ap_gp_exchange: 1,
+          timeline_trade_completed: 0,
+          timeline_stuck_detected: 79,
+          timeline_stuck_recovered: 76,
+          recurrence_ap_gp_exchange_events: 1,
+          recurrence_trade_completed: 0,
+          economy_organic_self_initiated_ap_gp_exchange_events: 0,
+          economy_controlled_ap_gp_exchange_events: 1,
+        },
+      },
+    ])).toEqual({
+      tone: 'warn',
+      summary: 'AP/GP recurrence is controlled-only in latest audit.',
+      detail: '20m audit: 1283/1283 actions, low-health waits 0, AP/GP exchanges 1, organic AP/GP 0, controlled AP/GP 1, trade closures 0, stuck recovered 76/79.',
+    });
+  });
+
+  test('warns when organic AP/GP recurrence appears without trade closures', () => {
+    expect(residentNormalLifeAuditSignal([
+      {
+        file: 'capability-qa/normal_life_audit_20260531T093212Z.json',
+        runId: 'normal_life_audit_20260531T093212Z',
+        task: { id: 'normal-life-audit' },
+        module: { id: 'ordinary-life' },
+        mode: 'autonomous',
+        resident: 'multi-resident',
+        startedAt: '2026-05-31T09:00:30.000Z',
+        endedAt: '2026-05-31T09:31:53.000Z',
+        status: 'passed',
+        score: 1,
+        metrics: {
+          totalActionAttempts: 3391,
+          successfulActionSubmissions: 3391,
+          failedActionSubmissions: 0,
+          cause_low_health_heal_wait: 0,
+          timeline_city_ap_gp_exchange: 3,
+          timeline_trade_completed: 0,
+          timeline_stuck_detected: 237,
+          timeline_stuck_recovered: 183,
+          recurrence_ap_gp_exchange_events: 3,
+          recurrence_trade_completed: 0,
+          economy_organic_self_initiated_ap_gp_exchange_events: 3,
+          economy_controlled_ap_gp_exchange_events: 0,
+        },
+      },
+    ])).toEqual({
+      tone: 'warn',
+      summary: 'Organic AP/GP recurrence appears, but trade closures are still absent.',
+      detail: '31m audit: 3391/3391 actions, low-health waits 0, AP/GP exchanges 3, organic AP/GP 3, controlled AP/GP 0, trade closures 0, stuck recovered 183/237.',
+    });
+  });
+
   test('warns when the latest normal-life audit still has recovery waits', () => {
     expect(residentNormalLifeAuditSignal([
       {
