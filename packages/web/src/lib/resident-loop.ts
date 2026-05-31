@@ -688,7 +688,7 @@ export function residentDemoPickCue(
       residentName: fallback.row.name,
       target: fallback.nextStep.target,
       action: fallback.nextStep.action,
-      detail: `${residentShortName(fallback.row.name)} needs attention first: ${fallback.warning.summary} Act from: ${fallback.nextStep.target}.`,
+      detail: `${residentShortName(fallback.row.name)} needs attention first: ${fallback.warning.summary}`,
     };
   }
 

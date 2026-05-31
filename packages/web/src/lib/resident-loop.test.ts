@@ -428,7 +428,7 @@ describe('resident loop helpers', () => {
       residentName: 'res:woodcutter',
       target: 'Grant Attention',
       action: 'Reconnect resident',
-      detail: 'woodcutter needs attention first: Resident is offline in the live controller snapshot. Act from: Grant Attention.',
+      detail: 'woodcutter needs attention first: Resident is offline in the live controller snapshot.',
     });
   });
 
