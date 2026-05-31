@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import {
   residentAgencyCue,
+  residentAttentionRunway,
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
   residentGuestTrailFacts,
@@ -75,13 +76,46 @@ describe('resident loop helpers', () => {
     expect(residentLoopSummaryLine(row({ attention: 100 }))).toContain('GP unobserved');
   });
 
+  test('describes AP as a runway above or below the support floor', () => {
+    expect(residentAttentionRunway(row())).toEqual({
+      label: 'unknown',
+      value: 'AP unknown',
+      detail: 'No live AP reading in this snapshot.',
+      tone: 'warn',
+    });
+    expect(residentAttentionRunway(row({ attention: 0 }))).toEqual({
+      label: 'empty',
+      value: '0 AP',
+      detail: 'At 0 AP; resident may be unable to act without support.',
+      tone: 'fail',
+    });
+    expect(residentAttentionRunway(row({ attention: 2 }))).toEqual({
+      label: 'floor',
+      value: '2 AP',
+      detail: 'At/below 10 AP support floor.',
+      tone: 'warn',
+    });
+    expect(residentAttentionRunway(row({ attention: 18 }))).toEqual({
+      label: 'short',
+      value: '18 AP',
+      detail: '8 AP above support floor.',
+      tone: 'warn',
+    });
+    expect(residentAttentionRunway(row({ attention: 42 }))).toEqual({
+      label: 'steady',
+      value: '42 AP',
+      detail: '32 AP above support floor.',
+      tone: 'ok',
+    });
+  });
+
   test('builds public state tiles that foreground AP, support need, and GP evidence', () => {
     expect(residentPublicStateTiles(row({
       attention: 2,
       body: { controlHeld: true, latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } } },
     }))).toEqual([
       { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
-      { label: 'AP', value: '2 AP', detail: 'Attention Points are low; this resident needs support soon.', tone: 'warn' },
+      { label: 'AP', value: '2 AP', detail: 'At/below 10 AP support floor.', tone: 'warn' },
       { label: 'Support need', value: 'AP support', detail: 'Resident is at or below the AP safety floor.', tone: 'warn' },
       { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
     ]);
@@ -108,7 +142,7 @@ describe('resident loop helpers', () => {
       { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
       { label: 'Soul', value: 'Duke', detail: 'res:duke | res-duke.md | behavior autonomous', tone: 'ok' },
       { label: 'North star', value: 'Keep the square lit and turn firemaking into public myth.', detail: 'soul orientation | keep-square-lit | pursue', tone: 'ok' },
-      { label: 'AP', value: '42 AP', detail: 'Attention Points life-force is stable.', tone: 'ok' },
+      { label: 'AP', value: '42 AP', detail: '32 AP above support floor.', tone: 'ok' },
       { label: 'Support need', value: 'steady', detail: 'AP and GP evidence are both visible.', tone: 'ok' },
       { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
     ]);
@@ -171,7 +205,7 @@ describe('resident loop helpers', () => {
       },
     })).toEqual([
       { label: 'Wants', value: 'Earn GP to keep AP above the floor', detail: 'live plan', tone: 'ok' },
-      { label: 'Needs', value: 'AP support', detail: '2 AP · GP not observed', tone: 'warn' },
+      { label: 'Needs', value: 'AP support', detail: 'At/below 10 AP support floor. · GP not observed', tone: 'warn' },
       { label: 'Did', value: 'pickup_item', detail: 'success | thinking | goal:ap-gp | tick 2048 (current)', tone: 'ok' },
       { label: 'Said', value: 'I need AP, but coin 995 is nearby.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
       { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'City dispatch cited this resident.', tone: 'ok' },

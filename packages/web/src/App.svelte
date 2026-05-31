@@ -15,6 +15,7 @@
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
     residentAgencyCue,
+    residentAttentionRunway,
     residentGuestTrailFacts,
     residentGuestTrailPulse,
     residentIntelligenceFacts,
@@ -5242,6 +5243,7 @@
       {@const pulse = residentProofPulse(row, { benchmark, economyGp, storyteller: storySignal })}
       {@const agencyCue = residentAgencyCue(row, { benchmark, economyGp, storyteller: storySignal })}
       {@const liveMoment = residentLiveMoment(row)}
+      {@const apRunway = residentAttentionRunway(row)}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
@@ -5250,6 +5252,7 @@
         </small>
         <small class={`city-resident-loop-line tone-${liveMoment.tone}`}>Moment: {residentLoopLine(`${liveMoment.label}: ${liveMoment.title} · ${liveMoment.detail}`, 92)}</small>
         <small class={`city-resident-loop-line tone-${agencyCue.tone}`}>{residentLoopLine(agencyCue.summary, 92)}</small>
+        <small class={`city-resident-loop-line tone-${apRunway.tone}`}>Runway: {residentLoopLine(`${apRunway.label} · ${apRunway.detail}`, 76)}</small>
         <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
         <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(planCheckpoint?.value || '-', 72)}</small>
         <small class={`city-resident-loop-line tone-${actionCheckpoint?.tone || 'warn'}`}>Action: {residentLoopLine(signal.action, 60)}</small>

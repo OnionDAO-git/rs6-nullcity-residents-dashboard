@@ -54,6 +54,13 @@ export interface ResidentLiveMoment {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+export interface ResidentAttentionRunway {
+  label: 'empty' | 'floor' | 'short' | 'steady' | 'long' | 'unknown';
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
 export interface ResidentProofRollupAction {
   label: string;
   tone: 'warn' | 'fail';
@@ -127,6 +134,8 @@ const STALE_FEED_MS = 120_000;
 const ACTION_STALE_TICK_GAP = 180;
 const SPEECH_STALE_TICK_GAP = 300;
 const STORY_STALE_TICK_GAP = 1200;
+const SHORT_AP_RUNWAY_THRESHOLD = LOW_AP_THRESHOLD + 15;
+const LONG_AP_RUNWAY_THRESHOLD = 100;
 const GP_ITEM_ID = 995;
 
 export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentGuestTrailPulse {
@@ -237,6 +246,7 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
   const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
   const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
   const gp = residentGoldEvidenceLabel(row);
+  const apRunway = residentAttentionRunway(row);
   const needsAp = residentNeedsAp(row);
   const needsGpEvidence = gp.value === 'not observed';
   const storyValue = row.storyArc?.summary || row.storyArc?.latestEventKind || signals.storyteller?.summary || '-';
@@ -251,8 +261,8 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
     {
       label: 'Needs',
       value: needsAp ? 'AP support' : needsGpEvidence ? 'coin-995 evidence' : 'steady',
-      detail: `${attentionLabel(row)} · ${needsGpEvidence ? 'GP not observed' : gp.value}`,
-      tone: needsAp || needsGpEvidence ? 'warn' : 'ok',
+      detail: `${apRunway.detail} · ${needsGpEvidence ? 'GP not observed' : gp.value}`,
+      tone: apRunway.tone === 'fail' ? 'fail' : needsAp || needsGpEvidence || apRunway.tone === 'warn' ? 'warn' : 'ok',
     },
     {
       label: 'Did',
@@ -487,6 +497,53 @@ export function residentNeedsAp(row: ResidentDashboardRow): boolean {
   return typeof row.attention === 'number' && row.attention <= LOW_AP_THRESHOLD;
 }
 
+export function residentAttentionRunway(row: ResidentDashboardRow): ResidentAttentionRunway {
+  if (row.attention === undefined) {
+    return {
+      label: 'unknown',
+      value: 'AP unknown',
+      detail: 'No live AP reading in this snapshot.',
+      tone: 'warn',
+    };
+  }
+
+  const ap = Math.max(0, Math.floor(row.attention));
+  if (ap <= 0) {
+    return {
+      label: 'empty',
+      value: '0 AP',
+      detail: 'At 0 AP; resident may be unable to act without support.',
+      tone: 'fail',
+    };
+  }
+
+  if (ap <= LOW_AP_THRESHOLD) {
+    return {
+      label: 'floor',
+      value: `${ap} AP`,
+      detail: `At/below ${LOW_AP_THRESHOLD} AP support floor.`,
+      tone: 'warn',
+    };
+  }
+
+  const floorDelta = ap - LOW_AP_THRESHOLD;
+  if (ap <= SHORT_AP_RUNWAY_THRESHOLD) {
+    return {
+      label: 'short',
+      value: `${ap} AP`,
+      detail: `${floorDelta} AP above support floor.`,
+      tone: 'warn',
+    };
+  }
+
+  return {
+    label: ap >= LONG_AP_RUNWAY_THRESHOLD ? 'long' : 'steady',
+    value: `${ap} AP`,
+    detail: `${floorDelta} AP above support floor.`,
+    tone: 'ok',
+  };
+}
+
 export function residentGoldEvidenceLabel(row: ResidentDashboardRow): { value: string; detail: string; tone: 'ok' | 'warn' } {
   const amount = residentCoinEvidenceAmount(row);
   if (amount > 0) {
@@ -505,6 +562,7 @@ export function residentCoinEvidenceAmount(row: ResidentDashboardRow): number {
 
 export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPublicStateTile[] {
   const gp = residentGoldEvidenceLabel(row);
+  const apRunway = residentAttentionRunway(row);
   const needsAp = residentNeedsAp(row);
   const needsGpEvidence = gp.tone === 'warn';
   const supportNeed = needsAp
@@ -535,13 +593,9 @@ export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPub
     ...residentPublicIdentityTiles(row),
     {
       label: 'AP',
-      value: attentionLabel(row),
-      detail: needsAp
-        ? 'Attention Points are low; this resident needs support soon.'
-        : row.attention === undefined
-          ? 'Attention Points are not reported in this snapshot.'
-          : 'Attention Points life-force is stable.',
-      ...(row.attention === undefined ? {} : { tone: needsAp ? 'warn' as const : 'ok' as const }),
+      value: apRunway.value,
+      detail: apRunway.detail,
+      tone: apRunway.tone,
     },
     {
       label: 'Support need',
