@@ -391,6 +391,67 @@ describe('routeCityApi points and souls', () => {
     expect(await response.json()).toEqual({ available: false, records: [], error: 'not_configured' });
   });
 
+  test('admin can inspect the controller NCRI print queue with a status filter', async () => {
+    const calls: unknown[] = [];
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        ncriPrintQueue: async query => {
+          calls.push(query);
+          return {
+            asOf: '2026-05-30T19:40:00.000Z',
+            items: [
+              {
+                ncriId: 'ncri-1',
+                itemId: 590,
+                displayName: 'Tinderbox of the Flame',
+                cityUserId: 'city-user:alice',
+                owner: 'city-user:alice',
+                sourceResidentName: 'res:duke',
+                status: 'awaiting_redemption',
+                gpRedemptionCost: 500,
+                printable: true,
+                printAssetRef: 'prints/tinderbox.glb',
+                createdAt: '2026-05-30T19:20:00.000Z',
+                updatedAt: '2026-05-30T19:39:00.000Z',
+              },
+            ],
+          };
+        },
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(authedRequest('/api/admin/nullcity/ncri/print-queue?status=awaiting_redemption'), services);
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([{ status: 'awaiting_redemption' }]);
+    expect(await response.json()).toMatchObject({
+      available: true,
+      asOf: '2026-05-30T19:40:00.000Z',
+      items: [
+        {
+          ncriId: 'ncri-1',
+          cityUserId: 'city-user:alice',
+          status: 'awaiting_redemption',
+          gpRedemptionCost: 500,
+        },
+      ],
+    });
+  });
+
+  test('controller-backed NCRI print queue degrades when the control bridge is not configured', async () => {
+    const services = testServices(adminUser);
+
+    const response = await route(authedRequest('/api/admin/nullcity/ncri/print-queue'), services);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false, items: [], error: 'not_configured' });
+  });
+
   test('public live economy route proxies the redacted Null City economy snapshot', async () => {
     const services = testServices(null, undefined, {
       nullcityControl: {

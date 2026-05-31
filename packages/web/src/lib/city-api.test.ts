@@ -132,6 +132,26 @@ describe('cityApi', () => {
     ]);
   });
 
+  test('calls the admin NCRI print queue endpoint with status filter', async () => {
+    const calls: Array<{ path: string; method: string }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+      });
+      return new Response(JSON.stringify({ available: true, asOf: '2026-05-30T19:40:00.000Z', items: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    await cityApi.adminNullcityNcriPrintQueue({ status: 'awaiting_redemption' });
+
+    expect(calls).toEqual([
+      { path: '/api/admin/nullcity/ncri/print-queue?status=awaiting_redemption', method: 'GET' },
+    ]);
+  });
+
   test('calls the public Null City live economy endpoint', async () => {
     const calls: string[] = [];
     globalThis.fetch = (async input => {

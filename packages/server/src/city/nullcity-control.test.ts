@@ -255,6 +255,60 @@ describe('createNullCityControlClient', () => {
     });
   });
 
+  test('fetches the controller NCRI print queue with status query and bearer auth', async () => {
+    const calls: Array<{ url: string; authorization: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return new Response(
+        JSON.stringify({
+          asOf: '2026-05-30T19:40:00.000Z',
+          items: [
+            {
+              ncriId: 'ncri-1',
+              itemId: 590,
+              displayName: 'Tinderbox of the Flame',
+              cityUserId: 'city-user:alice',
+              owner: 'city-user:alice',
+              sourceResidentName: 'res:duke',
+              status: 'awaiting_redemption',
+              gpRedemptionCost: 500,
+              printable: true,
+              printAssetRef: 'prints/tinderbox.glb',
+              createdAt: '2026-05-30T19:20:00.000Z',
+              updatedAt: '2026-05-30T19:39:00.000Z',
+            },
+          ],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const response = await client.ncriPrintQueue!({ status: 'awaiting_redemption' });
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/ncri/print-queue?status=awaiting_redemption',
+        authorization: 'Bearer city-token',
+      },
+    ]);
+    expect(response.items[0]).toMatchObject({
+      ncriId: 'ncri-1',
+      displayName: 'Tinderbox of the Flame',
+      cityUserId: 'city-user:alice',
+      status: 'awaiting_redemption',
+      gpRedemptionCost: 500,
+      printable: true,
+    });
+  });
+
   test('posts AP-for-GP exchanges to the controller resident route', async () => {
     const calls: Array<{ url: string; method: string; authorization: string | null; body: unknown }> = [];
     globalThis.fetch = (async (input, init) => {

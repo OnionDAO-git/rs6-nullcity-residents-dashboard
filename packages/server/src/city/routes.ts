@@ -10,7 +10,7 @@ import {
   verifyGameSessionTicket,
 } from './game-session';
 import type { LandingSessionAuthenticator } from './landing-session';
-import { NullCityControlError, type NullCityControlClient } from './nullcity-control';
+import { NullCityControlError, type NullCityControlClient, type NullCityNcriPrintQueueStatus } from './nullcity-control';
 import { quoteSoulProposal } from './quote';
 import { CityStoreError, type CityStore } from './store';
 import type { CityUser, LandingSessionUser, PointResource } from './types';
@@ -110,6 +110,25 @@ export async function routeCityApi(
       if (auth instanceof Response) return auth;
       if (!context.nullcityControl) return jsonResponse({ available: false, records: [], error: 'not_configured' });
       return jsonResponse({ available: true, records: await context.nullcityControl.listNcri() });
+    }
+
+    if (method === 'GET' && pathname === '/api/admin/nullcity/ncri/print-queue') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.nullcityControl?.ncriPrintQueue) {
+        return jsonResponse({ available: false, items: [], error: 'not_configured' });
+      }
+      try {
+        const response = await context.nullcityControl.ncriPrintQueue({
+          status: ncriPrintQueueStatus(url.searchParams.get('status')),
+        });
+        return jsonResponse({ available: true, asOf: response.asOf, items: response.items });
+      } catch (error) {
+        if (error instanceof NullCityControlError) {
+          return jsonResponse({ available: false, items: [], error: error.message });
+        }
+        throw error;
+      }
     }
 
     if (method === 'GET' && pathname === '/api/admin/nullcity/economy/listings') {
@@ -627,6 +646,11 @@ function positiveInteger(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function ncriPrintQueueStatus(value: string | null): NullCityNcriPrintQueueStatus | undefined {
+  if (value === 'awaiting_redemption' || value === 'redeemed' || value === 'all') return value;
+  return undefined;
 }
 
 function booleanBody(body: Record<string, unknown>, key: string): boolean | undefined {

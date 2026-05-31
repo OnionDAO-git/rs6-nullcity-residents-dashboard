@@ -127,6 +127,33 @@ export interface NullCityEconomyListingsResponse {
   listings: NullCityEconomyListing[];
 }
 
+export type NullCityNcriPrintQueueStatus = 'awaiting_redemption' | 'redeemed' | 'all';
+
+export interface NullCityNcriPrintQueueQuery {
+  status?: NullCityNcriPrintQueueStatus;
+}
+
+export interface NullCityNcriPrintQueueEntry {
+  ncriId: string;
+  itemId: number;
+  displayName: string;
+  cityUserId: string;
+  owner: string;
+  sourceResidentName?: string;
+  status: 'awaiting_redemption' | 'redeemed';
+  gpRedemptionCost?: number;
+  printable: boolean;
+  printAssetRef?: string;
+  createdAt: string;
+  updatedAt: string;
+  redeemedAt?: string;
+}
+
+export interface NullCityNcriPrintQueueResponse {
+  asOf: string;
+  items: NullCityNcriPrintQueueEntry[];
+}
+
 export interface NullCityApGpExchangeRequest {
   idempotencyKey: string;
   apAmount: number;
@@ -170,6 +197,7 @@ export interface NullCityControlClient {
   liveEconomy?(query?: NullCityLiveEconomyQuery): Promise<NullCityLiveEconomySnapshot>;
   economyHeartbeat?(): Promise<NullCityEconomyHeartbeat>;
   economyListings?(): Promise<NullCityEconomyListingsResponse>;
+  ncriPrintQueue?(query?: NullCityNcriPrintQueueQuery): Promise<NullCityNcriPrintQueueResponse>;
   exchangeApForGp?(resident: string, body: NullCityApGpExchangeRequest): Promise<NullCityApGpExchangeRecord>;
   approveProposal(id: string, adminNotes?: string): Promise<unknown>;
   rejectProposal(id: string, adminNotes?: string): Promise<unknown>;
@@ -243,6 +271,7 @@ export function createNullCityControlClient(options: NullCityControlClientOption
     liveEconomy: async query => parseLiveEconomy(await request<unknown>(`/economy/live${queryString(query)}`)),
     economyHeartbeat: async () => parseEconomyHeartbeat(await request<unknown>('/economy/heartbeat')),
     economyListings: async () => parseEconomyListings(await request<unknown>('/economy/listings')),
+    ncriPrintQueue: async query => parseNcriPrintQueue(await request<unknown>(`/ncri/print-queue${ncriPrintQueueQueryString(query)}`)),
     exchangeApForGp: async (resident, body) =>
       parseApGpExchange(await request<unknown>(`/residents/${encodeURIComponent(resident)}/ap-gp-exchanges`, {
         method: 'POST',
@@ -311,6 +340,13 @@ function parseEconomyHeartbeat(payload: unknown): NullCityEconomyHeartbeat {
 function parseEconomyListings(payload: unknown): NullCityEconomyListingsResponse {
   if (!isEconomyListingsResponse(payload)) {
     throw new NullCityControlError('invalid_economy_listings', 502);
+  }
+  return payload;
+}
+
+function parseNcriPrintQueue(payload: unknown): NullCityNcriPrintQueueResponse {
+  if (!isNcriPrintQueueResponse(payload)) {
+    throw new NullCityControlError('invalid_ncri_print_queue', 502);
   }
   return payload;
 }
@@ -445,6 +481,28 @@ function isEconomyListing(value: unknown): value is NullCityEconomyListing {
     record.listed === true;
 }
 
+function isNcriPrintQueueResponse(value: unknown): value is NullCityNcriPrintQueueResponse {
+  const record = asRecord(value);
+  return typeof record.asOf === 'string' &&
+    Array.isArray(record.items) &&
+    record.items.every(isNcriPrintQueueEntry);
+}
+
+function isNcriPrintQueueEntry(value: unknown): value is NullCityNcriPrintQueueEntry {
+  const record = asRecord(value);
+  return typeof record.ncriId === 'string' &&
+    typeof record.itemId === 'number' &&
+    Number.isFinite(record.itemId) &&
+    typeof record.displayName === 'string' &&
+    typeof record.cityUserId === 'string' &&
+    typeof record.owner === 'string' &&
+    isNcriPrintQueueStatus(record.status) &&
+    (record.gpRedemptionCost === undefined || typeof record.gpRedemptionCost === 'number') &&
+    typeof record.printable === 'boolean' &&
+    typeof record.createdAt === 'string' &&
+    typeof record.updatedAt === 'string';
+}
+
 function isApGpExchangeRecord(value: unknown): value is NullCityApGpExchangeRecord {
   const record = asRecord(value);
   return record.schemaVersion === 1 &&
@@ -486,11 +544,22 @@ function isNcriRedemptionStatus(value: unknown): value is NullCityNcriRedemption
   return value === 'available' || value === 'redeemed';
 }
 
+function isNcriPrintQueueStatus(value: unknown): value is NullCityNcriPrintQueueEntry['status'] {
+  return value === 'awaiting_redemption' || value === 'redeemed';
+}
+
 function queryString(query: NullCityLiveEconomyQuery | undefined): string {
   const params = new URLSearchParams();
   if (query?.since) params.set('since', query.since);
   if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
   if (typeof query?.residentLimit === 'number') params.set('residentLimit', String(query.residentLimit));
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
+function ncriPrintQueueQueryString(query: NullCityNcriPrintQueueQuery | undefined): string {
+  const params = new URLSearchParams();
+  if (query?.status) params.set('status', query.status);
   const serialized = params.toString();
   return serialized ? `?${serialized}` : '';
 }

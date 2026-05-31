@@ -260,6 +260,31 @@ export interface NullCityEconomyListingsBridgeResponse {
   error?: string;
 }
 
+export type NullCityNcriPrintQueueStatus = 'awaiting_redemption' | 'redeemed' | 'all';
+
+export interface NullCityNcriPrintQueueEntry {
+  ncriId: string;
+  itemId: number;
+  displayName: string;
+  cityUserId: string;
+  owner: string;
+  sourceResidentName?: string;
+  status: 'awaiting_redemption' | 'redeemed';
+  gpRedemptionCost?: number;
+  printable: boolean;
+  printAssetRef?: string;
+  createdAt: string;
+  updatedAt: string;
+  redeemedAt?: string;
+}
+
+export interface NullCityNcriPrintQueueBridgeResponse {
+  available: boolean;
+  asOf?: string;
+  items: NullCityNcriPrintQueueEntry[];
+  error?: string;
+}
+
 export type NullCityApGpExchangeStatus = 'complete' | 'failed_gp' | 'failed_ap' | 'failed_unknown';
 
 export interface NullCityApGpExchangeRequest {
@@ -555,6 +580,13 @@ function liveEconomyQuery(options: { since?: string; limit?: number; residentLim
   return serialized ? `?${serialized}` : '';
 }
 
+function ncriPrintQueueQuery(options: { status?: NullCityNcriPrintQueueStatus } = {}): string {
+  const params = new URLSearchParams();
+  if (options.status) params.set('status', options.status);
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -605,6 +637,8 @@ export const cityApi = {
 
   adminNullcityProposals: () => request<NullCityProposalBridgeResponse>('/api/admin/nullcity/proposals'),
   adminNullcityNcri: () => request<NullCityNcriBridgeResponse>('/api/admin/nullcity/ncri'),
+  adminNullcityNcriPrintQueue: (options?: { status?: NullCityNcriPrintQueueStatus }) =>
+    request<NullCityNcriPrintQueueBridgeResponse>(`/api/admin/nullcity/ncri/print-queue${ncriPrintQueueQuery(options)}`),
   nullcityEconomyLive: (options?: { since?: string; limit?: number; residentLimit?: number }) =>
     request<NullCityLiveEconomyBridgeResponse>(`/api/nullcity/economy/live${liveEconomyQuery(options)}`),
   nullcityEconomyHeartbeat: () => request<NullCityEconomyHeartbeatBridgeResponse>('/api/nullcity/economy/heartbeat'),
