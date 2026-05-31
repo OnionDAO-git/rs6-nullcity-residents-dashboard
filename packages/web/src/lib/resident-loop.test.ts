@@ -255,7 +255,7 @@ describe('resident loop helpers', () => {
     }))).toEqual({
       label: 'Said',
       title: 'I found the path to logs.',
-      detail: 'live speech in feed | tick 100 (current)',
+      detail: 'live speech in feed | tick 100 (current) | because the live feed captured speech at tick 100',
       tone: 'ok',
     });
   });
@@ -280,7 +280,7 @@ describe('resident loop helpers', () => {
     }))).toEqual({
       label: 'Did',
       title: 'picked up coin-995',
-      detail: 'success | thinking | goal:ap-gp | tick 2048 (current)',
+      detail: 'success | thinking | because the AP/GP goal drove pickup_item (goal:ap-gp) | tick 2048 (current)',
       tone: 'ok',
     });
   });
@@ -321,7 +321,7 @@ describe('resident loop helpers', () => {
     }))).toEqual({
       label: 'Reconnect',
       title: 'Waiting for reconnect',
-      detail: 'Resident is offline in the live controller snapshot.',
+      detail: 'offline live snapshot | because they are working on "Return to the square"',
       tone: 'fail',
     });
   });

@@ -351,10 +351,12 @@ export function residentAgencyCue(row: ResidentDashboardRow, signals: ResidentPr
 
 export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMoment {
   if (!row.online) {
+    const cause = residentCauseSignal(row);
+    const causeDetail = compactMomentCauseDetail(cause);
     return {
       label: 'Reconnect',
       title: 'Waiting for reconnect',
-      detail: 'Resident is offline in the live controller snapshot.',
+      detail: ['offline live snapshot', causeDetail].filter(Boolean).join(' | '),
       tone: 'fail',
     };
   }
@@ -362,10 +364,12 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
   const speech = recentSpeechSignal(row);
   const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
   if (speech.text !== '-') {
+    const cause = residentCauseSignal(row);
+    const causeDetail = cause.value === 'live speech' ? cause.detail : '';
     return {
       label: 'Said',
       title: truncateAgencyText(speech.text, 96),
-      detail: [speech.source === 'feed' ? 'live speech in feed' : 'latest say event', speechFreshness].filter(Boolean).join(' | '),
+      detail: [speech.source === 'feed' ? 'live speech in feed' : 'latest say event', speechFreshness, causeDetail].filter(Boolean).join(' | '),
       tone: isTickStale(speechFreshness) ? 'warn' : 'ok',
     };
   }
@@ -374,8 +378,10 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
   const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
   if (actionKind) {
     const outcome = residentActionOutcome(row);
-    const detail = actionDetail(row);
-    const detailParts = [detail === '-' ? '' : detail, actionFreshness].filter(Boolean);
+    const detail = actionDetailWithoutCause(row);
+    const cause = residentCauseSignal(row);
+    const causeDetail = cause.tone === 'ok' && cause.value !== 'live plan' && cause.value !== 'live speech' ? cause.detail : '';
+    const detailParts = [detail === '-' ? '' : detail, causeDetail, actionFreshness].filter(Boolean);
     return {
       label: 'Did',
       title: friendlyActionLabel(actionKind, row),
@@ -387,10 +393,12 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
   const storyTitle = row.storyArc?.summary || row.storyArc?.latestEventKind;
   if (storyTitle) {
     const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
+    const cause = residentCauseSignal(row);
+    const causeDetail = compactMomentCauseDetail(cause);
     return {
       label: 'Remembered',
       title: truncateAgencyText(storyTitle, 96),
-      detail: ['Library evidence', storyFreshness].filter(Boolean).join(' | '),
+      detail: ['Library evidence', storyFreshness, causeDetail].filter(Boolean).join(' | '),
       tone: isTickStale(storyFreshness) ? 'warn' : 'ok',
     };
   }
@@ -398,10 +406,12 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
   const plan = residentGoalLabel(row);
   if (plan !== '-') {
     const detail = residentGoalDetail(row);
+    const cause = residentCauseSignal(row);
+    const causeDetail = compactMomentCauseDetail(cause);
     return {
       label: 'Working',
       title: truncateAgencyText(plan, 96),
-      detail: detail === 'plan' ? 'live plan' : detail,
+      detail: [detail === 'plan' ? 'live plan' : detail, causeDetail].filter(Boolean).join(' | '),
       tone: row.thinking?.activePlan ? 'ok' : 'warn',
     };
   }
@@ -1214,6 +1224,18 @@ function actionDetail(row: ResidentDashboardRow): string {
   const action = row.body?.lastAction;
   if (!action) return row.lastEvent?.text || '-';
   return [action.result, action.source, action.cause || action.ruleId].filter(Boolean).join(' | ') || '-';
+}
+
+function actionDetailWithoutCause(row: ResidentDashboardRow): string {
+  const action = row.body?.lastAction;
+  if (!action) return row.lastEvent?.text || '-';
+  return [action.result, action.source].filter(Boolean).join(' | ') || '-';
+}
+
+function compactMomentCauseDetail(cause: ResidentCauseSignal): string {
+  if (cause.tone !== 'ok') return '';
+  if (cause.value === 'live plan' || cause.value === 'live speech') return cause.detail;
+  return `because ${cause.value}`;
 }
 
 function residentActionOutcome(row: ResidentDashboardRow): {
