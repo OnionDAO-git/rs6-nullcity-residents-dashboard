@@ -1142,7 +1142,7 @@
         tone: 'teal',
         metric: cityLiveEconomy.snapshot ? `${cityLiveEconomy.snapshot.city.attentionTotal.toLocaleString()} AP` : cityEconomyHeartbeat.available ? 'heartbeat' : 'bridge',
         detail: cityLiveEconomy.snapshot
-          ? `${cityLiveEconomy.snapshot.city.activeResidentCount.toLocaleString()} active · GP Δ ${cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString()}`
+          ? `${cityLiveEconomy.snapshot.city.activeResidentCount.toLocaleString()} economy events · GP Δ ${cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString()}`
           : 'Live point flow and resident economy status',
       },
       {

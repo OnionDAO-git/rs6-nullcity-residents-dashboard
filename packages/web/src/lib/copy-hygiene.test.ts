@@ -58,4 +58,9 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('GP means RuneScape coin evidence, trusted when coin-995 or accepted exchange proof appears.');
     expect(appSource).toContain('Souls are funded resident proposals that can become autonomous Null City residents.');
   });
+
+  test('labels homepage economy activity as event-window activity, not resident liveness', () => {
+    expect(appSource).not.toContain("active · GP Δ");
+    expect(appSource).toContain("economy events · GP Δ");
+  });
 });
