@@ -18,6 +18,7 @@ import {
   residentPublicStateTiles,
   residentStackSummary,
   residentTriageSummary,
+  visibleResidentTriageBuckets,
 } from './resident-loop';
 
 function row(input: Partial<ResidentDashboardRow> & { name?: string } = {}): ResidentDashboardRow {
@@ -650,6 +651,32 @@ describe('resident loop helpers', () => {
     expect(triage.urgentResidents).toBe(0);
     expect(triage.detail).toBe('All visible residents have AP, cadence, plan, GP/story proof, and capability signals.');
     expect(triage.buckets.every(bucket => bucket.count === 0 && bucket.tone === 'ok')).toBe(true);
+  });
+
+  test('selects active triage buckets before clear buckets for truncated strips', () => {
+    const triage = residentTriageSummary([
+      row({
+        name: 'res:needs-proof',
+        attention: 75,
+        thinking: { mode: 'executing', activePlan: 'Earn GP and make the story visible.' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'move_to', result: 'success', source: 'body', tick: 80 },
+          feed: {
+            attached: true,
+            tick: 80,
+            ageMs: 1000,
+            nearby: { players: 0, npcs: 1, objects: 2, worldItems: 0 },
+            events: 1,
+            availableActions: 8,
+            latestEventKind: 'movement_progress',
+          },
+        },
+      }),
+    ]);
+
+    expect(triage.buckets.slice(0, 4).map(bucket => bucket.key)).toEqual(['offline', 'attention', 'quiet', 'action']);
+    expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['gp', 'story', 'offline', 'attention']);
   });
 
   test('does not call an acting resident quiet just because no fresh speech line is visible', () => {

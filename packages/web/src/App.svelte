@@ -29,6 +29,7 @@
     residentPublicStateTiles,
     residentStackSummary,
     residentTriageSummary,
+    visibleResidentTriageBuckets,
     type ResidentLoopFact,
     type ResidentProofRollup,
     type ResidentGuestTrailPulse,
@@ -4168,7 +4169,7 @@
       <span class={`tag ${cityResidentTriage.tone}`}>{cityResidentTriage.urgentResidents}/{cityResidentTriage.totalResidents}</span>
     </div>
     <div class="resident-triage-grid">
-      {#each cityResidentTriage.buckets.slice(0, limit) as bucket (bucket.key)}
+      {#each visibleResidentTriageBuckets(cityResidentTriage, limit) as bucket (bucket.key)}
         <article class={`resident-triage-bucket tone-${bucket.count > 0 ? bucket.tone : 'ok'}`}>
           <div class="resident-triage-bucket-head">
             <span class={`tag ${bucket.count > 0 ? bucket.tone : 'ok'}`}>{bucket.count}</span>

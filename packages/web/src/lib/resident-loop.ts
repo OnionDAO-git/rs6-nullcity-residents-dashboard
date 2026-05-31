@@ -783,6 +783,13 @@ export function residentTriageSummary(
   };
 }
 
+export function visibleResidentTriageBuckets(summary: ResidentTriageSummary, limit: number): ResidentTriageBucket[] {
+  if (limit <= 0) return [];
+  const activeBuckets = summary.buckets.filter(bucket => bucket.count > 0);
+  const clearBuckets = summary.buckets.filter(bucket => bucket.count === 0);
+  return [...activeBuckets, ...clearBuckets].slice(0, limit);
+}
+
 function modelParts(row: ResidentDashboardRow): { value: string; detail?: string } {
   const profile = row.stack?.model || row.stack?.brain || row.stack?.body;
   const value =
