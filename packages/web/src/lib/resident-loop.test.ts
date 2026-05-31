@@ -1319,7 +1319,7 @@ describe('resident loop helpers', () => {
       thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
       body: {
         controlHeld: true,
-        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
         latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
         feed: {
           attached: true,
@@ -1394,7 +1394,7 @@ describe('resident loop helpers', () => {
       thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
       body: {
         controlHeld: true,
-        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
         latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
         feed: {
           attached: true,
@@ -1432,6 +1432,72 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('triages active plans whose latest action lacks an explicit goal link', () => {
+    const unlinked = row({
+      name: 'res:unlinked',
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof is live.' }],
+      },
+    });
+    const linked = row({
+      name: 'res:linked',
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof is live.' }],
+      },
+    });
+
+    const triage = residentTriageSummary([unlinked, linked]);
+
+    expect(triage.tone).toBe('warn');
+    expect(triage.detail).toBe('Goal link: 1');
+    expect(triage.buckets.find(bucket => bucket.key === 'goal-link')).toEqual({
+      key: 'goal-link',
+      label: 'Goal link',
+      tone: 'warn',
+      count: 1,
+      residents: ['res:unlinked'],
+      detail: 'Latest action is visible but not explicitly tied to the active plan.',
+    });
+  });
+
   test('builds operator triage buckets for quiet, low AP, missing plan, GP, story, and benchmark gaps', () => {
     const rows = [
       row({
@@ -1440,7 +1506,7 @@ describe('resident loop helpers', () => {
         thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
         body: {
           controlHeld: true,
-          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
           latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
           feed: {
             attached: true,
@@ -1541,6 +1607,14 @@ describe('resident loop helpers', () => {
           detail: 'Thinking has not published a current plan for these residents.',
         },
         {
+          key: 'goal-link',
+          label: 'Goal link',
+          tone: 'ok',
+          count: 0,
+          residents: [],
+          detail: 'No residents in this bucket right now.',
+        },
+        {
           key: 'contract',
           label: 'Goal contract',
           tone: 'ok',
@@ -1592,7 +1666,7 @@ describe('resident loop helpers', () => {
         thinking: { mode: 'executing', activePlan: 'Trade coin 995 for AP' },
         body: {
           controlHeld: true,
-          lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'body', tick: 44 },
+          lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'body', cause: 'goal:ap-gp', tick: 44 },
           feed: {
             attached: true,
             tick: 44,
@@ -1646,13 +1720,14 @@ describe('resident loop helpers', () => {
     ]);
 
     expect(triage.buckets.slice(0, 4).map(bucket => bucket.key)).toEqual(['offline', 'attention', 'recovery', 'quiet']);
-    expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['gp', 'story', 'memory', 'offline']);
+    expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['goal-link', 'gp', 'story', 'memory']);
   });
 
   test('parses resident triage focus links from the route query', () => {
     expect(residentTriageFocusFromSearch('?triage=attention')).toBe('attention');
     expect(residentTriageFocusFromSearch('triage=recovery')).toBe('recovery');
     expect(residentTriageFocusFromSearch('?human=guest&triage=quiet')).toBe('quiet');
+    expect(residentTriageFocusFromSearch('?triage=goal-link')).toBe('goal-link');
     expect(residentTriageFocusFromSearch('?triage=memory')).toBe('memory');
     expect(residentTriageFocusFromSearch('?triage=unknown')).toBe('');
     expect(residentTriageFocusFromSearch('?triage=')).toBe('');
@@ -1749,7 +1824,7 @@ describe('resident loop helpers', () => {
         thinking: { mode: 'executing', activePlan: 'Patrol Lumbridge and keep moving.' },
         body: {
           controlHeld: true,
-          lastAction: { kind: 'move_to', result: 'success', source: 'body', tick: 100 },
+          lastAction: { kind: 'move_to', result: 'success', source: 'body', cause: 'goal:patrol', tick: 100 },
           feed: {
             attached: true,
             tick: 101,

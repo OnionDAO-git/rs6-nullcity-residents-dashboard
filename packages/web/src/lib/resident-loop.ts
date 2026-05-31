@@ -163,7 +163,7 @@ export interface ResidentLivenessDetail {
 }
 
 export interface ResidentTriageBucket {
-  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'contract' | 'gp' | 'story' | 'memory' | 'benchmark';
+  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'goal-link' | 'contract' | 'gp' | 'story' | 'memory' | 'benchmark';
   label: string;
   tone: 'ok' | 'warn' | 'fail';
   count: number;
@@ -1881,6 +1881,7 @@ export function residentTriageSummary(
         emptyTriageBucket('quiet', 'Quiet loop', 'warn', 'No loop cadence is available yet.'),
         emptyTriageBucket('action', 'Action outcome', 'fail', 'No action outcome data is available yet.'),
         emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
+        emptyTriageBucket('goal-link', 'Goal link', 'warn', 'No goal/action link data is available yet.'),
         emptyTriageBucket('contract', 'Goal contract', 'warn', 'No active goal contract data is available yet.'),
         emptyTriageBucket('gp', 'Missing GP proof', 'warn', 'No coin-995 proof is available yet.'),
         emptyTriageBucket('story', 'Thin story', 'warn', 'No Library or Storyteller evidence is available yet.'),
@@ -1902,6 +1903,10 @@ export function residentTriageSummary(
   });
   const actionOutcomeRows = rows.filter(row => row.online && residentActionOutcome(row).failed);
   const missingPlanRows = rows.filter(row => row.online && !row.thinking?.activePlan?.trim());
+  const goalLinkRows = rows.filter(row => {
+    if (!row.online || !row.thinking?.activePlan?.trim()) return false;
+    return residentGoalActionLink(row).tone === 'warn';
+  });
   const missingContractRows = rows.filter(row => {
     if (!row.online) return false;
     const contract = resolveSignals(row).goalContract;
@@ -1932,6 +1937,7 @@ export function residentTriageSummary(
     makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
     makeTriageBucket('action', 'Action outcome', 'fail', actionOutcomeRows, 'Latest action result timed out or failed; inspect before trusting liveness.'),
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
+    makeTriageBucket('goal-link', 'Goal link', 'warn', goalLinkRows, 'Latest action is visible but not explicitly tied to the active plan.'),
     makeTriageBucket('contract', 'Goal contract', 'warn', missingContractRows, 'Active goal contracts are missing or lack binary completion evidence.'),
     makeTriageBucket('gp', 'Missing GP proof', 'warn', missingGpRows, 'Do not claim GP purchasing power until coin-995 or economy evidence appears.'),
     makeTriageBucket('story', 'Thin story', 'warn', thinStoryRows, 'Library or Storyteller evidence is not fresh enough to explain the resident.'),
@@ -1946,6 +1952,7 @@ export function residentTriageSummary(
     ...quietRows,
     ...actionOutcomeRows,
     ...missingPlanRows,
+    ...goalLinkRows,
     ...missingContractRows,
     ...missingGpRows,
     ...thinStoryRows,
@@ -1989,6 +1996,7 @@ const residentTriageBucketKeys = new Set<ResidentTriageBucketKey>([
   'quiet',
   'action',
   'plan',
+  'goal-link',
   'contract',
   'gp',
   'story',
