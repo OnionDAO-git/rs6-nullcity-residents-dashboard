@@ -68,6 +68,12 @@ export interface ResidentMemoryFreshness {
   tone: 'ok' | 'warn';
 }
 
+export interface ResidentCauseSignal {
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn';
+}
+
 export interface ResidentProofRollupAction {
   label: string;
   tone: 'warn' | 'fail';
@@ -261,6 +267,7 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
   const gp = residentGoldEvidenceLabel(row);
   const apRunway = residentAttentionRunway(row);
   const memory = residentMemoryFreshness(row);
+  const cause = residentCauseSignal(row);
   const needsAp = residentNeedsAp(row);
   const needsGpEvidence = gp.value === 'not observed';
   const storyValue = memory.label === 'thin' ? signals.storyteller?.summary || '-' : memory.summary;
@@ -295,6 +302,12 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
         ? [speech.source === 'feed' ? 'live speech in feed' : 'latest say event', speechFreshness].filter(Boolean).join(' | ')
         : 'no recent speech',
       tone: speech.text !== '-' && !isTickStale(speechFreshness) ? 'ok' : 'warn',
+    },
+    {
+      label: 'Because',
+      value: cause.value,
+      detail: cause.detail,
+      tone: cause.tone,
     },
     {
       label: 'Remembers',
@@ -418,6 +431,50 @@ export function residentMemoryFreshness(row: ResidentDashboardRow): ResidentMemo
     summary: truncateAgencyText(storyTitle, 96),
     detail: ['Library memory', storyDetail(row), freshness].filter(Boolean).join(' | '),
     tone: isTickStale(freshness) ? 'warn' : 'ok',
+  };
+}
+
+export function residentCauseSignal(row: ResidentDashboardRow): ResidentCauseSignal {
+  const action = row.body?.lastAction;
+  const actionKind = action?.kind || row.lastEvent?.kind;
+  const rawCause = action?.cause || action?.ruleId;
+  if (rawCause) {
+    return readableRawCause(rawCause, actionKind || 'action');
+  }
+
+  if (row.thinking?.lastInferenceCause) {
+    const cause = readableCauseToken(row.thinking.lastInferenceCause);
+    return {
+      value: cause,
+      detail: `because thinking recorded ${cause} (${row.thinking.lastInferenceCause})`,
+      tone: 'ok',
+    };
+  }
+
+  const speech = recentSpeechSignal(row);
+  if (speech.text !== '-') {
+    const source = speech.source === 'feed' ? 'live feed' : 'latest event';
+    const tick = speech.tick === undefined ? '' : ` at tick ${speech.tick}`;
+    return {
+      value: 'live speech',
+      detail: `because the ${source} captured speech${tick}`,
+      tone: 'ok',
+    };
+  }
+
+  const plan = row.thinking?.activePlan?.trim();
+  if (plan) {
+    return {
+      value: 'live plan',
+      detail: `because they are working on "${truncateAgencyText(plan, 72)}"`,
+      tone: 'ok',
+    };
+  }
+
+  return {
+    value: 'no cause yet',
+    detail: 'No action cause, speech source, or live plan is visible.',
+    tone: 'warn',
   };
 }
 
@@ -1084,6 +1141,53 @@ function friendlyActionLabel(kind: string, row: ResidentDashboardRow): string {
     trade_with: 'traded',
   };
   return labels[normalized] || `did ${normalized.replace(/_/g, ' ')}`;
+}
+
+function readableRawCause(rawCause: string, actionKind: string): ResidentCauseSignal {
+  const raw = rawCause.trim();
+  const normalized = raw.toLowerCase();
+  if (normalized === 'goal:ap-gp') {
+    return {
+      value: 'AP/GP goal',
+      detail: `because the AP/GP goal drove ${actionKind} (${raw})`,
+      tone: 'ok',
+    };
+  }
+  if (normalized === 'nervous:request-attention') {
+    return {
+      value: 'attention request',
+      detail: `because the nervous system requested attention (${raw})`,
+      tone: 'ok',
+    };
+  }
+
+  if (normalized.startsWith('goal:')) {
+    const value = `${readableCauseToken(raw.slice('goal:'.length))} goal`;
+    return {
+      value,
+      detail: `because ${value} drove ${actionKind} (${raw})`,
+      tone: 'ok',
+    };
+  }
+  if (normalized.startsWith('nervous:')) {
+    const value = readableCauseToken(raw.slice('nervous:'.length));
+    return {
+      value,
+      detail: `because the nervous system recorded ${value} (${raw})`,
+      tone: 'ok',
+    };
+  }
+
+  const value = raw.includes(':') ? readableCauseToken(raw.split(':').slice(1).join(':') || raw) : `rule ${readableCauseToken(raw)}`;
+  return {
+    value,
+    detail: `because ${value} drove ${actionKind} (${raw})`,
+    tone: 'ok',
+  };
+}
+
+function readableCauseToken(value: string): string {
+  return value.trim().replace(/[_:-]+/g, ' ').replace(/\s+/g, ' ');
 }
 
 function truncateAgencyText(value: string, maxLength: number): string {

@@ -3,6 +3,7 @@ import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import {
   residentAgencyCue,
   residentAttentionRunway,
+  residentCauseSignal,
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
   residentGuestTrailFacts,
@@ -228,6 +229,7 @@ describe('resident loop helpers', () => {
       { label: 'Needs', value: 'AP support', detail: 'At/below 10 AP support floor. · GP not observed', tone: 'warn' },
       { label: 'Did', value: 'pickup_item', detail: 'success | thinking | goal:ap-gp | tick 2048 (current)', tone: 'ok' },
       { label: 'Said', value: 'I need AP, but coin 995 is nearby.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
+      { label: 'Because', value: 'AP/GP goal', detail: 'because the AP/GP goal drove pickup_item (goal:ap-gp)', tone: 'ok' },
       { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'Library memory | city_attention_credit @ 2048 | tick 2048 (current) | City dispatch cited this resident.', tone: 'ok' },
     ]);
   });
@@ -378,6 +380,58 @@ describe('resident loop helpers', () => {
       label: 'thin',
       summary: 'No Library memory yet',
       detail: 'No current Library story signal.',
+      tone: 'warn',
+    });
+  });
+
+  test('turns raw action and speech causes into visitor-readable because signals', () => {
+    expect(residentCauseSignal(row({
+      thinking: { mode: 'executing', activePlan: 'Earn GP to keep AP above the floor' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 2048 },
+      },
+    }))).toEqual({
+      value: 'AP/GP goal',
+      detail: 'because the AP/GP goal drove pickup_item (goal:ap-gp)',
+      tone: 'ok',
+    });
+
+    expect(residentCauseSignal(row({
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'say', result: 'success', source: 'nervous-system', cause: 'nervous:request-attention', tick: 12 },
+      },
+    }))).toEqual({
+      value: 'attention request',
+      detail: 'because the nervous system requested attention (nervous:request-attention)',
+      tone: 'ok',
+    });
+
+    expect(residentCauseSignal(row({
+      thinking: { mode: 'executing', activePlan: 'Reach the cow pen safely' },
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          tick: 88,
+          ageMs: 1000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I am moving carefully.',
+        },
+      },
+    }))).toEqual({
+      value: 'live speech',
+      detail: 'because the live feed captured speech at tick 88',
+      tone: 'ok',
+    });
+
+    expect(residentCauseSignal(row())).toEqual({
+      value: 'no cause yet',
+      detail: 'No action cause, speech source, or live plan is visible.',
       tone: 'warn',
     });
   });
