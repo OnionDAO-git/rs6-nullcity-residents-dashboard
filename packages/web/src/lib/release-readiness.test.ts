@@ -164,6 +164,10 @@ describe('buildReleaseReadiness', () => {
       ['storyteller', 'ok'],
       ['ncri-print', 'ok'],
     ]);
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Transport')).toEqual({
+      label: 'Transport',
+      value: 'stream',
+    });
   });
 
   test('blocks when no residents are visible', () => {
@@ -216,6 +220,11 @@ describe('buildReleaseReadiness', () => {
       detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
     });
     expect(summary.nextActions).toContain('Restore the economy stream or confirm polling fallback before relying on live AP/GP state.');
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Transport')).toEqual({
+      label: 'Transport',
+      value: 'polling',
+      tone: 'warn',
+    });
   });
 
   test('queues bridge configuration when release readiness has no live economy transport', () => {

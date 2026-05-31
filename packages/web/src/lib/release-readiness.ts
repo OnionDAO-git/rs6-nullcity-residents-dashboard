@@ -151,8 +151,16 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
 
 export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): ReleaseReadinessMetricTile[] {
   const { metrics } = summary;
+  const economyTransport = summary.checks.find(check => check.id === 'economy-transport');
   return [
     { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
+    ...(economyTransport
+      ? [{
+        label: 'Transport',
+        value: economyTransport.value,
+        ...(economyTransport.tone !== 'ok' ? { tone: economyTransport.tone } : {}),
+      }]
+      : []),
     { label: 'Plans', value: metrics.activePlans.toLocaleString() },
     {
       label: 'Action Risks',
