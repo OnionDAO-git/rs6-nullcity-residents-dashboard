@@ -538,7 +538,7 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'warn', summary: 'No grounded Storyteller events for this resident.' },
     });
 
-    expect(lines).toHaveLength(12);
+    expect(lines).toHaveLength(13);
     expect(lines.map(line => line.label)).toEqual([
       'Moment',
       'Need',
@@ -547,6 +547,7 @@ describe('resident loop helpers', () => {
       'Stack',
       'Plan',
       'Action',
+      'Story',
       'Goal Link',
       'Memory',
       'Proof',
@@ -578,6 +579,13 @@ describe('resident loop helpers', () => {
       limit: 84,
       priority: 'secondary',
     });
+    expect(lines.find(line => line.label === 'Story')).toMatchObject({
+      tone: 'warn',
+      limit: 96,
+      priority: 'secondary',
+    });
+    expect(lines.find(line => line.label === 'Story')?.text).toContain('No grounded Storyteller events for this resident.');
+    expect(lines.find(line => line.label === 'Story')?.text).toContain('latest Library/Storyteller signal');
     expect(lines.find(line => line.label === 'Stack')).toMatchObject({
       text: 'openrouter/haiku | standard@0.3.0',
       tone: 'ok',

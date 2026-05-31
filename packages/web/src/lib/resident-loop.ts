@@ -1119,6 +1119,7 @@ export function residentRosterScanLines(
   const checkpoints = residentLoopCheckpoints(row);
   const planCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'plan');
   const actionCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'action');
+  const storyCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'story');
   const liveMoment = residentLiveMoment(row);
   const agencyCue = residentAgencyCue(row, signals);
   const causeSignal = residentCauseSignal(row);
@@ -1179,6 +1180,13 @@ export function residentRosterScanLines(
       text: loopSignal.action,
       tone: actionCheckpoint?.tone || 'warn',
       limit: 60,
+      priority: 'secondary',
+    },
+    {
+      label: 'Story',
+      text: `${signals.storyteller?.summary || storyCheckpoint?.value || '-'} · ${signals.storyteller?.detail || storyCheckpoint?.detail || 'no Storyteller digest signal loaded'}`,
+      tone: signals.storyteller?.tone || storyCheckpoint?.tone || 'warn',
+      limit: 96,
       priority: 'secondary',
     },
     {
