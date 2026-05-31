@@ -591,6 +591,20 @@ describe('storytellerMythCard', () => {
     }).evidenceLabels).toEqual(['grounded evidence']);
   });
 
+  test('turns stuck recovery into public narrative copy without dropping evidence', () => {
+    expect(storytellerMythCard({
+      ref: 'stuck-1',
+      kind: 'stuck_recovered',
+      residentName: 'res:the-hush',
+      note: 'res:the-hush recovered from being stuck.',
+      evidenceLabels: ['library:stuck-1'],
+    })).toEqual({
+      title: 'The Hush got moving again',
+      body: 'The Hush recovered and kept moving.',
+      evidenceLabels: ['library:stuck-1'],
+    });
+  });
+
   test('names live economy and lifecycle digest kinds with concrete public verbs', () => {
     const titleFor = (kind: string) => storytellerMythCard({
       ref: `${kind}-1`,
@@ -604,7 +618,7 @@ describe('storytellerMythCard', () => {
     expect(titleFor('ap_low')).toBe('Ada ran low on attention');
     expect(titleFor('gp_observed')).toBe('Ada showed GP proof');
     expect(titleFor('resident_faded')).toBe('Ada faded from the live window');
-    expect(titleFor('stuck_recovered')).toBe('Ada recovered from being stuck');
+    expect(titleFor('stuck_recovered')).toBe('Ada got moving again');
     expect(titleFor('patron_gift')).toBe('Ada received patron support');
     expect(titleFor('quiet_resident')).toBe('Ada went quiet');
   });

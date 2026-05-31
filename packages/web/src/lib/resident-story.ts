@@ -148,10 +148,11 @@ export function residentStoryDigestSignal(
 export function storytellerMythCard(event: StorytellerDigestEventSummary): StorytellerMythCard {
   const actor = residentDisplayName(event.residentName);
   const title = `${actor} ${eventVerb(event.kind)}`;
+  const body = eventBody(event, actor);
   const evidenceLabels = event.evidenceLabels.filter(label => label.trim().length > 0);
   return {
     title,
-    ...(event.note?.trim() ? { body: event.note.trim() } : {}),
+    ...(body ? { body } : {}),
     evidenceLabels: evidenceLabels.length ? evidenceLabels : ['grounded evidence'],
   };
 }
@@ -449,7 +450,7 @@ function eventVerb(kind: string): string {
     case 'resident_faded':
       return 'faded from the live window';
     case 'stuck_recovered':
-      return 'recovered from being stuck';
+      return 'got moving again';
     case 'patron_gift':
       return 'received patron support';
     case 'quiet_resident':
@@ -457,6 +458,11 @@ function eventVerb(kind: string): string {
     default:
       return 'left evidence';
   }
+}
+
+function eventBody(event: StorytellerDigestEventSummary, actor: string): string | undefined {
+  if (event.kind === 'stuck_recovered') return `${actor} recovered and kept moving.`;
+  return event.note?.trim() || undefined;
 }
 
 function eventTs(event: StorytellerDigestEventSummary, digest: StorytellerDigestSummary): number {
