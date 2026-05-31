@@ -44,6 +44,12 @@ export interface ReleaseReadinessInput {
   nowMs?: number;
 }
 
+export interface ReleaseReadinessMetricTile {
+  label: string;
+  value: string;
+  tone?: ReleaseReadinessTone;
+}
+
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
@@ -121,6 +127,35 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     blockers,
     nextActions,
   };
+}
+
+export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): ReleaseReadinessMetricTile[] {
+  const { metrics } = summary;
+  return [
+    { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
+    { label: 'Plans', value: metrics.activePlans.toLocaleString() },
+    {
+      label: 'Action Risks',
+      value: metrics.failedActionResidents.toLocaleString(),
+      ...(metrics.failedActionResidents > 0 ? { tone: 'fail' as const } : {}),
+    },
+    {
+      label: 'Low AP',
+      value: metrics.lowApResidents.toLocaleString(),
+      ...(metrics.lowApResidents > 0 ? { tone: 'warn' as const } : {}),
+    },
+    {
+      label: 'Observed GP',
+      value: metrics.observedGp.toLocaleString(),
+      ...(metrics.observedGp <= 0 ? { tone: 'warn' as const } : {}),
+    },
+    {
+      label: 'Capability QA',
+      value: `${metrics.capabilityProofs.toLocaleString()}/${(metrics.capabilityProofs + metrics.capabilityMissing).toLocaleString()}`,
+      ...(metrics.capabilityMissing > 0 ? { tone: 'warn' as const } : {}),
+    },
+    { label: 'Story Age', value: metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${metrics.latestStorytellerAgeMinutes.toLocaleString()}m` },
+  ];
 }
 
 function summarizeCapabilityQa(runs: BenchmarkArtifactSummary[], nowMs: number): CapabilityQaSummary {

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { buildReleaseReadiness } from './release-readiness';
+import { buildReleaseReadiness, releaseReadinessMetricTiles } from './release-readiness';
 
 function resident(overrides: Partial<ResidentDashboardRow> = {}): ResidentDashboardRow {
   return {
@@ -239,6 +239,49 @@ describe('buildReleaseReadiness', () => {
     });
     expect(summary.blockers).toContain('res:hans latest action outcome is failed, timed out, or cancelled.');
     expect(summary.nextActions).toContain('Inspect residents with failed or timed-out latest actions before demoing liveness.');
+  });
+
+  test('builds compact metric tiles with action risk counts', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+            lastAction: { kind: 'attack', result: 'failed', source: 'body', tick: 500 },
+          },
+          feed: {
+            attached: true,
+            tick: 500,
+            ageMs: 4_000,
+            nearby: { players: 0, npcs: 1, objects: 4, worldItems: 1 },
+            events: 3,
+            availableActions: 7,
+          },
+        }),
+      ],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    const tiles = releaseReadinessMetricTiles(summary);
+
+    expect(tiles.map(tile => tile.label)).toEqual([
+      'Residents',
+      'Plans',
+      'Action Risks',
+      'Low AP',
+      'Observed GP',
+      'Capability QA',
+      'Story Age',
+    ]);
+    expect(tiles.find(tile => tile.label === 'Action Risks')).toEqual({
+      label: 'Action Risks',
+      value: '1',
+      tone: 'fail',
+    });
   });
 
   test('warns when core capability proof groups are missing or stale', () => {

@@ -44,7 +44,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
-  import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
+  import { buildReleaseReadiness, releaseReadinessMetricTiles, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
@@ -3259,12 +3259,9 @@
       <span class={`tag ${readinessStatusTone(cityReleaseReadiness.status)}`}>{cityReleaseReadiness.status}</span>
     </div>
     <div class="city-resident-profile-grid city-readiness-metrics">
-      <span><small>Residents</small><strong>{cityReleaseReadiness.metrics.onlineResidents}/{cityReleaseReadiness.metrics.residents}</strong></span>
-      <span><small>Plans</small><strong>{cityReleaseReadiness.metrics.activePlans}</strong></span>
-      <span><small>Low AP</small><strong>{cityReleaseReadiness.metrics.lowApResidents}</strong></span>
-      <span><small>Observed GP</small><strong>{cityReleaseReadiness.metrics.observedGp.toLocaleString()}</strong></span>
-      <span><small>Capability QA</small><strong>{cityReleaseReadiness.metrics.capabilityProofs}/{cityReleaseReadiness.metrics.capabilityProofs + cityReleaseReadiness.metrics.capabilityMissing}</strong></span>
-      <span><small>Story Age</small><strong>{cityReleaseReadiness.metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${cityReleaseReadiness.metrics.latestStorytellerAgeMinutes}m`}</strong></span>
+      {#each releaseReadinessMetricTiles(cityReleaseReadiness) as metric (metric.label)}
+        <span><small>{metric.label}</small><strong class={metric.tone || ''}>{metric.value}</strong></span>
+      {/each}
     </div>
     <div class="city-record-list compact">
       {#each cityReleaseReadiness.checks as check (check.id)}
