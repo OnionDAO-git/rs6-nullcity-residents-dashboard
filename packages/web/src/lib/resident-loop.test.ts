@@ -19,6 +19,7 @@ import {
   residentLoopCheckpoints,
   residentLoopSignal,
   residentLoopSummaryLine,
+  residentMemoryEvidenceFacts,
   residentMemoryFreshness,
   residentNeedsAp,
   residentNeedsApSupportSoon,
@@ -2155,5 +2156,55 @@ describe('resident loop helpers', () => {
       detail: 'qmd fact | routes | facts/routes.md | 2026-05-31T14:45:00.000Z',
       tone: 'ok',
     });
+  });
+
+  test('builds qmd memory evidence facts for resident detail', () => {
+    expect(residentMemoryEvidenceFacts(row({
+      memory: {
+        files: ['facts/routes.md', 'facts/social.md'],
+        facts: [
+          {
+            topic: 'routes',
+            path: 'facts/routes.md',
+            timestamp: '2026-05-31T14:45:00.000Z',
+            text: 'Lumbridge cow pen is safer than goblins for weak residents.',
+          },
+          {
+            topic: 'social',
+            path: 'facts/social.md',
+            timestamp: '2026-05-31T14:41:00.000Z',
+            text: 'res:qa-scout said they found 21 trees near the river.',
+          },
+          {
+            topic: 'skills',
+            path: 'facts/skills.md',
+            timestamp: '2026-05-31T14:40:00.000Z',
+            text: 'Woodcutting gives reliable logs near Lumbridge.',
+          },
+        ],
+      },
+    }), 2)).toEqual([
+      {
+        label: 'routes',
+        value: 'Lumbridge cow pen is safer than goblins for weak residents.',
+        detail: 'facts/routes.md | 2026-05-31T14:45:00.000Z',
+        tone: 'ok',
+      },
+      {
+        label: 'social',
+        value: 'res:qa-scout said they found 21 trees near the river.',
+        detail: 'facts/social.md | 2026-05-31T14:41:00.000Z',
+        tone: 'ok',
+      },
+    ]);
+
+    expect(residentMemoryEvidenceFacts(row())).toEqual([
+      {
+        label: 'Memory',
+        value: 'No qmd facts',
+        detail: 'No formal facts/*.md memory snippets yet.',
+        tone: 'warn',
+      },
+    ]);
   });
 });

@@ -589,6 +589,27 @@ export function residentMemoryFreshness(row: ResidentDashboardRow): ResidentMemo
   };
 }
 
+export function residentMemoryEvidenceFacts(row: ResidentDashboardRow, limit = 3): ResidentLoopFact[] {
+  const facts = row.memory?.facts || [];
+  if (facts.length === 0) {
+    return [
+      {
+        label: 'Memory',
+        value: 'No qmd facts',
+        detail: 'No formal facts/*.md memory snippets yet.',
+        tone: 'warn',
+      },
+    ];
+  }
+
+  return facts.slice(0, Math.max(1, Math.trunc(limit))).map(fact => ({
+    label: fact.topic || 'fact',
+    value: truncateAgencyText(fact.text, 88),
+    detail: [fact.path, fact.timestamp].filter(Boolean).join(' | ') || 'facts/*.md',
+    tone: 'ok',
+  }));
+}
+
 function qmdFactDetail(fact: ResidentMemoryFact): string {
   return ['qmd fact', fact.topic, fact.path, fact.timestamp].filter(Boolean).join(' | ');
 }

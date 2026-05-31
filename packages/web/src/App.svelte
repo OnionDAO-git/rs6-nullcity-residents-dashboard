@@ -31,6 +31,7 @@
     residentLoopCheckpoints,
     residentLoopSignal,
     residentLoopSummaryLine,
+    residentMemoryEvidenceFacts,
     residentMemoryFreshness,
     residentNeedsApSupportSoon,
     residentNextStepCue,
@@ -4613,6 +4614,10 @@
             <strong>{residentLoopSummaryLine(cityResident, { economyGp: cityResidentEconomyGpEvidence })}</strong>
             <span>GP is shown only when coin-995 inventory evidence appears in the live dashboard snapshot.</span>
           </div>
+        </div>
+        <div class="city-panel span-2">
+          <div class="panel-title">Memory Evidence</div>
+          {@render ResidentLoopFactGrid({ facts: residentMemoryEvidenceFacts(cityResident) })}
         </div>
         <div class="city-panel span-2">
           <div class="panel-title">Resident Intent</div>
