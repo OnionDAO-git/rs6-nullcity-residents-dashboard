@@ -12,6 +12,7 @@ import {
   residentGuestTrailPulse,
   residentIntelligenceFacts,
   residentIntentFacts,
+  residentLivenessLedger,
   residentLiveMoment,
   residentLoopCheckpoints,
   residentLoopSignal,
@@ -1155,6 +1156,71 @@ describe('resident loop helpers', () => {
       warn: 1,
       fail: 0,
       online: 2,
+    });
+  });
+
+  test('builds a sorted resident liveness ledger with next actions and proof signals', () => {
+    const ready = row({
+      name: 'res:ready',
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+    });
+    const low = row({
+      name: 'res:low',
+      attention: 1,
+      thinking: { mode: 'idle', activePlan: '' },
+      body: { controlHeld: true },
+    });
+    const offline = row({ name: 'res:offline', online: false, attention: 50 });
+
+    const ledger = residentLivenessLedger([ready, low, offline], row =>
+      row.name === 'res:ready'
+        ? {
+          benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+          storyteller: { tone: 'ok', summary: 'Storyteller cited this resident' },
+        }
+        : {},
+    );
+
+    expect(ledger.map(entry => entry.residentName)).toEqual(['res:offline', 'res:low', 'res:ready']);
+    expect(ledger[0]).toMatchObject({
+      tone: 'fail',
+      displayName: 'offline',
+      status: 'offline',
+      nextAction: 'Reconnect resident',
+      nextTarget: 'Grant Attention',
+    });
+    expect(ledger[1]).toMatchObject({
+      tone: 'warn',
+      displayName: 'low',
+      ap: '1 AP',
+      gp: 'not observed',
+      nextAction: 'Top up AP',
+      nextTarget: 'Grant Attention',
+    });
+    expect(ledger[2]).toMatchObject({
+      tone: 'ok',
+      displayName: 'ready',
+      proof: '7/7 loop proofs live',
+      gp: '42 GP',
+      nextAction: 'Keep watching',
+      nextTarget: 'Resident Intent',
     });
   });
 

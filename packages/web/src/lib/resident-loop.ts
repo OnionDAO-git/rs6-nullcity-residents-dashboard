@@ -120,6 +120,21 @@ export interface ResidentProofRollup {
   online: number;
 }
 
+export interface ResidentLivenessLedgerEntry {
+  residentName: string;
+  displayName: string;
+  tone: 'ok' | 'warn' | 'fail';
+  status: string;
+  proof: string;
+  detail: string;
+  nextAction: string;
+  nextTarget: string;
+  ap: string;
+  gp: string;
+  plan: string;
+  story: string;
+}
+
 export interface ResidentTriageBucket {
   key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'benchmark';
   label: string;
@@ -1393,6 +1408,53 @@ export function residentProofRollup(
     fail,
     online: onlineRows.length,
   };
+}
+
+export function residentLivenessLedger(
+  rows: ResidentDashboardRow[],
+  resolveSignals: (row: ResidentDashboardRow) => ResidentProofPulseSignals = () => ({}),
+  limit = 12,
+): ResidentLivenessLedgerEntry[] {
+  return rows
+    .map(row => {
+      const signals = resolveSignals(row);
+      const proof = residentProofPulse(row, signals);
+      const nextStep = residentNextStepCue(row, signals);
+      const moment = residentLiveMoment(row);
+      const ap = residentAttentionRunway(row);
+      const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
+      const checkpoints = residentLoopCheckpoints(row);
+      const plan = checkpoints.find(checkpoint => checkpoint.key === 'plan');
+      const story = checkpoints.find(checkpoint => checkpoint.key === 'story');
+      return {
+        residentName: row.name,
+        displayName: residentShortName(row.name),
+        tone: proof.tone,
+        status: row.online ? `${moment.label}: ${moment.title}` : 'offline',
+        proof: proof.summary,
+        detail: proof.detail,
+        nextAction: nextStep.action,
+        nextTarget: nextStep.target,
+        ap: ap.value,
+        gp: gp.value,
+        plan: plan?.value || '-',
+        story: story?.value || '-',
+      };
+    })
+    .sort((left, right) => {
+      const toneDelta = livenessToneRank(left.tone) - livenessToneRank(right.tone);
+      if (toneDelta !== 0) return toneDelta;
+      const actionDelta = left.nextAction.localeCompare(right.nextAction);
+      if (actionDelta !== 0) return actionDelta;
+      return left.residentName.localeCompare(right.residentName);
+    })
+    .slice(0, Math.max(0, limit));
+}
+
+function livenessToneRank(tone: ResidentLivenessLedgerEntry['tone']): number {
+  if (tone === 'fail') return 0;
+  if (tone === 'warn') return 1;
+  return 2;
 }
 
 function proofGapAction(label: string): ResidentProofRollupAction {

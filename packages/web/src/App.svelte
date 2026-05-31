@@ -24,6 +24,7 @@
     residentGuestTrailPulse,
     residentIntelligenceFacts,
     residentIntentFacts,
+    residentLivenessLedger,
     residentLiveMoment,
     residentLoopCheckpoints,
     residentLoopSignal,
@@ -470,6 +471,11 @@
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
   }));
+  $: cityResidentLivenessLedger = residentLivenessLedger(cityResidents, row => ({
+    benchmark: residentBenchmarkLabel(row),
+    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
+    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
+  }), 8);
   $: cityResidentDemoPick = residentDemoPickCue(cityResidents, row => ({
     benchmark: residentBenchmarkLabel(row),
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
@@ -4377,9 +4383,42 @@
   </section>
   {@render ResidentTriageStrip({ limit: 8 })}
   <section class="city-dashboard-grid">
-    <div class="city-panel span-2">
-      <div class="panel-title">Live Residents</div>
-      {@render CityResidentList({ rows: cityResidents })}
+    <div class="city-panel span-2 resident-liveness-ledger">
+      <div class="row">
+        <div>
+          <div class="panel-title">Resident Liveness Ledger</div>
+          <strong>{cityResidentProofRollup.headline}</strong>
+          <small>{cityResidentProofRollup.detail}</small>
+        </div>
+        <span class={`tag ${cityResidentProofRollup.tone}`}>{cityResidentProofRollup.healthy}/{cityResidentProofRollup.online}</span>
+      </div>
+      <div class="resident-liveness-list">
+        {#each cityResidentLivenessLedger as entry (entry.residentName)}
+          <button class={`resident-liveness-row tone-${entry.tone}`} onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(entry.residentName))}`)}>
+            <span class={`tag ${entry.tone}`}>{entry.tone}</span>
+            <span class="resident-liveness-main">
+              <strong>{entry.displayName}</strong>
+              <small>{entry.status} · {entry.proof}</small>
+              <em>{entry.detail}</em>
+            </span>
+            <span class="resident-liveness-facts">
+              <small>AP <strong>{entry.ap}</strong></small>
+              <small>GP <strong>{entry.gp}</strong></small>
+              <small>Plan <strong>{entry.plan}</strong></small>
+              <small>Story <strong>{entry.story}</strong></small>
+            </span>
+            <span class="resident-liveness-next">
+              <small>{entry.nextTarget}</small>
+              <strong>{entry.nextAction}</strong>
+            </span>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No resident liveness rows yet</strong>
+            <span>Live resident proof rows appear once the controller or city snapshot publishes residents.</span>
+          </div>
+        {/each}
+      </div>
     </div>
     <div class="city-panel">
       <div class="panel-title">City Records</div>
@@ -4394,6 +4433,10 @@
           <div class="city-empty-state"><strong>No city resident records</strong><span>Live operations data is still available from the dashboard snapshot.</span></div>
         {/each}
       </div>
+    </div>
+    <div class="city-panel span-2">
+      <div class="panel-title">Live Residents</div>
+      {@render CityResidentList({ rows: cityResidents })}
     </div>
   </section>
 {/snippet}
