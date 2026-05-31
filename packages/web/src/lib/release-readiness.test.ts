@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
+import type { EconomyTransportSummary } from './live-economy';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
 import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles } from './release-readiness';
 
@@ -92,6 +93,15 @@ function printInsights(overrides: Partial<PrintQueueInsightSummary> = {}): Print
   };
 }
 
+function economyTransport(overrides: Partial<EconomyTransportSummary> = {}): EconomyTransportSummary {
+  return {
+    tone: 'ok',
+    label: 'stream',
+    detail: 'SSE snapshots are updating heartbeat and AP/GP totals.',
+    ...overrides,
+  };
+}
+
 function benchmark(overrides: Partial<BenchmarkArtifactSummary> = {}): BenchmarkArtifactSummary {
   return {
     file: 'bench.json',
@@ -124,6 +134,7 @@ describe('buildReleaseReadiness', () => {
       residents: [resident()],
       storyDigests: [digest()],
       printInsights: printInsights(),
+      economyTransport: economyTransport(),
       benchmarkRuns: capabilityBenchmarks(),
       nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
     });
@@ -148,6 +159,7 @@ describe('buildReleaseReadiness', () => {
       ['loop', 'ok'],
       ['ap', 'ok'],
       ['gp', 'ok'],
+      ['economy-transport', 'ok'],
       ['capabilities', 'ok'],
       ['storyteller', 'ok'],
       ['ncri-print', 'ok'],
@@ -179,6 +191,53 @@ describe('buildReleaseReadiness', () => {
 
     expect(summary.status).toBe('watch');
     expect(summary.detail).toBe('1 signal needs operator attention before relying on the loop live.');
+  });
+
+  test('watches release readiness when live AP/GP economy uses polling fallback', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport({
+        tone: 'warn',
+        label: 'polling',
+        detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
+      }),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'economy-transport')).toEqual({
+      id: 'economy-transport',
+      label: 'Economy Transport',
+      tone: 'warn',
+      value: 'polling',
+      detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
+    });
+    expect(summary.nextActions).toContain('Restore the economy stream or confirm polling fallback before relying on live AP/GP state.');
+  });
+
+  test('queues bridge configuration when release readiness has no live economy transport', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport({
+        tone: 'warn',
+        label: 'bridge',
+        detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+      }),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'economy-transport')).toMatchObject({
+      tone: 'warn',
+      value: 'bridge',
+    });
+    expect(summary.nextActions).toContain('Configure the live economy bridge before claiming AP/GP state is current.');
   });
 
   test('blocks when the latest capability proof fails despite other live signals', () => {

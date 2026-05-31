@@ -1,5 +1,6 @@
 import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
+import type { EconomyTransportSummary } from './live-economy';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
 import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp } from './resident-loop';
 import { storytellerGroundingAudit } from './resident-story';
@@ -8,7 +9,7 @@ export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
 export type ReleaseReadinessTone = 'ok' | 'warn' | 'fail';
 
 export interface ReleaseReadinessCheck {
-  id: 'residents' | 'plans' | 'loop' | 'ap' | 'gp' | 'capabilities' | 'storyteller' | 'ncri-print';
+  id: 'residents' | 'plans' | 'loop' | 'ap' | 'gp' | 'economy-transport' | 'capabilities' | 'storyteller' | 'ncri-print';
   label: string;
   tone: ReleaseReadinessTone;
   value: string;
@@ -42,6 +43,7 @@ export interface ReleaseReadinessInput {
   residents: ResidentDashboardRow[];
   storyDigests: StorytellerDigestSummary[];
   printInsights: PrintQueueInsightSummary;
+  economyTransport?: EconomyTransportSummary;
   benchmarkRuns?: BenchmarkArtifactSummary[];
   nowMs?: number;
 }
@@ -107,6 +109,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const storytellerReviewBacklog = storytellerDigestsNeedingReview(input.storyDigests).length;
 
   const capabilityQa = summarizeCapabilityQa(input.benchmarkRuns || [], nowMs);
+  const economyTransport = economyTransportCheck(input.economyTransport);
 
   const checks: ReleaseReadinessCheck[] = [
     residentCheck(residents.length, onlineResidents),
@@ -114,6 +117,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     residentLoopCheck(failedActionResidents, residents),
     apCheck(lowApResidents),
     gpCheck(observedGp),
+    ...(economyTransport ? [economyTransport] : []),
     capabilityQaCheck(capabilityQa),
     storytellerCheck(latestDigest, latestStorytellerAgeMinutes, storytellerReviewBacklog),
     ncriPrintCheck(input.printInsights),
@@ -222,6 +226,8 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Inspect residents')) return 'Inspect actions';
   if (action.startsWith('Top up')) return 'Top up AP';
   if (action.startsWith('Run an AP/GP')) return 'Prove GP';
+  if (action.startsWith('Configure the live economy')) return 'Configure bridge';
+  if (action.startsWith('Restore the economy')) return 'Check economy';
   if (action.startsWith('Run missing')) return 'Run capability QA';
   if (action.startsWith('Review and clear')) return 'Review Storyteller';
   if (action.startsWith('Run or review Storyteller')) return 'Review Storyteller';
@@ -439,6 +445,17 @@ function gpCheck(observedGp: number): ReleaseReadinessCheck {
   };
 }
 
+function economyTransportCheck(summary: EconomyTransportSummary | undefined): ReleaseReadinessCheck | undefined {
+  if (!summary) return undefined;
+  return {
+    id: 'economy-transport',
+    label: 'Economy Transport',
+    tone: summary.tone,
+    value: summary.label,
+    detail: summary.detail,
+  };
+}
+
 function storytellerCheck(
   digest: StorytellerDigestSummary | undefined,
   ageMinutes: number | undefined,
@@ -586,6 +603,14 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
+  const economyTransport = byId.get('economy-transport');
+  if (economyTransport && economyTransport.tone !== 'ok') {
+    if (economyTransport.value === 'bridge') {
+      actions.push('Configure the live economy bridge before claiming AP/GP state is current.');
+    } else {
+      actions.push('Restore the economy stream or confirm polling fallback before relying on live AP/GP state.');
+    }
+  }
   if (byId.get('capabilities')?.tone !== 'ok') actions.push('Run missing or stale capability benchmarks before relying on unproven resident loops.');
   if (byId.get('storyteller')?.tone === 'warn') {
     if (byId.get('storyteller')?.value.includes('pending review')) {

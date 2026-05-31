@@ -189,12 +189,6 @@
     ledger: [],
     residents: [],
   });
-  let cityReleaseReadiness: ReleaseReadinessSummary = buildReleaseReadiness({
-    residents: [],
-    storyDigests: [],
-    printInsights: cityPrintInsights,
-  });
-  let cityReleaseReadinessActions: ReleaseReadinessActionQueueItem[] = releaseReadinessActionQueue(cityReleaseReadiness);
   let cityEconomyProofs: EconomyProofSummary = buildEconomyProofSummary([]);
   let cityLiveEconomy: NullCityLiveEconomyBridgeResponse = { available: false, error: 'not_loaded' };
   let cityEconomyHeartbeat: NullCityEconomyHeartbeatBridgeResponse = { available: false, error: 'not_loaded' };
@@ -207,6 +201,13 @@
   let cityEconomyHeartbeatSummary: EconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   let cityEconomyListingsSummary: EconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
   let cityEconomyTransportSummary: EconomyTransportSummary = summarizeEconomyTransport(cityEconomyStreamStatus, cityLiveEconomy, cityEconomyHeartbeat);
+  let cityReleaseReadiness: ReleaseReadinessSummary = buildReleaseReadiness({
+    residents: [],
+    storyDigests: [],
+    printInsights: cityPrintInsights,
+    economyTransport: cityEconomyTransportSummary,
+  });
+  let cityReleaseReadinessActions: ReleaseReadinessActionQueueItem[] = releaseReadinessActionQueue(cityReleaseReadiness);
   let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
     authenticated: false,
     onlineResidents: [],
@@ -414,18 +415,19 @@
     ncriRecords: cityNullcityNcriRecords,
   });
   $: cityResidents = overview?.residents || residents;
-  $: cityReleaseReadiness = buildReleaseReadiness({
-    residents: cityResidents,
-    storyDigests: cityStoryDigests,
-    printInsights: cityPrintInsights,
-    benchmarkRuns: cityBenchmarkRuns,
-  });
-  $: cityReleaseReadinessActions = releaseReadinessActionQueue(cityReleaseReadiness);
   $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
   $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   $: cityEconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   $: cityEconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
   $: cityEconomyTransportSummary = summarizeEconomyTransport(cityEconomyStreamStatus, cityLiveEconomy, cityEconomyHeartbeat);
+  $: cityReleaseReadiness = buildReleaseReadiness({
+    residents: cityResidents,
+    storyDigests: cityStoryDigests,
+    printInsights: cityPrintInsights,
+    economyTransport: cityEconomyTransportSummary,
+    benchmarkRuns: cityBenchmarkRuns,
+  });
+  $: cityReleaseReadinessActions = releaseReadinessActionQueue(cityReleaseReadiness);
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
     gateway: gatewayStatus,
