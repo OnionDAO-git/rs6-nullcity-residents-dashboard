@@ -91,6 +91,7 @@ describe('dashboard route helpers', () => {
     expect(cityRouteNeedsStoryDigests('/')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/residents')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/residents/mother-anvil')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/library')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/story')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/economy')).toBe(false);
   });

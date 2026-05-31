@@ -12,7 +12,7 @@
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, selfFundedApResidentRows, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary, type SelfFundedApResidentRow } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
-  import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment } from './lib/resident-economy-evidence';
+  import { residentEconomyGpEvidence, residentEconomyReceiptTrail, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment, type ResidentEconomyReceipt } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
     residentAgencyCue,
@@ -240,6 +240,7 @@
   let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
   let cityResidentEconomyGpEvidence: ResidentEconomyGpEvidence | undefined;
   let cityResidentEconomyMoment: ResidentEconomyMoment | undefined;
+  let cityResidentEconomyReceipts: ResidentEconomyReceipt[] = [];
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentApSupport = residentApSupportRecommendation(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
@@ -430,6 +431,12 @@
   $: cityResidentGoalContract = residentGoalContractSignal(cityResidentEconomy);
   $: cityResidentEconomyGpEvidence = residentEconomyGpEvidence(cityResidentEconomy);
   $: cityResidentEconomyMoment = cityResident ? residentLiveEconomyMoment(cityLiveEconomy, cityResident.name) : undefined;
+  $: cityResidentEconomyReceipts = residentEconomyReceiptTrail({
+    economy: cityResidentEconomy,
+    liveEconomy: cityLiveEconomy,
+    residentName: cityResident?.name || cityResidentId,
+    limit: 4,
+  });
   $: cityResidentProofPulse = residentProofPulse(cityResident, {
     benchmark: cityResidentBenchmarkStatus,
     economyGp: cityResidentEconomyGpEvidence,
@@ -4605,6 +4612,22 @@
             </article>
           </div>
         {/if}
+        {#if cityResidentEconomyReceipts.length}
+          <div class="city-record-list compact" aria-label="AP/GP receipt trail">
+            {#each cityResidentEconomyReceipts as receipt (receipt.source + ':' + receipt.id)}
+              <article>
+                <span class="tag ok">{receipt.source}</span>
+                <div>
+                  <strong>{receipt.kind} · {receipt.deltaLabel}</strong>
+                  <small>{receipt.refLabel} · {timeAgo(receipt.ts)}</small>
+                  {#if receipt.note}
+                    <small>{receipt.note}</small>
+                  {/if}
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
       </div>
       {#if cityResident}
         {@const agencyCue = residentAgencyCue(cityResident, {
@@ -5234,6 +5257,30 @@
     <div class="city-panel">
       <div class="panel-title">Soul Files</div>
       {@render SoulGrid({ souls })}
+    </div>
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">Storyteller</div>
+        <button onclick={() => cityNav('/story')}>Open Feed</button>
+      </div>
+      {#if cityStoryDigests[0]}
+        {@const storyStatus = storytellerDigestStatus(cityStoryDigests[0])}
+        <div class="city-copy-block">
+          <strong>{cityStoryDigests[0].dispatch?.publicTitle || cityStoryDigests[0].digestId}</strong>
+          <p>{cityStoryDigests[0].summary || cityStoryDigests[0].dispatch?.publicBody || 'Digest captured. Open feed for full refs and review context.'}</p>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Run</small><strong>{cityStoryDigests[0].runId}</strong></span>
+          <span><small>Events</small><strong>{cityStoryDigests[0].topEventCount}</strong></span>
+          <span><small>Status</small><strong>{storyStatus.label}</strong></span>
+        </div>
+        <div class={`notice ${storyStatus.tone === 'warn' ? 'amber' : ''}`}>{storyStatus.summary}</div>
+      {:else}
+        <div class="city-empty-state">
+          <strong>No Storyteller digest yet</strong>
+          <span>Run `storyteller:dry-run` or dispatch to ground Library narratives.</span>
+        </div>
+      {/if}
     </div>
   </section>
 {/snippet}

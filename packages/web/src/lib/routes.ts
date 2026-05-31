@@ -104,6 +104,7 @@ export function cityRouteNeedsStoryDigests(route: string): boolean {
   return normalized === '/' ||
     normalized === '/residents' ||
     normalized.startsWith('/residents/') ||
+    normalized === '/library' ||
     isStoryRoute(normalized);
 }
 
