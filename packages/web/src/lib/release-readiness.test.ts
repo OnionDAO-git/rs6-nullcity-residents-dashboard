@@ -552,6 +552,11 @@ describe('buildReleaseReadiness', () => {
       detail: 'Latest Storyteller dispatch has no grounded top events selected.',
     });
     expect(summary.nextActions).toContain('Run Storyteller with grounded event evidence before using public canon narration.');
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Ground Story',
+      tone: 'warn',
+      detail: 'Run Storyteller with grounded event evidence before using public canon narration.',
+    });
   });
 
   test('warns when the latest Storyteller dispatch cites refs missing from top events', () => {
@@ -594,6 +599,11 @@ describe('buildReleaseReadiness', () => {
       detail: 'Latest Storyteller dispatch cites refs missing from digest top events: ghost-ref.',
     });
     expect(summary.nextActions).toContain('Review Storyteller grounding audit before using public canon narration.');
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Review grounding',
+      tone: 'warn',
+      detail: 'Review Storyteller grounding audit before using public canon narration.',
+    });
   });
 
   test('warns when the latest Storyteller dispatch has no grounded top events', () => {
