@@ -469,7 +469,7 @@ describe('buildReleaseReadiness', () => {
             operatorWarnings: [],
             reviewReasons: [],
             eventRefCount: 2,
-            eventRefsUsed: ['e3', 'e4'],
+            eventRefsUsed: ['e1', 'e2'],
           },
         }),
       ],
@@ -496,6 +496,62 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: '2 Storyteller digest dispatches still need operator review.',
     });
+  });
+
+  test('prioritizes latest zero-top-event grounding warning over older review backlog', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [
+        digest({
+          runId: 'review-older',
+          digestId: 'review-older',
+          dispatch: {
+            dispatchId: 'dispatch-review-older',
+            generatedAt: '2026-05-30T09:03:00.000Z',
+            modelProfile: 'default',
+            needsReview: true,
+            warningCount: 0,
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 1,
+            eventRefsUsed: ['e1'],
+          },
+        }),
+        digest({
+          runId: 'latest-empty',
+          digestId: 'latest-empty',
+          builtAt: '2026-05-30T09:08:00.000Z',
+          topEventCount: 0,
+          residentCount: 0,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-latest-empty',
+            generatedAt: '2026-05-30T09:08:00.000Z',
+            modelProfile: 'default',
+            needsReview: false,
+            warningCount: 0,
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 0,
+            eventRefsUsed: [],
+          },
+        }),
+      ],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.checks.find(check => check.id === 'storyteller')).toEqual({
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: 'no top events',
+      detail: 'Latest Storyteller dispatch has no grounded top events selected.',
+    });
+    expect(summary.nextActions).toContain('Run Storyteller with grounded event evidence before using public canon narration.');
   });
 
   test('warns when the latest Storyteller dispatch cites refs missing from top events', () => {
@@ -723,6 +779,49 @@ describe('buildReleaseReadiness', () => {
         label: 'Check economy',
         tone: 'warn',
         detail: 'Restore the economy stream or confirm polling fallback before relying on live AP/GP state.',
+      },
+      {
+        label: 'Check prints',
+        tone: 'warn',
+        detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+      },
+      {
+        label: 'Top up AP',
+        tone: 'warn',
+        detail: 'Top up low-AP residents or avoid presenting them as healthy.',
+      },
+      {
+        label: 'Prove GP',
+        tone: 'warn',
+        detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
+      },
+    ]);
+  });
+
+  test('keeps bridge configuration visible when the readiness queue is crowded', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          attention: 4,
+          body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } },
+        }),
+      ],
+      storyDigests: [],
+      printInsights: printInsights({ activeRequests: 0, inQueue: 0, ncriTrades: { pending: 0, accepted: 0, failed: 0, recent: [] } }),
+      economyTransport: economyTransport({
+        tone: 'warn',
+        label: 'bridge',
+        detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+      }),
+      benchmarkRuns: [],
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessActionQueue(summary)).toEqual([
+      {
+        label: 'Configure bridge',
+        tone: 'warn',
+        detail: 'Configure the live economy bridge before claiming AP/GP state is current.',
       },
       {
         label: 'Check prints',

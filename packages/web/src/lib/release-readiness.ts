@@ -279,7 +279,7 @@ function readinessActionTone(summary: ReleaseReadinessSummary, action: string): 
 
 function readinessActionPriority(action: ReleaseReadinessActionQueueItem): number {
   if (action.tone === 'fail') return 0;
-  if (action.label === 'Check economy') return 10;
+  if (action.label === 'Check economy' || action.label === 'Configure bridge') return 10;
   if (action.label === 'Check prints') return 20;
   if (action.label === 'Top up AP') return 30;
   if (action.label === 'Prove GP') return 40;
@@ -517,16 +517,6 @@ function storytellerCheck(
     };
   }
 
-  if (reviewBacklogCount > 0) {
-    return {
-      id: 'storyteller',
-      label: 'Storyteller',
-      tone: 'warn',
-      value: `${reviewBacklogCount.toLocaleString()} pending review`,
-      detail: `${reviewBacklogCount.toLocaleString()} Storyteller digest dispatch${reviewBacklogCount === 1 ? '' : 'es'} still need operator review.`,
-    };
-  }
-
   const audit = storytellerGroundingAudit(digest);
   if (audit.missingRefs.length > 0) {
     const names = audit.missingRefs.slice(0, 3).join(', ');
@@ -547,6 +537,16 @@ function storytellerCheck(
       tone: 'warn',
       value: 'no top events',
       detail: 'Latest Storyteller dispatch has no grounded top events selected.',
+    };
+  }
+
+  if (reviewBacklogCount > 0) {
+    return {
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: `${reviewBacklogCount.toLocaleString()} pending review`,
+      detail: `${reviewBacklogCount.toLocaleString()} Storyteller digest dispatch${reviewBacklogCount === 1 ? '' : 'es'} still need operator review.`,
     };
   }
 
