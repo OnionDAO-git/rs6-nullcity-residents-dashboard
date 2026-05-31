@@ -4249,7 +4249,7 @@
         <div class="city-panel span-2">
           <div class="city-empty-state">
             <strong>Public profile not loaded</strong>
-            <span>Check that the handle exists and the public event endpoints are running.</span>
+            <span>This profile will appear after the attendee handle has public AP, resident, or letter history.</span>
           </div>
         </div>
       </section>

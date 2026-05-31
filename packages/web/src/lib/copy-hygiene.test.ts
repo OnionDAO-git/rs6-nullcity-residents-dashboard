@@ -77,4 +77,9 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain('Run Storyteller digest generation to capture grounded resident events.');
     expect(appSource).toContain('Once a Storyteller digest cites this resident, grounded public story evidence will appear here.');
   });
+
+  test('keeps public profile empty states endpoint-free', () => {
+    expect(appSource).not.toContain('public event endpoints are running');
+    expect(appSource).toContain('This profile will appear after the attendee handle has public AP, resident, or letter history.');
+  });
 });
