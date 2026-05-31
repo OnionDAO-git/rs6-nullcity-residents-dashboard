@@ -72,7 +72,7 @@ export interface ReleaseReadinessActionQueueItem {
 }
 
 export interface ReleaseReadinessDemoProofItem {
-  label: 'Residents' | 'AP/GP' | 'Story' | 'Dry-run';
+  label: 'Residents' | 'Normal-life' | 'AP/GP' | 'Story' | 'Dry-run';
   tone: ReleaseReadinessTone;
   detail: string;
 }
@@ -275,6 +275,7 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
 export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary): ReleaseReadinessDemoProofItem[] {
   const checksById = new Map(summary.checks.map(check => [check.id, check]));
   const residents = worstCheck([checksById.get('residents'), checksById.get('plans'), checksById.get('loop')]);
+  const normalLife = checksById.get('normal-life');
   const apGpCapability = summary.demoProofs.apGpCapability;
   const apGpCapabilityCheck: ReleaseReadinessCheck | undefined = apGpCapability.tone === 'ok'
     ? undefined
@@ -297,6 +298,13 @@ export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary):
       label: 'Residents',
       tone: residents?.tone || 'warn',
       detail: residents && residents.tone !== 'ok' ? residents.detail : 'Residents, plans, and latest action outcomes are visible.',
+    },
+    {
+      label: 'Normal-life',
+      tone: normalLife?.tone || 'warn',
+      detail: normalLife && normalLife.tone !== 'ok'
+        ? normalLife.detail
+        : 'Latest normal-life audit is clear for recovery and AP/GP recurrence checks.',
     },
     {
       label: 'AP/GP',

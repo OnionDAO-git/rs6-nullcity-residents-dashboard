@@ -234,6 +234,11 @@ describe('buildReleaseReadiness', () => {
         detail: 'Residents, plans, and latest action outcomes are visible.',
       },
       {
+        label: 'Normal-life',
+        tone: 'ok',
+        detail: 'Latest normal-life audit is clear for recovery and AP/GP recurrence checks.',
+      },
+      {
         label: 'AP/GP',
         tone: 'ok',
         detail: 'AP support and coin-995 GP evidence are present.',
@@ -710,6 +715,11 @@ describe('buildReleaseReadiness', () => {
     expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Normal-life')).toEqual({
       label: 'Normal-life',
       value: 'watch',
+      tone: 'warn',
+      detail: 'latest audit: 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, trade closures 0, stuck recovered 590/592.',
+    });
+    expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Normal-life')).toEqual({
+      label: 'Normal-life',
       tone: 'warn',
       detail: 'latest audit: 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, trade closures 0, stuck recovered 590/592.',
     });

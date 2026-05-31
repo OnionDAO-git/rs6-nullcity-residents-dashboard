@@ -3434,7 +3434,7 @@
       <div>
         <div class="panel-title">AP/GP Loop Proofs</div>
         <strong>{cityEconomyProofs.headline}</strong>
-        <small>Priority proofs track AP top-up/resume, AP/GP goal hierarchy honesty, and AP-for-GP coin-995 exchange.</small>
+        <small>Priority proofs track AP top-up/resume, AP/GP goal hierarchy honesty, AP-for-GP coin-995 exchange, and normal-life recurrence caveats.</small>
       </div>
       <span class={`tag ${cityEconomyProofs.ready === cityEconomyProofs.total ? 'ok' : cityEconomyProofs.ready === 0 ? 'fail' : 'warn'}`}>
         {cityEconomyProofs.ready}/{cityEconomyProofs.total} fresh
