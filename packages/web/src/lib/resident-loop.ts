@@ -148,6 +148,12 @@ export interface ResidentGuestTrailPulse {
   observedGp: number;
 }
 
+export interface ResidentGuestTrailGuideCopy {
+  tone: 'ok' | 'warn';
+  headline: string;
+  detail: string;
+}
+
 export interface ResidentProofPulseSignals {
   benchmark?: ResidentBenchmarkSignal;
   goalContract?: { tone: 'ok' | 'warn'; summary: string };
@@ -604,6 +610,34 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
       tone: pulse.storyEvidence > 0 ? 'ok' : 'warn',
     },
   ];
+}
+
+export function residentGuestTrailGuideCopy(pulse: ResidentGuestTrailPulse): ResidentGuestTrailGuideCopy {
+  const online = Math.max(0, pulse.online);
+  const recoveryWait = Math.max(0, pulse.recoveryWait ?? 0);
+  const headline = 'Follow AP, GP, plan, action, recovery, speech, and story.';
+
+  if (online === 0) {
+    return {
+      tone: 'warn',
+      headline,
+      detail: 'Waiting for the live resident roster before reading recovery or demo liveness.',
+    };
+  }
+
+  if (recoveryWait > 0) {
+    return {
+      tone: 'warn',
+      headline,
+      detail: `${recoveryWaitDetail(pulse, recoveryWait)}. AP, GP, speech, and story still need live proof before demoing liveness.`,
+    };
+  }
+
+  return {
+    tone: 'ok',
+    headline,
+    detail: 'Recovery is clear when no online resident is waiting at low health. AP is the resident life force; GP still needs coin-995 evidence.',
+  };
 }
 
 export function residentRosterScanLines(

@@ -8,6 +8,7 @@ import {
   residentGoldEvidenceLabel,
   residentDemoPickCue,
   residentGuestTrailFacts,
+  residentGuestTrailGuideCopy,
   residentGuestTrailPulse,
   residentIntelligenceFacts,
   residentIntentFacts,
@@ -1493,6 +1494,58 @@ describe('resident loop helpers', () => {
       { label: 'Speech', value: '1/4 recent', detail: 'latest public say/feed line', tone: 'ok' },
       { label: 'Story', value: '2/4 grounded', detail: 'Library or Storyteller evidence', tone: 'ok' },
     ]);
+  });
+
+  test('explains clear recovery in the guest trail guide copy', () => {
+    expect(residentGuestTrailGuideCopy({
+      online: 4,
+      lowAp: 0,
+      planPublished: 4,
+      recentAction: 4,
+      recoveryWait: 0,
+      recentSpeech: 2,
+      storyEvidence: 3,
+      observedGp: 250,
+    })).toEqual({
+      tone: 'ok',
+      headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
+      detail: 'Recovery is clear when no online resident is waiting at low health. AP is the resident life force; GP still needs coin-995 evidence.',
+    });
+  });
+
+  test('explains active recovery waits in the guest trail guide copy', () => {
+    expect(residentGuestTrailGuideCopy({
+      online: 6,
+      lowAp: 0,
+      planPublished: 6,
+      recentAction: 6,
+      recoveryWait: 4,
+      recoveryWaitResidents: ['res:survivor', 'res:guardian', 'res:priest', 'res:scout'],
+      recoveryWaitMaxStuckTicks: 37,
+      recentSpeech: 2,
+      storyEvidence: 4,
+      observedGp: 250,
+    })).toEqual({
+      tone: 'warn',
+      headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
+      detail: 'survivor, guardian +2 more waiting; worst stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness. AP, GP, speech, and story still need live proof before demoing liveness.',
+    });
+  });
+
+  test('keeps the guest trail guide honest while the roster is syncing', () => {
+    expect(residentGuestTrailGuideCopy({
+      online: 0,
+      lowAp: 0,
+      planPublished: 0,
+      recentAction: 0,
+      recentSpeech: 0,
+      storyEvidence: 0,
+      observedGp: 0,
+    })).toEqual({
+      tone: 'warn',
+      headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
+      detail: 'Waiting for the live resident roster before reading recovery or demo liveness.',
+    });
   });
 
   test('summarizes multiple recovery-wait residents without overflowing the activity tile', () => {

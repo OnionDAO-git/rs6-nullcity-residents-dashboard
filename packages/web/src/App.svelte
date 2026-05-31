@@ -19,6 +19,7 @@
     residentCauseSignal,
     residentDemoPickCue,
     residentGuestTrailFacts,
+    residentGuestTrailGuideCopy,
     residentGuestTrailPulse,
     residentIntelligenceFacts,
     residentIntentFacts,
@@ -242,6 +243,7 @@
     storyEvidence: 0,
     observedGp: 0,
   };
+  let cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
@@ -452,6 +454,7 @@
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
+  $: cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
   $: cityResidentProofRollup = residentProofRollup(cityResidents, row => ({
     benchmark: residentBenchmarkLabel(row),
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
@@ -3561,8 +3564,8 @@
         {@render ResidentLoopFactGrid({ facts: residentGuestTrailFacts(cityLoopPulse) })}
       </div>
       <div class="city-empty-state subtle">
-        <strong>Follow the visible loop: AP, GP, plan, action, speech, and story.</strong>
-        <span>AP is the resident life force. GP is only trusted when coin-995 evidence appears in the live RuneScape snapshot.</span>
+        <strong>{cityGuestTrailGuide.headline}</strong>
+        <span>{cityGuestTrailGuide.detail}</span>
       </div>
       {@render CityResidentList({ rows: cityFeaturedResidents })}
     </div>
