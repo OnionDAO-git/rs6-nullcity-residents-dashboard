@@ -677,6 +677,11 @@ describe('buildReleaseReadiness', () => {
 
     expect(releaseReadinessActionQueue(summary)).toEqual([
       {
+        label: 'Check prints',
+        tone: 'warn',
+        detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+      },
+      {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
@@ -691,10 +696,48 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Run missing or stale capability benchmarks before relying on unproven resident loops.',
       },
-      {
-        label: 'Review Storyteller',
+    ]);
+  });
+
+  test('keeps live transport and print actions visible when the readiness queue is crowded', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          attention: 4,
+          body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } },
+        }),
+      ],
+      storyDigests: [],
+      printInsights: printInsights({ activeRequests: 0, inQueue: 0, ncriTrades: { pending: 0, accepted: 0, failed: 0, recent: [] } }),
+      economyTransport: economyTransport({
         tone: 'warn',
-        detail: 'Run or review Storyteller before using public canon narration.',
+        label: 'polling',
+        detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
+      }),
+      benchmarkRuns: [],
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessActionQueue(summary)).toEqual([
+      {
+        label: 'Check economy',
+        tone: 'warn',
+        detail: 'Restore the economy stream or confirm polling fallback before relying on live AP/GP state.',
+      },
+      {
+        label: 'Check prints',
+        tone: 'warn',
+        detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+      },
+      {
+        label: 'Top up AP',
+        tone: 'warn',
+        detail: 'Top up low-AP residents or avoid presenting them as healthy.',
+      },
+      {
+        label: 'Prove GP',
+        tone: 'warn',
+        detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
       },
     ]);
   });

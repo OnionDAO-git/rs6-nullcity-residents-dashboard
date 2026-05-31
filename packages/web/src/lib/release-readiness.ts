@@ -242,12 +242,17 @@ export function releaseReadinessActionQueue(summary: ReleaseReadinessSummary, li
   if (summary.status === 'ready') return [];
   return summary.nextActions
     .filter(action => !action.startsWith('Keep the controller running'))
+    .map((action, index) => {
+      const item = {
+        label: readinessActionLabel(action),
+        tone: readinessActionTone(summary, action),
+        detail: action,
+      };
+      return { item, index, priority: readinessActionPriority(item) };
+    })
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
     .slice(0, limit)
-    .map(action => ({
-      label: readinessActionLabel(action),
-      tone: readinessActionTone(summary, action),
-      detail: action,
-    }));
+    .map(action => action.item);
 }
 
 function readinessActionLabel(action: string): string {
@@ -270,6 +275,17 @@ function readinessActionTone(summary: ReleaseReadinessSummary, action: string): 
     return 'fail';
   }
   return 'warn';
+}
+
+function readinessActionPriority(action: ReleaseReadinessActionQueueItem): number {
+  if (action.tone === 'fail') return 0;
+  if (action.label === 'Check economy') return 10;
+  if (action.label === 'Check prints') return 20;
+  if (action.label === 'Top up AP') return 30;
+  if (action.label === 'Prove GP') return 40;
+  if (action.label === 'Run capability QA') return 50;
+  if (action.label === 'Review Storyteller') return 60;
+  return 100;
 }
 
 function summarizeCapabilityQa(runs: BenchmarkArtifactSummary[], nowMs: number): CapabilityQaSummary {
