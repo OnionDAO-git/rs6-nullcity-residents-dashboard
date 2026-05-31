@@ -807,6 +807,23 @@ describe('buildReleaseReadiness', () => {
     expect(summary.nextActions).toContain('Run missing or stale capability benchmarks before relying on unproven resident loops.');
   });
 
+  test('keeps the AP/GP demo proof rail on watch when the AP/GP capability proof is missing', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks().filter(run => run.task?.id !== 'ap-gp-exchange-5m'),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'AP/GP')).toEqual({
+      label: 'AP/GP',
+      tone: 'warn',
+      detail: 'AP/GP capability proof is missing; run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
+    });
+  });
+
   test('builds a compact first-five-minutes operator step rail from readiness state', () => {
     const summary = buildReleaseReadiness({
       residents: [],

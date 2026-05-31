@@ -37,6 +37,7 @@ export interface ReleaseReadinessSummary {
   detail: string;
   checks: ReleaseReadinessCheck[];
   metrics: ReleaseReadinessMetrics;
+  demoProofs: ReleaseReadinessDemoProofSignals;
   blockers: string[];
   nextActions: string[];
 }
@@ -73,6 +74,15 @@ export interface ReleaseReadinessDemoProofItem {
   label: 'Residents' | 'AP/GP' | 'Story' | 'Dry-run';
   tone: ReleaseReadinessTone;
   detail: string;
+}
+
+export interface ReleaseReadinessDemoProofSignal {
+  tone: ReleaseReadinessTone;
+  detail: string;
+}
+
+export interface ReleaseReadinessDemoProofSignals {
+  apGpCapability: ReleaseReadinessDemoProofSignal;
 }
 
 const LOW_AP_DEMO_THRESHOLD = 10;
@@ -122,6 +132,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const storytellerReviewBacklog = storytellerDigestsNeedingReview(input.storyDigests).length;
 
   const capabilityQa = summarizeCapabilityQa(input.benchmarkRuns || [], nowMs);
+  const apGpCapability = apGpCapabilityProofSignal(capabilityQa);
   const economyTransport = economyTransportCheck(input.economyTransport);
 
   const checks: ReleaseReadinessCheck[] = [
@@ -159,6 +170,9 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       ...(latestStorytellerAgeMinutes !== undefined ? { latestStorytellerAgeMinutes } : {}),
       capabilityProofs: capabilityQa.proven,
       capabilityMissing: capabilityQa.missing.length + capabilityQa.stale.length + capabilityQa.failed.length,
+    },
+    demoProofs: {
+      apGpCapability,
     },
     blockers,
     nextActions,
@@ -246,7 +260,17 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
 export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary): ReleaseReadinessDemoProofItem[] {
   const checksById = new Map(summary.checks.map(check => [check.id, check]));
   const residents = worstCheck([checksById.get('residents'), checksById.get('plans'), checksById.get('loop')]);
-  const apGp = worstCheck([checksById.get('ap'), checksById.get('gp'), checksById.get('economy-transport')]);
+  const apGpCapability = summary.demoProofs.apGpCapability;
+  const apGpCapabilityCheck: ReleaseReadinessCheck | undefined = apGpCapability.tone === 'ok'
+    ? undefined
+    : {
+      id: 'capabilities',
+      label: 'AP/GP Proof',
+      tone: apGpCapability.tone,
+      value: 'needs proof',
+      detail: apGpCapability.detail,
+    };
+  const apGp = worstCheck([checksById.get('ap'), checksById.get('gp'), checksById.get('economy-transport'), apGpCapabilityCheck]);
   const story = checksById.get('storyteller');
   const dryRunAction = summary.nextActions.find(action => action.startsWith('Run `npm run storyteller:dry-run'));
 
@@ -404,6 +428,41 @@ function summarizeCapabilityQa(runs: BenchmarkArtifactSummary[], nowMs: number):
   }
 
   return { proven, missing, stale, failed };
+}
+
+function apGpCapabilityProofSignal(summary: CapabilityQaSummary): ReleaseReadinessDemoProofSignal {
+  const missing = summary.missing.find(group => group.id === 'ap-gp');
+  if (missing) {
+    return {
+      tone: 'warn',
+      detail: 'AP/GP capability proof is missing; run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
+    };
+  }
+
+  const stale = summary.stale.find(item => item.group.id === 'ap-gp');
+  if (stale) {
+    return {
+      tone: 'warn',
+      detail: `AP/GP capability proof is stale (${capabilityRunLabel(stale.run)}); refresh it before claiming resident purchasing power.`,
+    };
+  }
+
+  const failed = summary.failed.find(item => item.group.id === 'ap-gp');
+  if (failed) {
+    return {
+      tone: 'fail',
+      detail: `AP/GP capability proof failed (${capabilityRunLabel(failed.run)}); rerun it before claiming resident purchasing power.`,
+    };
+  }
+
+  return {
+    tone: 'ok',
+    detail: 'AP/GP capability proof is fresh and passing.',
+  };
+}
+
+function capabilityRunLabel(run: BenchmarkArtifactSummary): string {
+  return run.task?.id || run.runId || run.file || 'unknown run';
 }
 
 function capabilityQaCheck(summary: CapabilityQaSummary): ReleaseReadinessCheck {
