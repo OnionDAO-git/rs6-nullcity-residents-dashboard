@@ -456,6 +456,11 @@ describe('resident loop helpers', () => {
       online: false,
       attention: 7674,
       thinking: { mode: 'offline', activePlan: 'Master woodcutting and supply the city with logs.', lastInferenceCause: 'evidence_record_failed' },
+      stack: {
+        model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: [] },
+      },
       body: {
         controlHeld: false,
         lastAction: { kind: 'action', result: 'success', source: 'thinking', tick: 26 },
@@ -470,12 +475,13 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'warn', summary: 'No grounded Storyteller events for this resident.' },
     });
 
-    expect(lines).toHaveLength(9);
+    expect(lines).toHaveLength(10);
     expect(lines.map(line => line.label)).toEqual([
       'Moment',
       'Need',
       'Why',
       'Runway',
+      'Stack',
       'Plan',
       'Action',
       'Memory',
@@ -497,7 +503,12 @@ describe('resident loop helpers', () => {
       text: 'Resident is offline in the live controller snapshot. · Act from: Grant Attention',
       tone: 'fail',
     });
-    expect(lines.some(line => line.label === 'Stack')).toBe(false);
+    expect(lines.find(line => line.label === 'Stack')).toMatchObject({
+      text: 'openrouter/haiku | standard@0.3.0',
+      tone: 'ok',
+      priority: 'secondary',
+      limit: 27,
+    });
     expect(lines.some(line => line.label === 'Storyteller')).toBe(false);
   });
 

@@ -401,6 +401,16 @@ function residentStackFact(row: ResidentDashboardRow): ResidentLoopFact {
   };
 }
 
+function residentRosterStackText(row: ResidentDashboardRow): string {
+  const model = modelParts(row);
+  const module = activeModule(row);
+  const modelLabel = model.value !== '-' ? model.value : 'no model';
+  const moduleLabel = module
+    ? `${module.id.replace(/^onion\.runescape\./, '')}${module.version ? `@${module.version}` : ''}`
+    : 'no SPARK';
+  return `${modelLabel} | ${moduleLabel}`;
+}
+
 export function residentIntentFacts(row: ResidentDashboardRow, signals: ResidentIntentSignals = {}): ResidentLoopFact[] {
   const speech = recentSpeechSignal(row);
   const action = row.body?.lastAction?.kind || row.lastEvent?.kind;
@@ -863,6 +873,7 @@ export function residentRosterScanLines(
   const agencyCue = residentAgencyCue(row, signals);
   const causeSignal = residentCauseSignal(row);
   const apRunway = residentAttentionRunway(row);
+  const stack = residentStackFact(row);
   const memoryFreshness = residentMemoryFreshness(row);
   const proofPulse = residentProofPulse(row, signals);
   const warning = residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
@@ -895,6 +906,13 @@ export function residentRosterScanLines(
       tone: apRunway.tone,
       limit: 76,
       priority: 'primary',
+    },
+    {
+      label: 'Stack',
+      text: residentRosterStackText(row),
+      tone: stack.tone || 'warn',
+      limit: 27,
+      priority: 'secondary',
     },
     {
       label: 'Plan',
