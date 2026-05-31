@@ -395,8 +395,8 @@
                 heading.textContent = 'Your Standing at the Embassy';
                 card.appendChild(heading);
 
-                // Shard balance
-                addStatRow(card, 'Shards',
+                // AP balance
+                addStatRow(card, 'AP',
                     (balance.balance || 0).toString(),
                     /* large= */ true
                 );
@@ -443,7 +443,7 @@
 
                     const hint = document.createElement('div');
                     hint.className = 'progress-hint';
-                    hint.textContent = standing.pointsToNext + ' Shards to ' + capitalise(standing.nextTier);
+                    hint.textContent = standing.pointsToNext + ' AP to ' + capitalise(standing.nextTier);
 
                     pwrap.appendChild(barWrap);
                     pwrap.appendChild(hint);
@@ -489,7 +489,7 @@
 
                 const btn = document.createElement('button');
                 btn.className = 'checkin-btn';
-                btn.textContent = 'Daily Check-In (+1 Shard)';
+                btn.textContent = 'Daily Check-In (+1 AP)';
 
                 const toast = document.createElement('div');
                 toast.className = 'checkin-toast';
@@ -503,7 +503,8 @@
                         .then(function (r) { return r.json(); })
                         .then(function (data) {
                             if (data.result === 'checked_in') {
-                                toast.textContent = '+' + data.shards_earned + ' Shard earned! Balance: ' + data.new_balance;
+                                const earned = data.ap_earned ?? data.shards_earned ?? 0;
+                                toast.textContent = '+' + earned + ' AP earned! Balance: ' + data.new_balance;
                                 toast.className = 'checkin-toast';
                                 // Refresh balance display in the card without full reload
                                 const balEls = document.querySelectorAll('.stat-value.large');

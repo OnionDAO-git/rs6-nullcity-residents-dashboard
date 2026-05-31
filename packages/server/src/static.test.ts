@@ -91,6 +91,24 @@ describe('serveDashboardWeb', () => {
     expect(patronHtml).toContain("'/debug/library/'");
   });
 
+  test('public event pages use AP vocabulary in visitor-facing copy', async () => {
+    const publicRoot = path.resolve(import.meta.dir, '../public');
+    const [indexHtml, patronHtml] = await Promise.all([
+      fs.readFile(path.join(publicRoot, 'index.html'), 'utf8'),
+      fs.readFile(path.join(publicRoot, 'patron/index.html'), 'utf8'),
+    ]);
+
+    expect(indexHtml).toContain('Attention Points');
+    expect(indexHtml).not.toContain('shards of attention');
+    expect(indexHtml).not.toContain('Shards balance');
+    expect(patronHtml).toContain("addStatRow(card, 'AP'");
+    expect(patronHtml).toContain("Daily Check-In (+1 AP)");
+    expect(patronHtml).toContain("AP earned! Balance:");
+    expect(patronHtml).not.toContain("addStatRow(card, 'Shards'");
+    expect(patronHtml).not.toContain("Daily Check-In (+1 Shard)");
+    expect(patronHtml).not.toContain("Shard earned! Balance:");
+  });
+
   test('public event pages offer a link back to the main dashboard', async () => {
     const publicRoot = path.resolve(import.meta.dir, '../public');
     const pages = [
