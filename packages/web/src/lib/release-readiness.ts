@@ -415,18 +415,18 @@ function readinessActionTone(summary: ReleaseReadinessSummary, action: string): 
 }
 
 function readinessActionTarget(action: string): { target: string; path: string } {
-  if (action.startsWith('Start or reconnect')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Start or reconnect')) return { target: 'Residents', path: '/residents?triage=offline' };
   if (action.startsWith('Confirm model/endpoint')) return { target: 'Residents', path: '/residents' };
   if (action.startsWith('Restart or observe')) return { target: 'Residents', path: '/residents' };
   if (action.startsWith('Inspect residents')) return { target: 'Residents', path: '/residents' };
-  if (action.startsWith('Inspect low-health recovery')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Inspect low-health recovery')) return { target: 'Residents', path: '/residents?triage=recovery' };
   if (action.startsWith('Fix failing normal-life audit')) return { target: 'Operator Readiness', path: '/' };
   if (action.startsWith('Run or sync a CQA10 normal-life audit')) return { target: 'Operator Readiness', path: '/' };
-  if (action.startsWith('Inspect top stuck-churn residents')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Inspect top stuck-churn residents')) return { target: 'Residents', path: '/residents?triage=quiet' };
   if (action.startsWith('Capture organic AP/GP recurrence evidence')) return { target: 'Economy', path: '/economy' };
   if (action.startsWith('Capture ordinary trade closure evidence')) return { target: 'Economy', path: '/economy' };
   if (action.startsWith('Use the latest normal-life audit caveat')) return { target: 'Operator Readiness', path: '/' };
-  if (action.startsWith('Top up')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Top up')) return { target: 'Residents', path: '/residents?triage=attention' };
   if (action.startsWith('Run an AP/GP')) return { target: 'Economy', path: '/economy' };
   if (action.startsWith('Configure the live economy')) return { target: 'Economy', path: '/economy' };
   if (action.startsWith('Restore the economy')) return { target: 'Economy', path: '/economy' };

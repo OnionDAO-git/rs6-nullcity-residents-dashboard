@@ -32,6 +32,7 @@ import {
   residentRosterScanLines,
   residentStackSummary,
   residentTriageSummary,
+  residentTriageFocusFromSearch,
   visibleResidentTriageBuckets,
 } from './resident-loop';
 
@@ -1449,6 +1450,14 @@ describe('resident loop helpers', () => {
 
     expect(triage.buckets.slice(0, 4).map(bucket => bucket.key)).toEqual(['offline', 'attention', 'recovery', 'quiet']);
     expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['gp', 'story', 'offline', 'attention']);
+  });
+
+  test('parses resident triage focus links from the route query', () => {
+    expect(residentTriageFocusFromSearch('?triage=attention')).toBe('attention');
+    expect(residentTriageFocusFromSearch('triage=recovery')).toBe('recovery');
+    expect(residentTriageFocusFromSearch('?human=guest&triage=quiet')).toBe('quiet');
+    expect(residentTriageFocusFromSearch('?triage=unknown')).toBe('');
+    expect(residentTriageFocusFromSearch('?triage=')).toBe('');
   });
 
   test('buckets low-health wait separately from generic quiet-loop risk', () => {

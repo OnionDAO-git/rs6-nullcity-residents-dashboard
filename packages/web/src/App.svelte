@@ -42,12 +42,14 @@
     residentPublicStateTiles,
     residentRosterScanLines,
     residentStackSummary,
+    residentTriageFocusFromSearch,
     residentTriageSummary,
     visibleResidentTriageBuckets,
     type ResidentApSupportRecommendation,
     type ResidentLoopFact,
     type ResidentProofRollup,
     type ResidentGuestTrailPulse,
+    type ResidentTriageBucketKey,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
@@ -239,6 +241,7 @@
   let cityResidentApSupport = residentApSupportRecommendation(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
+  let cityResidentTriageFocus: ResidentTriageBucketKey | '' = '';
   let cityResidentDemoPick = residentDemoPickCue([]);
   let cityDemoApSupport: CityDemoApSupportSignal | undefined;
   let cityResidentLoopAvailability = residentLoopAvailabilityState({ hasLiveResident: false, hasProjectedResident: false });
@@ -477,6 +480,7 @@
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
   }));
+  $: cityResidentTriageFocus = !isDebugRoute && route === '/residents' ? residentTriageFocusFromSearch(browserSearch) : '';
   $: cityResidentLivenessLedger = residentLivenessLedger(cityResidents, row => ({
     benchmark: residentBenchmarkLabel(row),
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
@@ -4503,7 +4507,12 @@
         </div>
       </article>
       {#each visibleResidentTriageBuckets(cityResidentTriage, limit) as bucket (bucket.key)}
-        <article class={`resident-triage-bucket tone-${bucket.count > 0 ? bucket.tone : 'ok'}`}>
+        <article
+          id={`resident-triage-${bucket.key}`}
+          class={`resident-triage-bucket tone-${bucket.count > 0 ? bucket.tone : 'ok'}`}
+          class:focused={cityResidentTriageFocus === bucket.key}
+          aria-current={cityResidentTriageFocus === bucket.key ? 'true' : undefined}
+        >
           <div class="resident-triage-bucket-head">
             <span class={`tag ${bucket.count > 0 ? bucket.tone : 'ok'}`}>{bucket.count}</span>
             <strong>{bucket.label}</strong>

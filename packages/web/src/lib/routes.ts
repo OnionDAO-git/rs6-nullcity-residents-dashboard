@@ -57,7 +57,7 @@ export function publicEventPath(route: string, origin?: string): string {
 }
 
 export function cityPath(route: string): string {
-  return normalizePath(route);
+  return normalizeNavigationPath(route);
 }
 
 export function residentDebugRoute(name: string): string {
@@ -135,6 +135,16 @@ function normalizePath(pathname: string): string {
   const [pathOnly = '/'] = pathname.split(/[?#]/);
   const withSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
   return withSlash.length > 1 ? withSlash.replace(/\/+$/, '') : '/';
+}
+
+function normalizeNavigationPath(route: string): string {
+  const hashIndex = route.indexOf('#');
+  const routeWithoutHash = hashIndex >= 0 ? route.slice(0, hashIndex) : route;
+  const hash = hashIndex >= 0 ? route.slice(hashIndex) : '';
+  const queryIndex = routeWithoutHash.indexOf('?');
+  const path = queryIndex >= 0 ? routeWithoutHash.slice(0, queryIndex) : routeWithoutHash;
+  const query = queryIndex >= 0 ? routeWithoutHash.slice(queryIndex) : '';
+  return `${normalizePath(path)}${query}${hash}`;
 }
 
 function normalizeResidentName(name: string): string {

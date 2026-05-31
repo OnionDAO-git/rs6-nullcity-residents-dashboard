@@ -515,7 +515,7 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.',
       target: 'Residents',
-      path: '/residents',
+      path: '/residents?triage=recovery',
     });
   });
 
@@ -762,7 +762,7 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Inspect top stuck-churn residents (qa-trader, agent, qa-social) before the next normal-life recurrence claim.',
       target: 'Residents',
-      path: '/residents',
+      path: '/residents?triage=quiet',
     });
   });
 
@@ -1218,7 +1218,7 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
         target: 'Residents',
-        path: '/residents',
+        path: '/residents?triage=attention',
       },
       {
         label: 'Prove GP',
@@ -1276,7 +1276,7 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
         target: 'Residents',
-        path: '/residents',
+        path: '/residents?triage=attention',
       },
     ]);
   });
@@ -1327,7 +1327,7 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
         target: 'Residents',
-        path: '/residents',
+        path: '/residents?triage=attention',
       },
     ]);
   });

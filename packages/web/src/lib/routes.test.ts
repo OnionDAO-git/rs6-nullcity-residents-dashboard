@@ -36,6 +36,8 @@ describe('dashboard route helpers', () => {
     expect(debugPath('/residents')).toBe('/debug/residents');
     expect(debugPath('/debug/logs')).toBe('/debug/logs');
     expect(cityPath('embassy')).toBe('/embassy');
+    expect(cityPath('residents?triage=attention')).toBe('/residents?triage=attention');
+    expect(cityPath('/residents#resident-triage-attention')).toBe('/residents#resident-triage-attention');
   });
 
   test('points public event pages at the dashboard server during Vite dev', () => {

@@ -166,6 +166,8 @@ export interface ResidentTriageBucket {
   detail: string;
 }
 
+export type ResidentTriageBucketKey = ResidentTriageBucket['key'];
+
 export interface ResidentTriageSummary {
   tone: 'ok' | 'warn' | 'fail';
   headline: string;
@@ -1755,6 +1757,23 @@ export function visibleResidentTriageBuckets(summary: ResidentTriageSummary, lim
   const activeBuckets = summary.buckets.filter(bucket => bucket.count > 0);
   const clearBuckets = summary.buckets.filter(bucket => bucket.count === 0);
   return [...activeBuckets, ...clearBuckets].slice(0, limit);
+}
+
+const residentTriageBucketKeys = new Set<ResidentTriageBucketKey>([
+  'offline',
+  'attention',
+  'recovery',
+  'quiet',
+  'action',
+  'plan',
+  'gp',
+  'story',
+  'benchmark',
+]);
+
+export function residentTriageFocusFromSearch(search: string): ResidentTriageBucketKey | '' {
+  const focus = new URLSearchParams(search).get('triage')?.trim().toLowerCase() || '';
+  return residentTriageBucketKeys.has(focus as ResidentTriageBucketKey) ? focus as ResidentTriageBucketKey : '';
 }
 
 function modelParts(row: ResidentDashboardRow): { value: string; detail?: string } {
