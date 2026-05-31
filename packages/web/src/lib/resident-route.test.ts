@@ -3,6 +3,8 @@ import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { ResidentReadModel } from './city-api';
 import {
   findResidentReadModel,
+  residentRowsNeedLiveFallback,
+  residentRowsForCityDirectory,
   residentDetailEmptyState,
   residentLoopAvailabilityState,
   residentRosterEmptyState,
@@ -35,6 +37,20 @@ describe('resident route helpers', () => {
     expect(resolveResidentRouteId('agent', [row('res:agent')])).toBe('res:agent');
     expect(resolveResidentRouteId('RES:AGENT', [row('res:agent')])).toBe('res:agent');
     expect(resolveResidentRouteId('missing', [row('res:agent')])).toBe('missing');
+  });
+
+  test('keeps city resident directory grounded in live rows when snapshot rows are empty', () => {
+    const liveRows = [row('res:agent'), row('res:hans')];
+
+    expect(residentRowsForCityDirectory([], liveRows)).toEqual(liveRows);
+    expect(residentRowsForCityDirectory(undefined, liveRows)).toEqual(liveRows);
+    expect(residentRowsForCityDirectory([row('res:pip')], liveRows)).toEqual([row('res:pip')]);
+  });
+
+  test('asks the city route to fetch live rows when the overview has no resident rows', () => {
+    expect(residentRowsNeedLiveFallback([])).toBe(true);
+    expect(residentRowsNeedLiveFallback(undefined)).toBe(true);
+    expect(residentRowsNeedLiveFallback([row('res:agent')])).toBe(false);
   });
 
   test('finds projected resident records from the loaded directory without a detail fetch', () => {

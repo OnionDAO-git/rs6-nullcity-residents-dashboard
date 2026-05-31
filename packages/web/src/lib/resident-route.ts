@@ -82,6 +82,17 @@ export function resolveResidentRouteId(input: string, rows: ResidentDashboardRow
   return match?.name || requested;
 }
 
+export function residentRowsForCityDirectory(
+  overviewRows: ResidentDashboardRow[] | undefined,
+  fallbackRows: ResidentDashboardRow[],
+): ResidentDashboardRow[] {
+  return overviewRows && overviewRows.length > 0 ? overviewRows : fallbackRows;
+}
+
+export function residentRowsNeedLiveFallback(overviewRows: ResidentDashboardRow[] | undefined): boolean {
+  return !overviewRows || overviewRows.length === 0;
+}
+
 export function findResidentReadModel(rows: ResidentReadModel[], input: string): ResidentReadModel | undefined {
   const requested = input.trim().toLowerCase();
   const requestedSlug = residentRouteSlug(requested);

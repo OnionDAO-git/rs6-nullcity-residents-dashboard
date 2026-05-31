@@ -63,7 +63,7 @@
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
-  import { findResidentReadModel, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
+  import { findResidentReadModel, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, residentRowsNeedLiveFallback, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -442,7 +442,7 @@
     printInsights: cityPrintInsights,
     ncriRecords: cityNullcityNcriRecords,
   });
-  $: cityResidents = overview?.residents || residents;
+  $: cityResidents = residentRowsForCityDirectory(overview?.residents, residents);
   $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
   $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   $: citySelfFundedApRows = selfFundedApResidentRows(cityLiveEconomy);
@@ -921,9 +921,16 @@
       overview = await api.overview();
       gatewayStatus = overview.gateway;
       residents = overview.residents || [];
+      if (residentRowsNeedLiveFallback(overview.residents)) {
+        residents = await api.residents('all').catch(() => residents);
+      }
       cityDataError = '';
     } catch (err) {
-      cityDataError = err instanceof Error ? err.message : 'City data unavailable';
+      const snapshotError = err instanceof Error ? err.message : 'City data unavailable';
+      const [fallbackResidents, fallbackGateway] = await Promise.allSettled([api.residents('all'), api.gatewayStatus()]);
+      residents = fallbackResidents.status === 'fulfilled' ? fallbackResidents.value : [];
+      if (fallbackGateway.status === 'fulfilled') gatewayStatus = fallbackGateway.value;
+      cityDataError = snapshotError;
     }
   }
 
