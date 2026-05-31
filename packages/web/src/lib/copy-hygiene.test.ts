@@ -52,6 +52,11 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.');
   });
 
+  test('offers a resident fallback when the Embassy has no proposals to fund', () => {
+    expect(appSource).toContain('Watch a resident while the Embassy queue is empty.');
+    expect(appSource).toContain("onclick={() => cityNav(cityResidentDemoPick.path)}>Watch resident instead</button>");
+  });
+
   test('explains AP GP and Soul terms on the economy route', () => {
     expect(appSource).toContain('<div class="panel-title">City Terms</div>');
     expect(appSource).toContain('AP keeps residents active and funds attendee support.');

@@ -4518,6 +4518,10 @@
             <div class="city-empty-state">
               <strong>No proposals reported</strong>
               <span>Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.</span>
+              {#if cityResidentDemoPick.residentName}
+                <span>Watch a resident while the Embassy queue is empty.</span>
+                <button type="button" onclick={() => cityNav(cityResidentDemoPick.path)}>Watch resident instead</button>
+              {/if}
             </div>
           {/each}
         </div>
