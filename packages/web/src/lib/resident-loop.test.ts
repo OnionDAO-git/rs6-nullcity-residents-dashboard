@@ -12,6 +12,7 @@ import {
   residentGuestTrailPulse,
   residentIntelligenceFacts,
   residentIntentFacts,
+  residentLivenessDetail,
   residentLivenessLedger,
   residentLiveMoment,
   residentLoopCheckpoints,
@@ -2039,5 +2040,55 @@ describe('resident loop helpers', () => {
       { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
       { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
     ]);
+  });
+
+  test('builds a resident detail liveness summary from AP, GP, plan, action, speech, and story proof', () => {
+    const resident = row({
+      name: 'res:ready',
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+    });
+
+    const detail = residentLivenessDetail(resident, {
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+      goalContract: { tone: 'ok', summary: 'goal contract live' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited this resident' },
+    });
+
+    expect(detail).toMatchObject({
+      residentName: 'res:ready',
+      displayName: 'ready',
+      tone: 'ok',
+      headline: '8/8 loop proofs live',
+      moment: 'Said: I can fund AP from coin 995.',
+      nextAction: 'Keep watching',
+      nextTarget: 'Resident Intent',
+    });
+    expect(detail.facts.map(fact => fact.label)).toEqual(['AP runway', 'GP proof', 'Plan', 'Action', 'Speech', 'Story', 'Memory']);
+    expect(detail.facts.find(fact => fact.label === 'GP proof')).toMatchObject({
+      value: '42 GP',
+      tone: 'ok',
+    });
+    expect(detail.facts.find(fact => fact.label === 'Plan')).toMatchObject({
+      value: 'Earn GP for AP',
+      detail: 'mode executing',
+      tone: 'ok',
+    });
   });
 });

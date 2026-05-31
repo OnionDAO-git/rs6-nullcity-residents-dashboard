@@ -24,6 +24,7 @@
     residentGuestTrailPulse,
     residentIntelligenceFacts,
     residentIntentFacts,
+    residentLivenessDetail,
     residentLivenessLedger,
     residentLiveMoment,
     residentLoopCheckpoints,
@@ -4538,7 +4539,29 @@
           economyGp: cityResidentEconomyGpEvidence,
           storyteller: cityResidentStorySignal,
         })}
+        {@const livenessDetail = residentLivenessDetail(cityResident, {
+          benchmark: cityResidentBenchmarkStatus,
+          economyGp: cityResidentEconomyGpEvidence,
+          goalContract: cityResidentGoalContract,
+          storyteller: cityResidentStorySignal,
+        })}
         {@const liveMoment = residentLiveMoment(cityResident)}
+        <div class={`city-panel span-2 resident-liveness-detail tone-${livenessDetail.tone}`}>
+          <div class="row">
+            <div>
+              <div class="panel-title">Liveness Detail</div>
+              <strong>{livenessDetail.headline}</strong>
+              <small>{livenessDetail.moment}</small>
+            </div>
+            <span class={`tag ${livenessDetail.tone}`}>{livenessDetail.tone}</span>
+          </div>
+          <div class="city-copy-block">
+            <strong>{livenessDetail.nextAction}</strong>
+            <p>{livenessDetail.nextDetail}</p>
+            <small>Act from: {livenessDetail.nextTarget}</small>
+          </div>
+          {@render ResidentLoopFactGrid({ facts: livenessDetail.facts })}
+        </div>
         <div class="city-panel span-2">
           <div class="row">
             <div class="panel-title">Resident Intelligence Loop</div>

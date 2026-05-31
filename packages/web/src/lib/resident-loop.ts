@@ -135,6 +135,19 @@ export interface ResidentLivenessLedgerEntry {
   story: string;
 }
 
+export interface ResidentLivenessDetail {
+  residentName: string;
+  displayName: string;
+  tone: 'ok' | 'warn' | 'fail';
+  headline: string;
+  moment: string;
+  detail: string;
+  nextAction: string;
+  nextTarget: string;
+  nextDetail: string;
+  facts: ResidentLoopFact[];
+}
+
 export interface ResidentTriageBucket {
   key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'benchmark';
   label: string;
@@ -1449,6 +1462,50 @@ export function residentLivenessLedger(
       return left.residentName.localeCompare(right.residentName);
     })
     .slice(0, Math.max(0, limit));
+}
+
+export function residentLivenessDetail(
+  row: ResidentDashboardRow,
+  signals: ResidentProofPulseSignals = {},
+): ResidentLivenessDetail {
+  const proof = residentProofPulse(row, signals);
+  const nextStep = residentNextStepCue(row, signals);
+  const moment = residentLiveMoment(row);
+  const ap = residentAttentionRunway(row);
+  const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
+  const checkpoints = residentLoopCheckpoints(row);
+  const memory = residentMemoryFreshness(row);
+
+  const checkpointFact = (key: ResidentLoopCheckpoint['key']): ResidentLoopFact => {
+    const checkpoint = checkpoints.find(item => item.key === key);
+    return {
+      label: checkpoint?.label || key,
+      value: checkpoint?.value || '-',
+      detail: checkpoint?.detail || `no ${key} signal`,
+      tone: checkpoint?.tone || 'warn',
+    };
+  };
+
+  return {
+    residentName: row.name,
+    displayName: residentShortName(row.name),
+    tone: proof.tone,
+    headline: proof.summary,
+    moment: `${moment.label}: ${moment.title}`,
+    detail: [moment.detail, proof.detail].filter(Boolean).join(' | '),
+    nextAction: nextStep.action,
+    nextTarget: nextStep.target,
+    nextDetail: nextStep.detail,
+    facts: [
+      { label: 'AP runway', value: ap.value, detail: ap.detail, tone: ap.tone },
+      { label: 'GP proof', value: gp.value, detail: gp.detail, tone: gp.tone },
+      checkpointFact('plan'),
+      checkpointFact('action'),
+      checkpointFact('speech'),
+      checkpointFact('story'),
+      { label: 'Memory', value: memory.label, detail: `${memory.summary}; ${memory.detail}`, tone: memory.tone },
+    ],
+  };
 }
 
 function livenessToneRank(tone: ResidentLivenessLedgerEntry['tone']): number {

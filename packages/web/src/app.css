@@ -2638,6 +2638,45 @@ pre {
   white-space: nowrap;
 }
 
+.resident-liveness-detail {
+  display: grid;
+  gap: 12px;
+  border-left: 3px solid var(--s-green);
+}
+
+.resident-liveness-detail.tone-warn {
+  border-left-color: var(--s-amber);
+}
+
+.resident-liveness-detail.tone-fail {
+  border-left-color: var(--s-rose);
+}
+
+.resident-liveness-detail .row {
+  align-items: start;
+}
+
+.resident-liveness-detail .row strong,
+.resident-liveness-detail .row small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resident-liveness-detail .row strong {
+  color: var(--text-0);
+}
+
+.resident-liveness-detail .row small {
+  margin-top: 4px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.resident-liveness-detail .city-copy-block {
+  margin-top: 0;
+}
+
 .resident-triage-strip {
   display: grid;
   gap: 14px;
