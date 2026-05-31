@@ -522,6 +522,10 @@ describe('resident loop helpers', () => {
         },
       },
       storyArc: { phase: 'progress', summary: 'Coin proof collected.', latestEventKind: 'gp_observed', latestEventTick: 150 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }],
+      },
     });
     const offline = row({ name: 'res:offline-resident', online: false });
 
@@ -535,7 +539,7 @@ describe('resident loop helpers', () => {
       residentName: 'res:ready-resident',
       target: 'Resident Detail',
       action: 'Open demo-ready resident',
-      detail: 'ready-resident has 6/6 loop proofs live; all tracked proof signals are live.',
+      detail: 'ready-resident has 7/7 loop proofs live; all tracked proof signals are live.',
     });
   });
 
@@ -946,12 +950,42 @@ describe('resident loop helpers', () => {
         },
       },
       storyArc: { phase: 'progress', summary: 'Making GP progress.' },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'GP can self-fund AP.' }],
+      },
     }), {
       economyGp: { tone: 'ok', summary: 'Recent economy GP evidence is available.', detail: 'ap_gp_exchange: exchanged 10 GP for 20 AP' },
     })).toEqual({
       tone: 'ok',
-      summary: '5/5 loop proofs live',
+      summary: '6/6 loop proofs live',
       detail: 'all tracked proof signals are live',
+    });
+  });
+
+  test('flags missing qmd memory as a resident proof gap', () => {
+    expect(residentProofPulse(row({
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Trade GP for AP when needed' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'body' },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can use coin 995 for AP.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Making GP progress.' },
+    }))).toEqual({
+      tone: 'warn',
+      summary: '5/6 loop proofs live',
+      detail: 'missing: Memory',
     });
   });
 
@@ -975,13 +1009,17 @@ describe('resident loop helpers', () => {
         },
       },
       storyArc: { phase: 'progress', summary: 'Combat attempt recorded.', latestEventKind: 'combat_started', latestEventTick: 400 },
+      memory: {
+        files: ['facts/combat.md'],
+        facts: [{ topic: 'combat', path: 'facts/combat.md', text: 'Cow pen fights need food.' }],
+      },
     }), {
       benchmark: { tone: 'ok', summary: 'pass', detail: 'score 1' },
       storyteller: { tone: 'ok', summary: 'story grounded' },
       goalContract: { tone: 'ok', summary: 'goal condition present' },
     })).toEqual({
       tone: 'fail',
-      summary: '7/8 loop proofs live',
+      summary: '8/9 loop proofs live',
       detail: 'action outcome: latest action timeout',
     });
   });
@@ -1083,6 +1121,10 @@ describe('resident loop helpers', () => {
       body: { controlHeld: true, latestPerception: { resident: { inventory: [{ id: 995, count: 42 }] } } },
       feed: { attached: true, ageMs: 5000, nearby: { players: 0, npcs: 1, objects: 1, worldItems: 0 }, events: 1, availableActions: 6 },
       storyArc: { phase: 'progress', summary: 'Making GP progress.' },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin 995 funds AP.' }],
+      },
     }), {
       tone: 'ok',
       summary: 'Latest benchmark passed on ap-gp-library-strategy-5m.',
@@ -1110,6 +1152,10 @@ describe('resident loop helpers', () => {
           latestEventText: 'I can fund AP from coin 995.',
         },
       },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin 995 funds AP.' }],
+      },
     }), {
       benchmark: { tone: 'ok', summary: 'pass', detail: 'score 1' },
       storyteller: { tone: 'ok', summary: 'story grounded' },
@@ -1118,7 +1164,7 @@ describe('resident loop helpers', () => {
 
     expect(pulse).toEqual({
       tone: 'ok',
-      summary: '8/8 loop proofs live',
+      summary: '9/9 loop proofs live',
       detail: 'all tracked proof signals are live',
     });
   });
@@ -1133,7 +1179,7 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'warn', summary: 'no digest' },
     })).toEqual({
       tone: 'fail',
-      summary: '0/7 loop proofs live',
+      summary: '0/8 loop proofs live',
       detail: 'offline · AP, Plan, Action',
     });
   });
@@ -1157,6 +1203,10 @@ describe('resident loop helpers', () => {
             latestEventKind: 'say',
             latestEventText: 'I can fund AP from coin 995.',
           },
+        },
+        memory: {
+          files: ['facts/economy.md'],
+          facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }],
         },
       }),
       row({
@@ -1258,7 +1308,7 @@ describe('resident loop helpers', () => {
     expect(ledger[2]).toMatchObject({
       tone: 'ok',
       displayName: 'ready',
-      proof: '7/7 loop proofs live',
+      proof: '8/8 loop proofs live',
       gp: '42 GP',
       memory: 'routes',
       nextAction: 'Keep watching',
@@ -1288,6 +1338,10 @@ describe('resident loop helpers', () => {
           },
         },
         storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+        memory: {
+          files: ['facts/economy.md'],
+          facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof is live.' }],
+        },
       }),
       row({
         name: 'res:low',
@@ -1387,6 +1441,14 @@ describe('resident loop helpers', () => {
           detail: 'Library or Storyteller evidence is not fresh enough to explain the resident.',
         },
         {
+          key: 'memory',
+          label: 'Thin memory',
+          tone: 'warn',
+          count: 1,
+          residents: ['res:low'],
+          detail: 'No qmd facts/*.md memory snippets are visible for these residents.',
+        },
+        {
           key: 'benchmark',
           label: 'Capability warning',
           tone: 'warn',
@@ -1419,6 +1481,10 @@ describe('resident loop helpers', () => {
           },
         },
         storyArc: { phase: 'progress', latestEventKind: 'city_ap_gp_exchange', latestEventTick: 44 },
+        memory: {
+          files: ['facts/economy.md'],
+          facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'The exchange completed.' }],
+        },
       }),
     ], () => ({
       economyGp: { tone: 'ok', summary: 'recent GP exchange', detail: 'city_ap_gp_exchange burned real coin 995' },
@@ -1429,7 +1495,7 @@ describe('resident loop helpers', () => {
     expect(triage.tone).toBe('ok');
     expect(triage.headline).toBe('1/1 residents look steady');
     expect(triage.urgentResidents).toBe(0);
-    expect(triage.detail).toBe('All visible residents have AP, cadence, plan, GP/story proof, and capability signals.');
+    expect(triage.detail).toBe('All visible residents have AP, cadence, plan, GP/story/memory proof, and capability signals.');
     expect(triage.buckets.every(bucket => bucket.count === 0 && bucket.tone === 'ok')).toBe(true);
   });
 
@@ -1456,13 +1522,14 @@ describe('resident loop helpers', () => {
     ]);
 
     expect(triage.buckets.slice(0, 4).map(bucket => bucket.key)).toEqual(['offline', 'attention', 'recovery', 'quiet']);
-    expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['gp', 'story', 'offline', 'attention']);
+    expect(visibleResidentTriageBuckets(triage, 4).map(bucket => bucket.key)).toEqual(['gp', 'story', 'memory', 'offline']);
   });
 
   test('parses resident triage focus links from the route query', () => {
     expect(residentTriageFocusFromSearch('?triage=attention')).toBe('attention');
     expect(residentTriageFocusFromSearch('triage=recovery')).toBe('recovery');
     expect(residentTriageFocusFromSearch('?human=guest&triage=quiet')).toBe('quiet');
+    expect(residentTriageFocusFromSearch('?triage=memory')).toBe('memory');
     expect(residentTriageFocusFromSearch('?triage=unknown')).toBe('');
     expect(residentTriageFocusFromSearch('?triage=')).toBe('');
   });
@@ -1492,6 +1559,10 @@ describe('resident loop helpers', () => {
           latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
         },
         storyArc: { phase: 'progress', summary: 'Combat recovery in progress.', latestEventKind: 'combat_recovery', latestEventTick: 900 },
+        memory: {
+          files: ['facts/combat.md'],
+          facts: [{ topic: 'combat', path: 'facts/combat.md', text: 'Recover health before re-engaging.' }],
+        },
       }),
     ], () => ({
       economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
@@ -1565,6 +1636,10 @@ describe('resident loop helpers', () => {
           },
         },
         storyArc: { phase: 'progress', latestEventKind: 'movement_progress', latestEventTick: 100 },
+        memory: {
+          files: ['facts/routes.md'],
+          facts: [{ topic: 'routes', path: 'facts/routes.md', text: 'Patrol Lumbridge and keep moving.' }],
+        },
       }),
     ], () => ({
       economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
@@ -1598,6 +1673,10 @@ describe('resident loop helpers', () => {
           },
         },
         storyArc: { phase: 'progress', summary: 'Combat action was attempted.', latestEventKind: 'combat_started', latestEventTick: 300 },
+        memory: {
+          files: ['facts/combat.md'],
+          facts: [{ topic: 'combat', path: 'facts/combat.md', text: 'Recover from stuck combat action.' }],
+        },
       }),
     ], () => ({
       economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
@@ -2126,6 +2205,10 @@ describe('resident loop helpers', () => {
         },
       },
       storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin 995 funds AP.' }],
+      },
     });
 
     const detail = residentLivenessDetail(resident, {
@@ -2138,7 +2221,7 @@ describe('resident loop helpers', () => {
       residentName: 'res:ready',
       displayName: 'ready',
       tone: 'ok',
-      headline: '8/8 loop proofs live',
+      headline: '9/9 loop proofs live',
       moment: 'Said: I can fund AP from coin 995.',
       nextAction: 'Keep watching',
       nextTarget: 'Resident Intent',

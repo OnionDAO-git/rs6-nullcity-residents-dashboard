@@ -161,7 +161,7 @@ export interface ResidentLivenessDetail {
 }
 
 export interface ResidentTriageBucket {
-  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'benchmark';
+  key: 'offline' | 'attention' | 'recovery' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'memory' | 'benchmark';
   label: string;
   tone: 'ok' | 'warn' | 'fail';
   count: number;
@@ -1685,6 +1685,12 @@ function proofGapAction(label: string): ResidentProofRollupAction {
         tone: 'warn',
         detail: 'Run coin-995 or AP/GP exchange proof before claiming purchasing power.',
       };
+    case 'Memory':
+      return {
+        label: 'Capture memory proof',
+        tone: 'warn',
+        detail: 'Wait for a qmd facts/*.md snippet or inspect resident memory before demoing recall.',
+      };
     case 'Goal contract':
       return {
         label: 'Check goal contract',
@@ -1733,6 +1739,7 @@ export function residentTriageSummary(
         emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
         emptyTriageBucket('gp', 'Missing GP proof', 'warn', 'No coin-995 proof is available yet.'),
         emptyTriageBucket('story', 'Thin story', 'warn', 'No Library or Storyteller evidence is available yet.'),
+        emptyTriageBucket('memory', 'Thin memory', 'warn', 'No qmd facts/*.md memory snippets are available yet.'),
         emptyTriageBucket('benchmark', 'Capability warning', 'warn', 'No capability benchmark signal is loaded yet.'),
       ],
     };
@@ -1761,6 +1768,7 @@ export function residentTriageSummary(
     const storyCheckpoint = residentLoopCheckpoints(row).find(checkpoint => checkpoint.key === 'story');
     return storyCheckpoint?.tone === 'warn' && signals.storyteller?.tone !== 'ok';
   });
+  const missingMemoryRows = rows.filter(row => row.online && !residentHasQmdMemory(row));
   const benchmarkRows = rows.filter(row => {
     if (!row.online) return false;
     const signal = resolveSignals(row).benchmark;
@@ -1776,6 +1784,7 @@ export function residentTriageSummary(
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
     makeTriageBucket('gp', 'Missing GP proof', 'warn', missingGpRows, 'Do not claim GP purchasing power until coin-995 or economy evidence appears.'),
     makeTriageBucket('story', 'Thin story', 'warn', thinStoryRows, 'Library or Storyteller evidence is not fresh enough to explain the resident.'),
+    makeTriageBucket('memory', 'Thin memory', 'warn', missingMemoryRows, 'No qmd facts/*.md memory snippets are visible for these residents.'),
     makeTriageBucket('benchmark', 'Capability warning', 'warn', benchmarkRows, 'Latest capability benchmark signal is stale, failed, or missing confidence.'),
   ];
 
@@ -1788,6 +1797,7 @@ export function residentTriageSummary(
     ...missingPlanRows,
     ...missingGpRows,
     ...thinStoryRows,
+    ...missingMemoryRows,
     ...benchmarkRows,
   ].map(row => row.name));
 
@@ -1798,7 +1808,7 @@ export function residentTriageSummary(
   const activeBuckets = buckets.filter(bucket => bucket.count > 0);
   const detail = activeBuckets.length
     ? activeBuckets.slice(0, 3).map(bucket => `${bucket.label}: ${bucket.count}`).join(' · ')
-    : 'All visible residents have AP, cadence, plan, GP/story proof, and capability signals.';
+    : 'All visible residents have AP, cadence, plan, GP/story/memory proof, and capability signals.';
 
   return {
     tone,
@@ -1829,6 +1839,7 @@ const residentTriageBucketKeys = new Set<ResidentTriageBucketKey>([
   'plan',
   'gp',
   'story',
+  'memory',
   'benchmark',
 ]);
 
@@ -2191,6 +2202,7 @@ function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPu
     { label: actionOutcome.failed ? 'Action outcome' : 'Action', ok: actionOutcome.ok },
     { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
     { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok' },
+    { label: 'Memory', ok: residentHasQmdMemory(row) },
     {
       label: 'Goal contract',
       ok: signals.goalContract?.tone === 'ok',
@@ -2207,6 +2219,10 @@ function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPu
       optional: signals.benchmark === undefined,
     },
   ];
+}
+
+function residentHasQmdMemory(row: ResidentDashboardRow): boolean {
+  return (row.memory?.facts || []).length > 0;
 }
 
 function emptyTriageBucket(
