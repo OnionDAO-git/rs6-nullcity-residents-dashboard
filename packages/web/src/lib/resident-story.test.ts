@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -468,6 +468,55 @@ describe('storytellerLatestPreview', () => {
       detail: 'No latest digest is available from /api/storyteller/digests yet.',
       bullets: [],
     });
+  });
+});
+
+describe('storytellerLibraryPreview', () => {
+  test('turns the latest digest into compact Library story context', () => {
+    const preview = storytellerLibraryPreview(digest({
+      dispatch: {
+        dispatchId: 'dispatch-library',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        publicTitle: 'Null City keeps its promises',
+        publicBody: 'Residents turned AP and GP proof into Library memory.',
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: [],
+        warningCount: 0,
+        eventRefCount: 2,
+        eventRefsUsed: ['e1', 'e2'],
+        estimatedCostUsd: null,
+      },
+    }), Date.parse('2026-05-30T04:10:00.000Z'));
+
+    expect(preview).toEqual({
+      tone: 'ok',
+      source: 'dispatch',
+      statusLabel: 'ready',
+      title: 'Null City keeps its promises',
+      body: 'Residents turned AP and GP proof into Library memory.',
+      detail: 'Dispatch is grounded and ready for public review.',
+      runLabel: 'run-1',
+      eventLabel: '2 events',
+    });
+  });
+
+  test('keeps the empty Library state public-facing and command-free', () => {
+    const preview = storytellerLibraryPreview(undefined);
+
+    expect(preview).toEqual({
+      tone: 'warn',
+      source: 'empty',
+      statusLabel: 'waiting',
+      title: 'No Library story digest yet',
+      body: 'Grounded resident stories will appear here once Storyteller has a digest to review.',
+      detail: 'Open the Storyteller feed for operator review context.',
+      runLabel: '-',
+      eventLabel: '0 events',
+    });
+    expect(`${preview.title} ${preview.body} ${preview.detail}`).not.toMatch(/storyteller:|`|\/api/);
   });
 });
 

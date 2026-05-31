@@ -54,7 +54,7 @@
     type ResidentTriageBucketKey,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -196,6 +196,7 @@
   let cityStoryRunList: StorytellerDigestRunList = storytellerDigestRunList([]);
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
+  let cityLibraryStoryPreview = storytellerLibraryPreview(undefined);
   let cityPrintInsights = printQueueInsights([], [], []);
   let cityPrintResidentSignals: PrintResidentSignal[] = [];
   let cityPrintStorySignal: PrintStoryDigestSignal = printStoryDigestSignal({
@@ -424,6 +425,7 @@
     ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
     : cityStoryDigests[0];
   $: cityStoryRunList = storytellerDigestRunList(cityStoryDigests, cityStoryRunId);
+  $: cityLibraryStoryPreview = storytellerLibraryPreview(cityStoryDigests[0]);
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
@@ -5263,24 +5265,16 @@
         <div class="panel-title">Storyteller</div>
         <button onclick={() => cityNav('/story')}>Open Feed</button>
       </div>
-      {#if cityStoryDigests[0]}
-        {@const storyStatus = storytellerDigestStatus(cityStoryDigests[0])}
-        <div class="city-copy-block">
-          <strong>{cityStoryDigests[0].dispatch?.publicTitle || cityStoryDigests[0].digestId}</strong>
-          <p>{cityStoryDigests[0].summary || cityStoryDigests[0].dispatch?.publicBody || 'Digest captured. Open feed for full refs and review context.'}</p>
-        </div>
-        <div class="city-resident-profile-grid">
-          <span><small>Run</small><strong>{cityStoryDigests[0].runId}</strong></span>
-          <span><small>Events</small><strong>{cityStoryDigests[0].topEventCount}</strong></span>
-          <span><small>Status</small><strong>{storyStatus.label}</strong></span>
-        </div>
-        <div class={`notice ${storyStatus.tone === 'warn' ? 'amber' : ''}`}>{storyStatus.summary}</div>
-      {:else}
-        <div class="city-empty-state">
-          <strong>No Storyteller digest yet</strong>
-          <span>Run `storyteller:dry-run` or dispatch to ground Library narratives.</span>
-        </div>
-      {/if}
+      <div class="city-copy-block">
+        <strong>{cityLibraryStoryPreview.title}</strong>
+        <p>{cityLibraryStoryPreview.body}</p>
+      </div>
+      <div class="city-resident-profile-grid">
+        <span><small>Run</small><strong>{cityLibraryStoryPreview.runLabel}</strong></span>
+        <span><small>Events</small><strong>{cityLibraryStoryPreview.eventLabel}</strong></span>
+        <span><small>Status</small><strong>{cityLibraryStoryPreview.statusLabel}</strong></span>
+      </div>
+      <div class={`notice ${cityLibraryStoryPreview.tone === 'warn' ? 'amber' : ''}`}>{cityLibraryStoryPreview.detail}</div>
     </div>
   </section>
 {/snippet}

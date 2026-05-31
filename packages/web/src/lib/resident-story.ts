@@ -61,6 +61,17 @@ export interface StorytellerLatestPreview {
   bullets: string[];
 }
 
+export interface StorytellerLibraryPreview {
+  tone: StorytellerLatestPreview['tone'];
+  source: StorytellerLatestPreview['source'];
+  statusLabel: StorytellerLatestPreview['label'];
+  title: string;
+  body: string;
+  detail: string;
+  runLabel: string;
+  eventLabel: string;
+}
+
 export function residentStoryEvents(
   resident: ResidentDashboardRow | undefined,
   digests: StorytellerDigestSummary[],
@@ -272,6 +283,35 @@ export function storytellerLatestPreview(
     body: digest.summary?.trim() || 'No grounded top events are available for this Storyteller run yet.',
     detail: `${status.summary} No grounded top events are available for a public preview.`,
     bullets: status.label === 'ready' ? bullets : [],
+  };
+}
+
+export function storytellerLibraryPreview(
+  digest: StorytellerDigestSummary | undefined,
+  nowMs = Date.now(),
+): StorytellerLibraryPreview {
+  if (!digest) {
+    return {
+      tone: 'warn',
+      source: 'empty',
+      statusLabel: 'waiting',
+      title: 'No Library story digest yet',
+      body: 'Grounded resident stories will appear here once Storyteller has a digest to review.',
+      detail: 'Open the Storyteller feed for operator review context.',
+      runLabel: '-',
+      eventLabel: '0 events',
+    };
+  }
+  const preview = storytellerLatestPreview(digest, nowMs);
+  return {
+    tone: preview.tone,
+    source: preview.source,
+    statusLabel: preview.label,
+    title: preview.title,
+    body: preview.body,
+    detail: preview.detail,
+    runLabel: digest.runId || '-',
+    eventLabel: plural(digest.topEventCount || digest.topEvents.length, 'event'),
   };
 }
 
