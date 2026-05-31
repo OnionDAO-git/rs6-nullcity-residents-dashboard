@@ -83,6 +83,7 @@ export interface ReleaseReadinessDemoProofSignal {
 
 export interface ReleaseReadinessDemoProofSignals {
   apGpCapability: ReleaseReadinessDemoProofSignal;
+  dryRun: ReleaseReadinessDemoProofSignal;
 }
 
 const LOW_AP_DEMO_THRESHOLD = 10;
@@ -133,6 +134,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
 
   const capabilityQa = summarizeCapabilityQa(input.benchmarkRuns || [], nowMs);
   const apGpCapability = apGpCapabilityProofSignal(capabilityQa);
+  const dryRun = dryRunDemoProofSignal(input.storyDigests, nowMs);
   const economyTransport = economyTransportCheck(input.economyTransport);
 
   const checks: ReleaseReadinessCheck[] = [
@@ -173,6 +175,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     },
     demoProofs: {
       apGpCapability,
+      dryRun,
     },
     blockers,
     nextActions,
@@ -273,6 +276,9 @@ export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary):
   const apGp = worstCheck([checksById.get('ap'), checksById.get('gp'), checksById.get('economy-transport'), apGpCapabilityCheck]);
   const story = checksById.get('storyteller');
   const dryRunAction = summary.nextActions.find(action => action.startsWith('Run `npm run storyteller:dry-run'));
+  const dryRun = dryRunAction
+    ? { tone: 'warn' as const, detail: dryRunAction }
+    : summary.demoProofs.dryRun;
 
   return [
     {
@@ -292,8 +298,8 @@ export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary):
     },
     {
       label: 'Dry-run',
-      tone: dryRunAction ? 'warn' : story?.tone === 'ok' ? 'ok' : 'warn',
-      detail: dryRunAction || dryRunDetail(summary),
+      tone: dryRun.tone,
+      detail: dryRun.detail,
     },
   ];
 }
@@ -333,12 +339,6 @@ function tonePriority(tone: ReleaseReadinessTone): number {
   if (tone === 'fail') return 2;
   if (tone === 'warn') return 1;
   return 0;
-}
-
-function dryRunDetail(summary: ReleaseReadinessSummary): string {
-  const age = summary.metrics.latestStorytellerAgeMinutes;
-  const ageLabel = age === undefined ? 'available' : `${age.toLocaleString()}m old`;
-  return `Latest digest is ${ageLabel}; rerun \`npm run storyteller:dry-run -- --fixture\` for fresh demo evidence.`;
 }
 
 export function releaseReadinessActionQueue(summary: ReleaseReadinessSummary, limit = 4): ReleaseReadinessActionQueueItem[] {
@@ -463,6 +463,38 @@ function apGpCapabilityProofSignal(summary: CapabilityQaSummary): ReleaseReadine
 
 function capabilityRunLabel(run: BenchmarkArtifactSummary): string {
   return run.task?.id || run.runId || run.file || 'unknown run';
+}
+
+function dryRunDemoProofSignal(digests: StorytellerDigestSummary[], nowMs: number): ReleaseReadinessDemoProofSignal {
+  const digest = latestDryRunDigest(digests);
+  const command = '`npm run storyteller:dry-run -- --fixture`';
+  if (!digest) {
+    return {
+      tone: 'warn',
+      detail: `No deterministic dry-run digest is loaded; run ${command} for fresh demo evidence.`,
+    };
+  }
+
+  if (digest.topEventCount <= 0 || digest.topEvents.length === 0) {
+    return {
+      tone: 'warn',
+      detail: `Latest dry-run digest has no grounded top events; run ${command} for fresh demo evidence.`,
+    };
+  }
+
+  const age = digestAgeMinutes(digest, nowMs);
+  if (age * 60 * 1000 > STORYTELLER_STALE_MS) {
+    return {
+      tone: 'warn',
+      detail: `Dry-run digest evidence is ${age.toLocaleString()}m old; rerun ${command} for fresh demo evidence.`,
+    };
+  }
+
+  const events = digest.topEventCount;
+  return {
+    tone: 'ok',
+    detail: `Dry-run digest evidence is ${age.toLocaleString()}m old with ${events.toLocaleString()} grounded event${events === 1 ? '' : 's'}.`,
+  };
 }
 
 function capabilityQaCheck(summary: CapabilityQaSummary): ReleaseReadinessCheck {
@@ -789,6 +821,16 @@ function latestStorytellerDigest(digests: StorytellerDigestSummary[]): Storytell
   return digests
     .slice()
     .sort((a, b) => digestTimestamp(b) - digestTimestamp(a))[0];
+}
+
+function latestDryRunDigest(digests: StorytellerDigestSummary[]): StorytellerDigestSummary | undefined {
+  return digests
+    .filter(isDryRunDigest)
+    .sort((a, b) => digestTimestamp(b) - digestTimestamp(a))[0];
+}
+
+function isDryRunDigest(digest: StorytellerDigestSummary): boolean {
+  return digest.queue === 'dry-run' || !digest.dispatch;
 }
 
 function storytellerDigestsNeedingReview(digests: StorytellerDigestSummary[]): StorytellerDigestSummary[] {

@@ -43,6 +43,7 @@ function digest(overrides: Partial<StorytellerDigestSummary> = {}): StorytellerD
   return {
     runId: 'run-1',
     digestId: 'digest-1',
+    queue: 'canon',
     builtAt: '2026-05-30T09:00:00.000Z',
     topEventCount: 2,
     residentCount: 1,
@@ -80,6 +81,19 @@ function digest(overrides: Partial<StorytellerDigestSummary> = {}): StorytellerD
       eventRefCount: 2,
       eventRefsUsed: ['e1', 'e2'],
     },
+    ...overrides,
+  };
+}
+
+function dryRunDigest(overrides: Partial<StorytellerDigestSummary> = {}): StorytellerDigestSummary {
+  const { dispatch: _dispatch, ...base } = digest({
+    runId: 'dry-run-1',
+    digestId: 'dry-run-digest-1',
+    queue: 'dry-run',
+    builtAt: '2026-05-30T08:59:00.000Z',
+  });
+  return {
+    ...base,
     ...overrides,
   };
 }
@@ -147,7 +161,7 @@ describe('buildReleaseReadiness', () => {
   test('marks the city ready when residents, plans, GP, Storyteller, and NCRI/print signals are present', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],
-      storyDigests: [digest()],
+      storyDigests: [digest(), dryRunDigest()],
       printInsights: printInsights(),
       economyTransport: economyTransport(),
       benchmarkRuns: capabilityBenchmarks(),
@@ -211,7 +225,7 @@ describe('buildReleaseReadiness', () => {
       {
         label: 'Dry-run',
         tone: 'ok',
-        detail: 'Latest digest is 10m old; rerun `npm run storyteller:dry-run -- --fixture` for fresh demo evidence.',
+        detail: 'Dry-run digest evidence is 11m old with 2 grounded events.',
       },
     ]);
   });
@@ -603,6 +617,27 @@ describe('buildReleaseReadiness', () => {
       label: 'Dry-run',
       tone: 'warn',
       detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
+    });
+  });
+
+  test('keeps the dry-run demo proof rail on watch when only canon dispatches are loaded', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.checks.find(check => check.id === 'storyteller')).toMatchObject({
+      tone: 'ok',
+      value: '10m old',
+    });
+    expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
+      label: 'Dry-run',
+      tone: 'warn',
+      detail: 'No deterministic dry-run digest is loaded; run `npm run storyteller:dry-run -- --fixture` for fresh demo evidence.',
     });
   });
 
