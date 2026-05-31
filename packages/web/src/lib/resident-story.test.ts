@@ -459,15 +459,17 @@ describe('storytellerLatestPreview', () => {
       body: 'Hans traded GP for attention: burned 25 GP for 50 AP Pip received attention: received AP grant',
     });
 
-    expect(storytellerLatestPreview(undefined)).toEqual({
+    const emptyPreview = storytellerLatestPreview(undefined);
+    expect(emptyPreview).toEqual({
       tone: 'warn',
       source: 'empty',
       label: 'waiting',
       title: 'No Storyteller run loaded',
       body: 'Digest and dispatch artifacts will appear once the controller writes grounded Storyteller runs.',
-      detail: 'No latest digest is available from /api/storyteller/digests yet.',
+      detail: 'No latest Storyteller digest is available yet.',
       bullets: [],
     });
+    expect(emptyPreview.detail).not.toContain('/api/');
   });
 });
 

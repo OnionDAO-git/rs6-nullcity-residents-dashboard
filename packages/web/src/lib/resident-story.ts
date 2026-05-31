@@ -236,7 +236,7 @@ export function storytellerLatestPreview(
       label: 'waiting',
       title: 'No Storyteller run loaded',
       body: 'Digest and dispatch artifacts will appear once the controller writes grounded Storyteller runs.',
-      detail: 'No latest digest is available from /api/storyteller/digests yet.',
+      detail: 'No latest Storyteller digest is available yet.',
       bullets: [],
     };
   }
