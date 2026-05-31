@@ -411,6 +411,82 @@ function residentStackFact(row: ResidentDashboardRow): ResidentLoopFact {
   };
 }
 
+export function residentIntelligenceDigestFacts(
+  row: ResidentDashboardRow | undefined,
+  signals: ResidentProofPulseSignals = {},
+): ResidentLoopFact[] {
+  if (!row) {
+    return [{
+      label: 'Snapshot',
+      value: 'not loaded',
+      detail: 'No live resident snapshot yet.',
+      tone: 'warn',
+    }];
+  }
+
+  const ap = residentAttentionRunway(row);
+  const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
+  const checkpoints = residentLoopCheckpoints(row);
+  const plan = checkpoints.find(checkpoint => checkpoint.key === 'plan');
+  const story = checkpoints.find(checkpoint => checkpoint.key === 'story');
+  const module = activeModule(row);
+  const model = modelIdentityParts(row);
+  const endpoint = endpointParts(row);
+  const action = row.body?.lastAction?.kind || row.lastEvent?.kind || '-';
+  const actionOutcome = residentActionOutcome(row);
+  const warnings = residentOperatorWarnings(row, signals.benchmark, { economyGp: signals.economyGp });
+  const warningDensity = residentWarningDensityLine(warnings);
+  const topWarning = warnings.find(warning => warning.tone !== 'ok') || warnings[0];
+  const failCount = warnings.filter(warning => warning.tone === 'fail').length;
+  const warnCount = warnings.filter(warning => warning.tone === 'warn').length;
+  const apGpTone = worstTone(ap.tone, gp.tone);
+  const storyTone = signals.storyteller?.tone || story?.tone || 'warn';
+
+  return [
+    {
+      label: 'Stack',
+      value: `${model.value !== '-' ? model.value : 'model unavailable'} | ${module ? `${module.id}${module.version ? `@${module.version}` : ''}` : 'SPARK unavailable'}`,
+      detail: `${endpoint.value !== '-' ? endpoint.value : 'endpoint unavailable'} | ${module?.source || 'module source unavailable'}`,
+      tone: model.value !== '-' && endpoint.value !== '-' && module ? 'ok' : 'warn',
+    },
+    {
+      label: 'AP/GP',
+      value: `${ap.value} / ${gp.value}`,
+      detail: `${ap.detail} | ${gp.detail}`,
+      tone: apGpTone,
+      ...(apGpTone === 'ok' ? {} : { path: ap.tone !== 'ok' ? '/residents?triage=attention' : '/residents?triage=gp' }),
+    },
+    {
+      label: 'Plan',
+      value: plan?.value || row.thinking?.activePlan || '-',
+      detail: plan?.detail || 'no active plan published yet',
+      tone: plan?.tone || 'warn',
+      ...((plan?.tone || 'warn') === 'ok' ? {} : { path: '/residents?triage=plan' }),
+    },
+    {
+      label: 'Action',
+      value: action,
+      detail: actionDetailWithoutCause(row),
+      tone: actionOutcome.failed ? 'fail' : actionOutcome.ok ? 'ok' : 'warn',
+      ...(actionOutcome.failed || !actionOutcome.ok ? { path: '/residents?triage=action' } : {}),
+    },
+    {
+      label: 'Storyteller',
+      value: signals.storyteller?.summary || story?.value || '-',
+      detail: signals.storyteller?.detail || story?.detail || 'no Storyteller digest signal loaded',
+      tone: storyTone,
+      ...(storyTone === 'ok' ? {} : { path: '/residents?triage=story' }),
+    },
+    {
+      label: 'Warnings',
+      value: `${failCount.toLocaleString()} fail · ${warnCount.toLocaleString()} warn`,
+      detail: topWarning ? `${topWarning.summary} — ${topWarning.detail}` : 'no active operator warnings',
+      tone: warningDensity.tone,
+      ...(warningDensity.tone === 'ok' ? {} : { path: nextStepTargetPath(topWarning) }),
+    },
+  ];
+}
+
 function residentRosterStackText(row: ResidentDashboardRow): string {
   const model = modelParts(row);
   const module = activeModule(row);
@@ -2488,6 +2564,12 @@ function nextStepTargetLabel(warning: ResidentOperatorWarning): string {
   if (warning.summary.startsWith('Library strategy')) return 'Storyteller Grounded Events';
   if (warning.summary.toLowerCase().includes('benchmark')) return 'Capability Warnings';
   return 'Capability Warnings';
+}
+
+function nextStepTargetPath(warning: ResidentOperatorWarning | undefined): string {
+  if (!warning) return '/residents';
+  const triageKey = residentDemoPickTriageKey(nextStepActionLabel(warning));
+  return triageKey ? `/residents?triage=${triageKey}` : '/residents';
 }
 
 function residentRecoveryWaitSignal(row: ResidentDashboardRow | undefined): ResidentRecoveryWaitSignal | undefined {

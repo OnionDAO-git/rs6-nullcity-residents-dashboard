@@ -23,6 +23,7 @@
     residentGuestTrailFacts,
     residentGuestTrailGuideCopy,
     residentGuestTrailPulse,
+    residentIntelligenceDigestFacts,
     residentIntelligenceFacts,
     residentIntentFacts,
     residentLivenessDetail,
@@ -4669,6 +4670,13 @@
           <span><small>Vitals</small><strong>{cityResident ? residentVitalsLabel(cityResident) : '-'}</strong></span>
           <span><small>Position</small><strong>{cityResident?.position ? formatPosition(cityResident.position) : '-'}</strong></span>
         </div>
+        {#if cityResident}
+          {@render ResidentLoopFactGrid({ facts: residentIntelligenceDigestFacts(cityResident, {
+            benchmark: cityResidentBenchmarkStatus,
+            economyGp: cityResidentEconomyGpEvidence,
+            storyteller: cityResidentStorySignal,
+          }) })}
+        {/if}
         <div class="city-copy-block">
           <strong>{cityResidentReadModel?.goal || 'No public goal recorded'}</strong>
           <p>{cityResidentReadModel?.latestThought || 'No resident post has been projected yet.'}</p>

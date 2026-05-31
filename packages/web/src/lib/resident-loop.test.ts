@@ -11,6 +11,7 @@ import {
   residentGuestTrailFacts,
   residentGuestTrailGuideCopy,
   residentGuestTrailPulse,
+  residentIntelligenceDigestFacts,
   residentIntelligenceFacts,
   residentIntentFacts,
   residentLivenessDetail,
@@ -48,6 +49,66 @@ function row(input: Partial<ResidentDashboardRow> & { name?: string } = {}): Res
 }
 
 describe('resident loop helpers', () => {
+  test('builds a compact operator digest for resident intelligence at a glance', () => {
+    const digest = residentIntelligenceDigestFacts(row({
+      attention: 75,
+      thinking: { mode: 'deciding', activePlan: 'Earn GP for AP' },
+      stack: {
+        model: { endpoint: 'openrouter', model: 'anthropic/claude-3.5-haiku' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: ['economy'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+        },
+      },
+      storyArc: { phase: 'progress', latestEventKind: 'gp_observed', latestEventTick: 100 },
+    }), {
+      benchmark: { tone: 'warn', summary: 'Capability proof stale', detail: 'run is older than target window' },
+      economyGp: { tone: 'ok', summary: 'recent GP proof', detail: 'ap_gp_exchange: exchanged 10 GP for 20 AP' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited this resident', detail: 'digest run story-20260531' },
+    });
+
+    expect(digest.map(fact => fact.label)).toEqual(['Stack', 'AP/GP', 'Plan', 'Action', 'Storyteller', 'Warnings']);
+    expect(digest.find(fact => fact.label === 'Stack')).toMatchObject({
+      value: 'anthropic/claude-3.5-haiku | onion.runescape.standard@0.3.0',
+      tone: 'ok',
+    });
+    expect(digest.find(fact => fact.label === 'AP/GP')).toMatchObject({
+      value: '75 AP / recent GP proof',
+      detail: '65 AP above support floor. | ap_gp_exchange: exchanged 10 GP for 20 AP',
+      tone: 'ok',
+    });
+    expect(digest.find(fact => fact.label === 'Plan')).toMatchObject({
+      value: 'Earn GP for AP',
+      tone: 'ok',
+    });
+    expect(digest.find(fact => fact.label === 'Action')).toMatchObject({
+      value: 'exchange_gp_for_ap',
+      detail: 'success | thinking',
+      tone: 'ok',
+    });
+    expect(digest.find(fact => fact.label === 'Storyteller')).toMatchObject({
+      value: 'Storyteller cited this resident',
+      detail: 'digest run story-20260531',
+      tone: 'ok',
+    });
+    expect(digest.find(fact => fact.label === 'Warnings')).toMatchObject({
+      value: '0 fail · 2 warn',
+      detail: 'Live inventory GP missing; recent economy evidence exists. — ap_gp_exchange: exchanged 10 GP for 20 AP',
+      tone: 'warn',
+      path: '/residents?triage=gp',
+    });
+  });
+
   test('summarizes model, SPARK, action, AP, and story from existing overview data', () => {
     const facts = residentIntelligenceFacts(row({
       attention: 42,
