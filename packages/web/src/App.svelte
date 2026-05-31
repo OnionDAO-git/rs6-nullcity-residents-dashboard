@@ -57,7 +57,7 @@
     type ResidentTriageBucketKey,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -3965,13 +3965,11 @@
 {#snippet CityStoryEvents({ events, compact = false }: { events: StorytellerDigestEventSummary[]; compact?: boolean })}
   {#if events.length}
     <div class="city-record-list story-event-list" class:compact>
-      {#each events as event (event.ref)}
-        {@const myth = storytellerMythCard(event)}
+      {#each storytellerMythMoments(events, compact ? 3 : 6) as myth, index (myth.title + ':' + index)}
         <article class="story-event-card">
-          <span class={`tag ${storytellerEventTone(event)}`}>{event.importance || 'event'}</span>
+          <span class="tag ok">moment</span>
           <div class="story-event-copy">
             <strong>{myth.title}</strong>
-            <small>{storytellerEventMeta(event)}</small>
             {#if myth.body}
               <p>{myth.body}</p>
             {/if}
@@ -4072,6 +4070,10 @@
             {/each}
           </div>
         {/if}
+        <div class="city-review-block">
+          <div class="panel-title">Grounded Moments</div>
+          {@render CityStoryEvents({ events: cityStoryDigest.topEvents })}
+        </div>
         <div class={`city-review-block story-review-density tone-${selectedStoryDensity.tone}`}>
           <div class="row">
             <div>
@@ -4114,7 +4116,6 @@
         {#if cityStoryDigest.dispatch?.operatorSummary}
           <div class="notice">{cityStoryDigest.dispatch.operatorSummary}</div>
         {/if}
-        {@render CityStoryEvents({ events: cityStoryDigest.topEvents })}
         {#if cityStoryDigest.dispatch?.needsReview}
           <div class="notice">Dispatch flagged for review before public broadcast.</div>
         {/if}

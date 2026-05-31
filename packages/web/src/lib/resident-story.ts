@@ -175,6 +175,24 @@ export function storytellerMythCard(event: StorytellerDigestEventSummary): Story
   };
 }
 
+export function storytellerMythMoments(events: StorytellerDigestEventSummary[], limit = 3): StorytellerMythCard[] {
+  const max = Math.max(0, limit);
+  if (max === 0 || events.length === 0) return [];
+
+  const stuckRecovered = events.filter(event => event.kind === 'stuck_recovered');
+  if (stuckRecovered.length <= 1) {
+    return events.slice(0, max).map(storytellerMythCard);
+  }
+
+  const movementMoment = movementReturnedMoment(stuckRecovered);
+  const remaining = events
+    .filter(event => event.kind !== 'stuck_recovered')
+    .slice(0, Math.max(0, max - 1))
+    .map(storytellerMythCard);
+
+  return [movementMoment, ...remaining].slice(0, max);
+}
+
 function eventTitle(event: StorytellerDigestEventSummary, actor: string): string {
   if (isSpeechEvent(event)) return `${actor} spoke in the city`;
   return `${actor} ${eventVerb(event.kind)}`;
@@ -259,18 +277,20 @@ export function storytellerLatestPreview(
     };
   }
 
-  const eventLines = digest.topEvents
-    .slice(0, 3)
-    .map(storytellerEventPreviewLine)
+  const moments = storytellerMythMoments(digest.topEvents, 3);
+  const eventLines = moments
+    .map(storytellerMomentPreviewLine)
     .filter(line => line.length > 0);
   if (eventLines.length) {
+    const eventCount = Math.min(digest.topEvents.length, 3);
+    const previewSource = eventLines.length === eventCount ? 'grounded top event' : 'grounded public moment';
     return {
       tone: status.tone,
       source: 'events',
       label: status.label,
       title,
       body: eventLines.join(' '),
-      detail: `${status.summary} Preview is derived from ${plural(eventLines.length, 'grounded top event')}.`,
+      detail: `${status.summary} Preview is derived from ${plural(eventLines.length, previewSource)}.`,
       bullets: status.label === 'ready' ? bullets : [],
     };
   }
@@ -513,8 +533,7 @@ function cleanBullets(bullets: string[]): string[] {
   return bullets.map(bullet => bullet.trim()).filter(bullet => bullet.length > 0);
 }
 
-function storytellerEventPreviewLine(event: StorytellerDigestEventSummary): string {
-  const myth = storytellerMythCard(event);
+function storytellerMomentPreviewLine(myth: StorytellerMythCard): string {
   return myth.body ? `${myth.title}: ${myth.body}` : myth.title;
 }
 
@@ -544,6 +563,29 @@ function residentDisplayName(name: string | undefined): string {
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase())
     .trim() || 'City';
+}
+
+function movementReturnedMoment(events: StorytellerDigestEventSummary[]): StorytellerMythCard {
+  const residentNames = uniqueStrings(events.map(event => residentDisplayName(event.residentName)));
+  const evidenceLabels = uniqueStrings(events.flatMap(event => event.evidenceLabels.filter(label => label.trim().length > 0)));
+  const residentCount = residentNames.length || events.length;
+  return {
+    title: `Movement returned to ${residentCount.toLocaleString()} residents`,
+    body: `${joinHumanList(residentNames.slice(0, 5))}${residentNames.length > 5 ? ', and others' : ''} got moving again.`,
+    evidenceLabels: evidenceLabels.length ? evidenceLabels : ['grounded movement evidence'],
+  };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
 }
 
 function eventVerb(kind: string): string {

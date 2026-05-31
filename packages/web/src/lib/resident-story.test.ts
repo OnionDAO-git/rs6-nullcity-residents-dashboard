@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -388,6 +388,70 @@ describe('storytellerDigestRunList', () => {
 });
 
 describe('storytellerLatestPreview', () => {
+  test('collapses repeated recovery events into one public movement moment', () => {
+    const recoveryDigest = digest({
+      digestId: 'recovery-digest',
+      topEventCount: 4,
+      topEvents: [
+        {
+          ref: 'stuck-1',
+          kind: 'stuck_recovered',
+          residentName: 'res:the-hush',
+          ts: '2026-05-30T04:02:00.000Z',
+          note: 'res:the-hush recovered from being stuck.',
+          importance: 'medium',
+          evidenceLabels: ['library:stuck-1'],
+        },
+        {
+          ref: 'stuck-2',
+          kind: 'stuck_recovered',
+          residentName: 'res:mother-anvil',
+          ts: '2026-05-30T04:01:00.000Z',
+          note: 'res:mother-anvil recovered from being stuck.',
+          importance: 'medium',
+          evidenceLabels: ['library:stuck-2'],
+        },
+        {
+          ref: 'stuck-3',
+          kind: 'stuck_recovered',
+          residentName: 'res:pip',
+          ts: '2026-05-30T04:00:00.000Z',
+          note: 'res:pip recovered from being stuck.',
+          importance: 'medium',
+          evidenceLabels: ['library:stuck-3'],
+        },
+        {
+          ref: 'goal-1',
+          kind: 'goal_progress',
+          residentName: 'res:hans',
+          ts: '2026-05-30T04:03:00.000Z',
+          note: 'checked the next landmark',
+          importance: 'high',
+          evidenceLabels: ['library:goal-1'],
+        },
+      ],
+    });
+
+    expect(storytellerMythMoments(recoveryDigest.topEvents, 3)).toEqual([
+      {
+        title: 'Movement returned to 3 residents',
+        body: 'The Hush, Mother Anvil, and Pip got moving again.',
+        evidenceLabels: ['library:stuck-1', 'library:stuck-2', 'library:stuck-3'],
+      },
+      {
+        title: 'Hans advanced a goal',
+        body: 'checked the next landmark',
+        evidenceLabels: ['library:goal-1'],
+      },
+    ]);
+
+    const preview = storytellerLatestPreview(recoveryDigest, Date.parse('2026-05-30T04:10:00.000Z'));
+    expect(preview.body).toContain('Movement returned to 3 residents: The Hush, Mother Anvil, and Pip got moving again.');
+    expect(preview.body).toContain('Hans advanced a goal: checked the next landmark');
+    expect(preview.body).not.toContain('recovered from being stuck');
+    expect(preview.detail).toContain('2 grounded public moments');
+  });
+
   test('uses a ready dispatch body and bullets when grounded canon is safe to read', () => {
     const preview = storytellerLatestPreview(digest({
       dispatch: {
