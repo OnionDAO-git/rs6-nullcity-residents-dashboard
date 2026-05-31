@@ -10,7 +10,7 @@ import {
   verifyGameSessionTicket,
 } from './game-session';
 import type { LandingSessionAuthenticator } from './landing-session';
-import { NullCityControlError, type NullCityControlClient, type NullCityNcriPrintQueueStatus } from './nullcity-control';
+import { NullCityControlError, type NullCityControlClient, type NullCityEconomyStreamQuery, type NullCityNcriPrintQueueStatus } from './nullcity-control';
 import { quoteSoulProposal } from './quote';
 import { CityStoreError, type CityStore } from './store';
 import type { CityUser, LandingSessionUser, PointResource } from './types';
@@ -174,6 +174,24 @@ export async function routeCityApi(
         });
       } catch (error) {
         if (error instanceof NullCityControlError) return jsonResponse({ available: false, error: error.message });
+        throw error;
+      }
+    }
+
+    if (method === 'GET' && pathname === '/api/nullcity/economy/stream') {
+      if (!context.nullcityControl?.economyStream) {
+        return jsonResponse({ available: false, error: 'not_configured' }, { status: 404 });
+      }
+      try {
+        const upstream = await context.nullcityControl.economyStream(economyStreamQuery(url));
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers: economyStreamHeaders(upstream.headers),
+        });
+      } catch (error) {
+        if (error instanceof NullCityControlError) {
+          return jsonResponse({ available: false, error: error.message }, { status: error.status });
+        }
         throw error;
       }
     }
@@ -646,6 +664,27 @@ function positiveInteger(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function economyStreamQuery(url: URL): NullCityEconomyStreamQuery {
+  return {
+    ...(url.searchParams.get('since') ? { since: url.searchParams.get('since') || undefined } : {}),
+    ...(positiveInteger(url.searchParams.get('limit')) ? { limit: positiveInteger(url.searchParams.get('limit')) } : {}),
+    ...(positiveInteger(url.searchParams.get('residentLimit')) ? { residentLimit: positiveInteger(url.searchParams.get('residentLimit')) } : {}),
+    ...(positiveInteger(url.searchParams.get('intervalMs')) ? { intervalMs: positiveInteger(url.searchParams.get('intervalMs')) } : {}),
+    ...(url.searchParams.get('once') === '1' || url.searchParams.get('once') === 'true' ? { once: true } : {}),
+  };
+}
+
+function economyStreamHeaders(upstream: Headers): Headers {
+  const headers = new Headers({
+    'content-type': upstream.get('content-type') || 'text/event-stream; charset=utf-8',
+    'cache-control': upstream.get('cache-control') || 'no-cache',
+    connection: 'keep-alive',
+  });
+  const buffering = upstream.get('x-accel-buffering');
+  if (buffering) headers.set('x-accel-buffering', buffering);
+  return headers;
 }
 
 function ncriPrintQueueStatus(value: string | null): NullCityNcriPrintQueueStatus | undefined {

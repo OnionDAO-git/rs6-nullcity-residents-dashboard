@@ -47,6 +47,11 @@ export interface NullCityLiveEconomyQuery {
   residentLimit?: number;
 }
 
+export interface NullCityEconomyStreamQuery extends NullCityLiveEconomyQuery {
+  intervalMs?: number;
+  once?: boolean;
+}
+
 export interface NullCityLiveEconomyEvent {
   id: string;
   ts: string;
@@ -196,6 +201,7 @@ export interface NullCityControlClient {
   listNcri(): Promise<NullCityNcriRecord[]>;
   liveEconomy?(query?: NullCityLiveEconomyQuery): Promise<NullCityLiveEconomySnapshot>;
   economyHeartbeat?(): Promise<NullCityEconomyHeartbeat>;
+  economyStream?(query?: NullCityEconomyStreamQuery): Promise<Response>;
   economyListings?(): Promise<NullCityEconomyListingsResponse>;
   ncriPrintQueue?(query?: NullCityNcriPrintQueueQuery): Promise<NullCityNcriPrintQueueResponse>;
   exchangeApForGp?(resident: string, body: NullCityApGpExchangeRequest): Promise<NullCityApGpExchangeRecord>;
@@ -265,11 +271,33 @@ export function createNullCityControlClient(options: NullCityControlClientOption
     return payload as T;
   }
 
+  async function requestStream(path: string): Promise<Response> {
+    let response: Response;
+    try {
+      response = await fetchImpl(`${baseUrl}${path}`, {
+        headers: {
+          accept: 'text/event-stream',
+          authorization: `Bearer ${options.token}`,
+        },
+      });
+    } catch {
+      throw new NullCityControlError('controller_unreachable', 502);
+    }
+    if (!response.ok) {
+      const payload = await readPayload(response);
+      const record = asRecord(payload);
+      const message = typeof record.error === 'string' ? record.error : `${response.status} ${response.statusText}`;
+      throw new NullCityControlError(message, response.status);
+    }
+    return response;
+  }
+
   return {
     listProposals: async () => parseProposalList(await request<unknown>('/proposals')),
     listNcri: async () => parseNcriList(await request<unknown>('/ncri')),
     liveEconomy: async query => parseLiveEconomy(await request<unknown>(`/economy/live${queryString(query)}`)),
     economyHeartbeat: async () => parseEconomyHeartbeat(await request<unknown>('/economy/heartbeat')),
+    economyStream: async query => requestStream(`/economy/stream${economyStreamQueryString(query)}`),
     economyListings: async () => parseEconomyListings(await request<unknown>('/economy/listings')),
     ncriPrintQueue: async query => parseNcriPrintQueue(await request<unknown>(`/ncri/print-queue${ncriPrintQueueQueryString(query)}`)),
     exchangeApForGp: async (resident, body) =>
@@ -553,6 +581,17 @@ function queryString(query: NullCityLiveEconomyQuery | undefined): string {
   if (query?.since) params.set('since', query.since);
   if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
   if (typeof query?.residentLimit === 'number') params.set('residentLimit', String(query.residentLimit));
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
+function economyStreamQueryString(query: NullCityEconomyStreamQuery | undefined): string {
+  const params = new URLSearchParams();
+  if (query?.since) params.set('since', query.since);
+  if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query?.residentLimit === 'number') params.set('residentLimit', String(query.residentLimit));
+  if (typeof query?.intervalMs === 'number') params.set('intervalMs', String(query.intervalMs));
+  if (query?.once) params.set('once', '1');
   const serialized = params.toString();
   return serialized ? `?${serialized}` : '';
 }

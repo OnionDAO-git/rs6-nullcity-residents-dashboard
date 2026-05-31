@@ -6,7 +6,7 @@
   import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
@@ -199,6 +199,9 @@
   let cityLiveEconomy: NullCityLiveEconomyBridgeResponse = { available: false, error: 'not_loaded' };
   let cityEconomyHeartbeat: NullCityEconomyHeartbeatBridgeResponse = { available: false, error: 'not_loaded' };
   let cityEconomyListings: NullCityEconomyListingsBridgeResponse = { available: false, listings: [], error: 'not_loaded' };
+  let cityEconomyStream: EventSource | undefined;
+  let cityEconomyStreamKey = '';
+  let cityEconomyStreamStatus: 'polling' | 'connecting' | 'live' | 'fallback' = 'polling';
   let cityLiveEconomySummary: LiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   let cityEconomyHeartbeatSummary: EconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   let cityEconomyListingsSummary: EconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
@@ -554,6 +557,7 @@
       clearInterval(timer);
       closeRuntimeStream();
       closeSessionStream();
+      closeCityEconomyStream();
       void stopCityGameClient();
     };
   });
@@ -658,14 +662,19 @@
     closeSessionStream();
     const routePublicProfileHandle = activeRoute === '/profile' ? publicPatronHandleFromSearch(browserSearch) : '';
     if (isStoryRoute(activeRoute)) {
+      closeCityEconomyStream();
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
       return;
     }
-    if (!cityRouteNeedsSnapshot(activeRoute)) return;
+    if (!cityRouteNeedsSnapshot(activeRoute)) {
+      closeCityEconomyStream();
+      return;
+    }
     await loadCitySnapshot();
     if (sessionLoading) await bootstrapSession();
     if (!citySession.authenticated && cityRouteRequiresLogin(activeRoute)) {
       clearProtectedCityData();
+      closeCityEconomyStream();
       return;
     }
     if (activeRoute === '/') {
@@ -825,6 +834,7 @@
     } else if (!citySession.authenticated) {
       cityTrades = [];
     }
+    syncCityEconomyStream(activeRoute);
     await refreshInboxNotifications(activeRoute);
   }
 
@@ -1550,6 +1560,71 @@
     sessionStream?.close();
     sessionStream = undefined;
     sessionStreamId = '';
+  }
+
+  function syncCityEconomyStream(activeRoute = route) {
+    const streamOptions = cityEconomyStreamOptions(activeRoute);
+    if (!streamOptions) {
+      closeCityEconomyStream();
+      return;
+    }
+    if (cityEconomyStream && cityEconomyStreamKey === streamOptions.key) return;
+    closeCityEconomyStream('connecting');
+    cityEconomyStreamKey = streamOptions.key;
+    const stream = cityApi.nullcityEconomyStream(streamOptions.query);
+    cityEconomyStream = stream;
+    stream.addEventListener('economy_snapshot', event => {
+      if (cityEconomyStream !== stream) return;
+      const snapshot = parseCityEconomyStreamSnapshot((event as MessageEvent).data);
+      if (!snapshot) return;
+      cityLiveEconomy = { available: true, snapshot: snapshot.live };
+      cityEconomyHeartbeat = { available: true, heartbeat: snapshot.heartbeat };
+      cityEconomyStreamStatus = 'live';
+    });
+    stream.onerror = () => {
+      if (cityEconomyStream !== stream) return;
+      closeCityEconomyStream('fallback');
+    };
+  }
+
+  function cityEconomyStreamOptions(activeRoute: string): { key: string; query: { limit: number; residentLimit: number } } | undefined {
+    if (activeRoute === '/') {
+      return { key: 'home:8:6', query: { limit: 8, residentLimit: 6 } };
+    }
+    if (activeRoute === '/economy') {
+      const residentLimit = Math.max(50, (overview?.residents || residents).length);
+      return { key: `economy:30:${residentLimit}`, query: { limit: 30, residentLimit } };
+    }
+    return undefined;
+  }
+
+  function closeCityEconomyStream(nextStatus: 'polling' | 'connecting' | 'fallback' = 'polling') {
+    cityEconomyStream?.close();
+    cityEconomyStream = undefined;
+    cityEconomyStreamKey = '';
+    cityEconomyStreamStatus = nextStatus;
+  }
+
+  function parseCityEconomyStreamSnapshot(data: string): NullCityLiveEconomyStreamSnapshot | undefined {
+    try {
+      const payload = JSON.parse(data) as unknown;
+      const record = asRecord(payload);
+      const heartbeat = asRecord(record.heartbeat);
+      const live = asRecord(record.live);
+      if (typeof record.asOf === 'string' && typeof heartbeat.asOf === 'string' && typeof live.asOf === 'string') {
+        return payload as NullCityLiveEconomyStreamSnapshot;
+      }
+    } catch {
+      // Polling remains active if a malformed SSE frame slips through.
+    }
+    return undefined;
+  }
+
+  function cityEconomyStreamLabel(): string {
+    if (cityEconomyStreamStatus === 'live') return 'stream';
+    if (cityEconomyStreamStatus === 'connecting') return 'stream...';
+    if (cityEconomyStreamStatus === 'fallback') return 'polling';
+    return cityLiveEconomy.available ? 'live' : 'bridge';
   }
 
   function clampSpectatorZoom(value: number): number {
@@ -3374,7 +3449,7 @@
         <strong>{cityLiveEconomySummary.headline}</strong>
         <small>{cityLiveEconomySummary.detail}</small>
       </div>
-      <span class={`tag ${cityEconomyHeartbeatSummary.tone}`}>{cityEconomyHeartbeat.available ? 'heartbeat' : 'bridge'}</span>
+      <span class={`tag ${cityEconomyStreamStatus === 'fallback' ? 'warn' : cityEconomyHeartbeatSummary.tone}`}>{cityEconomyStreamLabel()}</span>
     </div>
     <div class="city-resident-profile-grid">
       <span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>
@@ -3505,7 +3580,7 @@
           <strong>{cityLiveEconomySummary.headline}</strong>
           <small>{cityLiveEconomySummary.detail}</small>
         </div>
-        <span class={`tag ${cityLiveEconomySummary.tone}`}>{cityLiveEconomy.available ? 'live' : 'bridge'}</span>
+        <span class={`tag ${cityEconomyStreamStatus === 'fallback' ? 'warn' : cityLiveEconomySummary.tone}`}>{cityEconomyStreamLabel()}</span>
       </div>
       <div class="city-resident-profile-grid">
         <span><small>Residents</small><strong>{cityLiveEconomy.snapshot?.city.residentCount?.toLocaleString() || cityResidents.length.toLocaleString()}</strong></span>

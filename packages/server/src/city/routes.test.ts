@@ -550,6 +550,44 @@ describe('routeCityApi points and souls', () => {
     expect(await response.json()).toEqual({ available: false, error: 'not_configured' });
   });
 
+  test('public economy stream route proxies the controller SSE feed', async () => {
+    const calls: unknown[] = [];
+    const services = testServices(null, undefined, {
+      nullcityControl: {
+        listProposals: async () => [],
+        listNcri: async () => [],
+        economyStream: async query => {
+          calls.push(query);
+          return new Response('retry: 1500\n\nevent: economy_snapshot\ndata: {"asOf":"2026-05-30T18:52:00.000Z"}\n\n', {
+            headers: {
+              'content-type': 'text/event-stream; charset=utf-8',
+              'cache-control': 'no-cache, no-transform',
+            },
+          });
+        },
+        approveProposal: async () => ({}),
+        rejectProposal: async () => ({}),
+        birthProposal: async () => ({}),
+      },
+    });
+
+    const response = await route(new Request('http://city.test/api/nullcity/economy/stream?limit=5&residentLimit=3&intervalMs=1500&once=1'), services);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(await response.text()).toContain('economy_snapshot');
+    expect(calls).toEqual([{ limit: 5, residentLimit: 3, intervalMs: 1500, once: true }]);
+  });
+
+  test('public economy stream route returns 404 when the stream bridge is unavailable', async () => {
+    const services = testServices(null);
+
+    const response = await route(new Request('http://city.test/api/nullcity/economy/stream?once=1'), services);
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ available: false, error: 'not_configured' });
+  });
+
   test('admin economy listings route proxies controller NCRI listings', async () => {
     const services = testServices(adminUser, undefined, {
       nullcityControl: {

@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken } from './city-api';
 
 const originalFetch = globalThis.fetch;
+const originalEventSource = globalThis.EventSource;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  globalThis.EventSource = originalEventSource;
   setCityCsrfToken(undefined);
 });
 
@@ -180,6 +182,29 @@ describe('cityApi', () => {
     await cityApi.nullcityEconomyHeartbeat();
 
     expect(calls).toEqual(['/api/nullcity/economy/heartbeat']);
+  });
+
+  test('opens the public Null City economy stream endpoint with query params', () => {
+    class FakeEventSource {
+      constructor(readonly url: string) {}
+      close() {}
+      addEventListener() {}
+      removeEventListener() {}
+      dispatchEvent() { return true; }
+      onerror = null;
+      onmessage = null;
+      onopen = null;
+      readyState = 0;
+      withCredentials = false;
+      readonly CONNECTING = 0;
+      readonly OPEN = 1;
+      readonly CLOSED = 2;
+    }
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
+
+    const stream = cityApi.nullcityEconomyStream({ limit: 5, residentLimit: 3, intervalMs: 1500 });
+
+    expect((stream as unknown as { url: string }).url).toBe('/api/nullcity/economy/stream?limit=5&residentLimit=3&intervalMs=1500');
   });
 
   test('calls the admin Null City economy listings endpoint', async () => {

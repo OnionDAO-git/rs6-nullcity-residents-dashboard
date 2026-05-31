@@ -240,6 +240,12 @@ export interface NullCityEconomyHeartbeatBridgeResponse {
   error?: string;
 }
 
+export interface NullCityLiveEconomyStreamSnapshot {
+  asOf: string;
+  heartbeat: NullCityEconomyHeartbeat;
+  live: NullCityLiveEconomySnapshot;
+}
+
 export interface NullCityEconomyListing {
   ncriId: string;
   itemId: number;
@@ -580,6 +586,16 @@ function liveEconomyQuery(options: { since?: string; limit?: number; residentLim
   return serialized ? `?${serialized}` : '';
 }
 
+function economyStreamQuery(options: { since?: string; limit?: number; residentLimit?: number; intervalMs?: number } = {}): string {
+  const params = new URLSearchParams();
+  if (options.since) params.set('since', options.since);
+  if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+  if (typeof options.residentLimit === 'number') params.set('residentLimit', String(options.residentLimit));
+  if (typeof options.intervalMs === 'number') params.set('intervalMs', String(options.intervalMs));
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
 function ncriPrintQueueQuery(options: { status?: NullCityNcriPrintQueueStatus } = {}): string {
   const params = new URLSearchParams();
   if (options.status) params.set('status', options.status);
@@ -642,6 +658,8 @@ export const cityApi = {
   nullcityEconomyLive: (options?: { since?: string; limit?: number; residentLimit?: number }) =>
     request<NullCityLiveEconomyBridgeResponse>(`/api/nullcity/economy/live${liveEconomyQuery(options)}`),
   nullcityEconomyHeartbeat: () => request<NullCityEconomyHeartbeatBridgeResponse>('/api/nullcity/economy/heartbeat'),
+  nullcityEconomyStream: (options?: { since?: string; limit?: number; residentLimit?: number; intervalMs?: number }) =>
+    new EventSource(`/api/nullcity/economy/stream${economyStreamQuery(options)}`),
   adminNullcityEconomyListings: () => request<NullCityEconomyListingsBridgeResponse>('/api/admin/nullcity/economy/listings'),
   exchangeNullcityApForGp: (residentId: string, body: NullCityApGpExchangeRequest) =>
     request<NullCityApGpExchangeBridgeResponse>(

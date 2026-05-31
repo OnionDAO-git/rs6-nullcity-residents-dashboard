@@ -205,6 +205,39 @@ describe('createNullCityControlClient', () => {
     });
   });
 
+  test('opens the controller economy SSE stream with bearer auth and query params', async () => {
+    const calls: Array<{ url: string; accept: string | null; authorization: string | null; signal: boolean }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        accept: new Headers(init?.headers).get('accept'),
+        authorization: new Headers(init?.headers).get('authorization'),
+        signal: init?.signal instanceof AbortSignal,
+      });
+      return new Response('retry: 1500\n\nevent: economy_snapshot\ndata: {"asOf":"2026-05-30T18:52:00.000Z"}\n\n', {
+        headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+      });
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const response = await client.economyStream!({ limit: 5, residentLimit: 3, intervalMs: 1500, once: true });
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/economy/stream?limit=5&residentLimit=3&intervalMs=1500&once=1',
+        accept: 'text/event-stream',
+        authorization: 'Bearer city-token',
+        signal: false,
+      },
+    ]);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(await response.text()).toContain('economy_snapshot');
+  });
+
   test('fetches the controller NCRI economy listings with bearer auth', async () => {
     const calls: Array<{ url: string; authorization: string | null }> = [];
     globalThis.fetch = (async (input, init) => {
