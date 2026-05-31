@@ -3998,8 +3998,13 @@
           </button>
         {:else}
           <div class="city-empty-state">
-            <strong>No Storyteller dispatches</strong>
-            <span>Public dispatch previews will appear once grounded Storyteller runs are written.</span>
+            {#if cityDataError}
+              <strong>Storyteller feed is unavailable</strong>
+              <span>{cityDataNoticeCopy(cityDataError)} Reopen this route after the dashboard server reconnects.</span>
+            {:else}
+              <strong>No Storyteller dispatches</strong>
+              <span>Public dispatch previews will appear once grounded Storyteller runs are written.</span>
+            {/if}
           </div>
         {/each}
       </div>

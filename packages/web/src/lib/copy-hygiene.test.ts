@@ -31,6 +31,7 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('<h1>Storyteller Dispatches</h1>');
     expect(appSource).toContain('<div class="panel-title">Public Dispatch Preview</div>');
     expect(appSource).toContain('<div class="panel-title">Latest Public Dispatch</div>');
+    expect(appSource).toContain('<strong>Storyteller feed is unavailable</strong>');
   });
 
   test('keeps guest login fallback from linking attendees back to the same unavailable route', () => {
