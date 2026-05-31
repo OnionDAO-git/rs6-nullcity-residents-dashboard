@@ -57,6 +57,12 @@ export interface ReleaseReadinessFirstFiveStep {
   detail: string;
 }
 
+export interface ReleaseReadinessActionQueueItem {
+  label: string;
+  tone: ReleaseReadinessTone;
+  detail: string;
+}
+
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
@@ -195,6 +201,38 @@ export function releaseReadinessFirstFiveSteps(summary: ReleaseReadinessSummary)
         : 'Capture fresh screenshots/logs before a public demo.',
     },
   ];
+}
+
+export function releaseReadinessActionQueue(summary: ReleaseReadinessSummary, limit = 4): ReleaseReadinessActionQueueItem[] {
+  if (summary.status === 'ready') return [];
+  return summary.nextActions
+    .filter(action => !action.startsWith('Keep the controller running'))
+    .slice(0, limit)
+    .map(action => ({
+      label: readinessActionLabel(action),
+      tone: readinessActionTone(summary, action),
+      detail: action,
+    }));
+}
+
+function readinessActionLabel(action: string): string {
+  if (action.startsWith('Start or reconnect')) return 'Reconnect residents';
+  if (action.startsWith('Restart or observe')) return 'Wake planning';
+  if (action.startsWith('Inspect residents')) return 'Inspect actions';
+  if (action.startsWith('Top up')) return 'Top up AP';
+  if (action.startsWith('Run an AP/GP')) return 'Prove GP';
+  if (action.startsWith('Run missing')) return 'Run capability QA';
+  if (action.startsWith('Review and clear')) return 'Review Storyteller';
+  if (action.startsWith('Run or review Storyteller')) return 'Review Storyteller';
+  if (action.startsWith('Assign blocked print')) return 'Check prints';
+  return 'Next action';
+}
+
+function readinessActionTone(summary: ReleaseReadinessSummary, action: string): ReleaseReadinessTone {
+  if (summary.status === 'blocked' && (action.startsWith('Start or reconnect') || action.startsWith('Inspect residents'))) {
+    return 'fail';
+  }
+  return 'warn';
 }
 
 function summarizeCapabilityQa(runs: BenchmarkArtifactSummary[], nowMs: number): CapabilityQaSummary {

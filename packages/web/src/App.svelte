@@ -45,7 +45,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
-  import { buildReleaseReadiness, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
+  import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
@@ -192,6 +192,7 @@
     storyDigests: [],
     printInsights: cityPrintInsights,
   });
+  let cityReleaseReadinessActions: ReleaseReadinessActionQueueItem[] = releaseReadinessActionQueue(cityReleaseReadiness);
   let cityEconomyProofs: EconomyProofSummary = buildEconomyProofSummary([]);
   let cityLiveEconomy: NullCityLiveEconomyBridgeResponse = { available: false, error: 'not_loaded' };
   let cityEconomyHeartbeat: NullCityEconomyHeartbeatBridgeResponse = { available: false, error: 'not_loaded' };
@@ -412,6 +413,7 @@
     printInsights: cityPrintInsights,
     benchmarkRuns: cityBenchmarkRuns,
   });
+  $: cityReleaseReadinessActions = releaseReadinessActionQueue(cityReleaseReadiness);
   $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
   $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   $: cityEconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
@@ -3277,6 +3279,19 @@
         </article>
       {/each}
     </div>
+    {#if cityReleaseReadinessActions.length > 0}
+      <div class="city-record-list compact">
+        {#each cityReleaseReadinessActions as action (action.detail)}
+          <article>
+            <span class={`tag ${action.tone}`}>{action.label}</span>
+            <div>
+              <strong>{action.detail}</strong>
+              <small>Readiness queue</small>
+            </div>
+          </article>
+        {/each}
+      </div>
+    {/if}
     <div class="city-record-list compact">
       {#each cityReleaseReadiness.checks as check (check.id)}
         <article>

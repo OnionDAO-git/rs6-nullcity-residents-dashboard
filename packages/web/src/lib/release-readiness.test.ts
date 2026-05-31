@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { buildReleaseReadiness, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles } from './release-readiness';
+import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles } from './release-readiness';
 
 function resident(overrides: Partial<ResidentDashboardRow> = {}): ResidentDashboardRow {
   return {
@@ -456,6 +456,44 @@ describe('buildReleaseReadiness', () => {
         label: 'Capture',
         tone: 'warn',
         detail: 'After the blocker clears, capture fresh screenshots/logs before a public demo.',
+      },
+    ]);
+  });
+
+  test('keeps several readiness next actions visible with compact operator labels', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          attention: 4,
+          body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } },
+        }),
+      ],
+      storyDigests: [],
+      printInsights: printInsights({ activeRequests: 0, inQueue: 0, ncriTrades: { pending: 0, accepted: 0, failed: 0, recent: [] } }),
+      benchmarkRuns: [],
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessActionQueue(summary)).toEqual([
+      {
+        label: 'Top up AP',
+        tone: 'warn',
+        detail: 'Top up low-AP residents or avoid presenting them as healthy.',
+      },
+      {
+        label: 'Prove GP',
+        tone: 'warn',
+        detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
+      },
+      {
+        label: 'Run capability QA',
+        tone: 'warn',
+        detail: 'Run missing or stale capability benchmarks before relying on unproven resident loops.',
+      },
+      {
+        label: 'Review Storyteller',
+        tone: 'warn',
+        detail: 'Run or review Storyteller before using public canon narration.',
       },
     ]);
   });
