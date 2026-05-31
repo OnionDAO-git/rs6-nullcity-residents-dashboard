@@ -83,7 +83,7 @@ export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse
   return {
     tone,
     headline: `${snapshot.city.residentCount.toLocaleString()} residents carrying ${snapshot.city.attentionTotal.toLocaleString()} AP`,
-    detail: `${snapshot.city.activeResidentCount.toLocaleString()} active in economy window · AP Δ ${signed(snapshot.city.attentionDelta)} · GP Δ ${signed(snapshot.city.gpNetDelta)}`,
+    detail: `${economyWindowResidentLabel(snapshot.city.activeResidentCount, snapshot.window.windowMs)} · AP Δ ${signed(snapshot.city.attentionDelta)} · GP Δ ${signed(snapshot.city.gpNetDelta)}`,
     eventLabel: `${apGpEvents.toLocaleString()} AP/GP events`,
     proposalLabel: pendingFunding === 1 ? '1 Soul funding' : `${pendingFunding.toLocaleString()} Souls funding`,
     selfFundedLabel,
@@ -265,6 +265,12 @@ export function selfFundedApResidentRows(
 
 function signed(value: number): string {
   return value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
+}
+
+function economyWindowResidentLabel(activeResidentCount: number, windowMs: number): string {
+  const count = Math.max(0, activeResidentCount);
+  const minutes = Math.max(1, Math.round(windowMs / 60000));
+  return `${count.toLocaleString()} resident${count === 1 ? '' : 's'} with economy events in ${minutes.toLocaleString()}m`;
 }
 
 function summarizeSelfFundedAp(events: NullCityLiveEconomyEvent[]): string {

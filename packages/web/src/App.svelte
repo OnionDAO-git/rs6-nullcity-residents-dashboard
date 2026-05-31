@@ -8,6 +8,7 @@
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
+  import { cityDemoPathSteps } from './lib/demo-path';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, selfFundedApResidentRows, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary, type SelfFundedApResidentRow } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
@@ -377,6 +378,7 @@
     { label: 'Overview', path: '/', match: '/', glyph: 'OV' },
     { label: 'World', path: '/world', match: '/world', glyph: 'WO' },
     { label: 'Story', path: '/story', match: '/story', glyph: 'ST' },
+    { label: 'Economy', path: '/economy', match: '/economy', glyph: 'EC' },
     { label: 'Embassy', path: '/embassy', match: '/embassy', glyph: 'EM' },
     { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
     { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
@@ -473,6 +475,28 @@
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
   }));
+  $: cityLatestStoryStatus = cityStoryDigests[0] ? storytellerDigestStatus(cityStoryDigests[0]) : undefined;
+  $: cityDemoPath = cityDemoPathSteps({
+    authenticated: citySession.authenticated,
+    residentCount: cityResidents.length,
+    onlineResidents: cityOnlineResidents.length,
+    lowApResidents: cityLowAttentionResidents.length,
+    demoResident: {
+      tone: cityResidentDemoPick.tone,
+      ...(cityResidentDemoPick.residentName ? { name: cityResidentDemoPick.residentName } : {}),
+      ...(cityResidentDemoPick.residentName ? { path: `/residents/${encodeURIComponent(residentSlug(cityResidentDemoPick.residentName))}` } : {}),
+      action: cityResidentDemoPick.action,
+      detail: cityResidentDemoPick.detail,
+    },
+    story: {
+      tone: cityLatestStoryStatus?.tone || 'warn',
+      label: cityLatestStoryStatus?.label || 'waiting',
+      ...((cityStoryDigests[0]?.dispatch?.publicTitle || cityStoryDigests[0]?.digestId)
+        ? { title: cityStoryDigests[0]?.dispatch?.publicTitle || cityStoryDigests[0]?.digestId }
+        : {}),
+      summary: cityLatestStoryStatus?.summary || 'No Storyteller run is loaded yet; open the feed to inspect digest availability.',
+    },
+  });
   $: cityProfileEconomy = buildProfileEconomySummary({
     apBalance: citySession.ap,
     gpBalance: citySession.gp,
@@ -3352,6 +3376,29 @@
       <button onclick={() => cityNav('/admin')}>Open Admin</button>
     </section>
   {/if}
+
+  <section class="city-panel city-demo-path-panel">
+    <div class="row">
+      <div>
+        <div class="panel-title">Monday Demo Path</div>
+        <strong>Show the city alive, funded, responsive, and narrated.</strong>
+      </div>
+      <span class="tag ok">4 stops</span>
+    </div>
+    <div class="city-demo-path-grid">
+      {#each cityDemoPath as step, index (step.id)}
+        <button class={`city-demo-step tone-${step.tone}`} onclick={() => cityNav(step.path)}>
+          <span class={`tag ${step.tone}`}>{index + 1}</span>
+          <span class="city-demo-step-copy">
+            <small>{step.label}</small>
+            <strong>{step.metric}</strong>
+            <span>{step.action}</span>
+            <em>{step.detail}</em>
+          </span>
+        </button>
+      {/each}
+    </div>
+  </section>
 
   {@render ResidentTriageStrip({ limit: 4 })}
 

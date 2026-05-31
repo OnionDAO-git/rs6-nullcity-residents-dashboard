@@ -27,11 +27,37 @@ describe('summarizeLiveEconomy', () => {
     expect(summarizeLiveEconomy(response)).toEqual({
       tone: 'ok',
       headline: '23 residents carrying 50,000 AP',
-      detail: '5 active in economy window · AP Δ +125 · GP Δ -20',
+      detail: '5 residents with economy events in 15m · AP Δ +125 · GP Δ -20',
       eventLabel: '3 AP/GP events',
       proposalLabel: '1 Soul funding',
       selfFundedLabel: 'no self-funded AP',
     });
+  });
+
+  test('describes quiet economy windows without implying live residents are offline', () => {
+    const response: NullCityLiveEconomyBridgeResponse = {
+      available: true,
+      snapshot: {
+        asOf: '2026-05-30T17:47:00.000Z',
+        window: { since: '2026-05-30T17:32:00.000Z', windowMs: 900000 },
+        city: { residentCount: 23, activeResidentCount: 0, attentionTotal: 50000, attentionDelta: 0, gpNetDelta: 0 },
+        countsByKind: {},
+        topResidentsByAttention: [],
+        residents: [],
+        recentEvents: [],
+        pendingProposals: [],
+      },
+    };
+
+    const summary = summarizeLiveEconomy(response);
+
+    expect(summary).toMatchObject({
+      tone: 'warn',
+      headline: '23 residents carrying 50,000 AP',
+      detail: '0 residents with economy events in 15m · AP Δ 0 · GP Δ 0',
+      eventLabel: '0 AP/GP events',
+    });
+    expect(summary.detail).not.toContain('active');
   });
 
   test('summarizes resident GP-to-AP exchanges as self-funded AP', () => {
