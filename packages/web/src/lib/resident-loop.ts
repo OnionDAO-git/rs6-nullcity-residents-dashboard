@@ -877,7 +877,9 @@ export function residentRosterScanLines(
   const stack = residentStackFact(row);
   const memoryFreshness = residentMemoryFreshness(row);
   const proofPulse = residentProofPulse(row, signals);
-  const warning = residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
+  const warnings = residentOperatorWarnings(row, signals.benchmark, { economyGp: signals.economyGp });
+  const warning = warnings[0] || residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
+  const warningDensity = residentWarningDensityLine(warnings);
 
   return [
     {
@@ -944,6 +946,13 @@ export function residentRosterScanLines(
       priority: 'secondary',
     },
     {
+      label: 'Warnings',
+      text: warningDensity.text,
+      tone: warningDensity.tone,
+      limit: 96,
+      priority: 'secondary',
+    },
+    {
       label: 'Risk',
       text: `${warning.summary} · Act from: ${nextStepTargetLabel(warning)}`,
       tone: warning.tone,
@@ -951,6 +960,27 @@ export function residentRosterScanLines(
       priority: 'secondary',
     },
   ];
+}
+
+function residentWarningDensityLine(
+  warnings: ResidentOperatorWarning[],
+): { tone: 'ok' | 'warn' | 'fail'; text: string } {
+  const failCount = warnings.filter(warning => warning.tone === 'fail').length;
+  const warnCount = warnings.filter(warning => warning.tone === 'warn').length;
+  const top = warnings.find(warning => warning.tone !== 'ok') || warnings[0];
+  const counts = `${failCount.toLocaleString()} fail · ${warnCount.toLocaleString()} warn`;
+
+  if (!top || (failCount === 0 && warnCount === 0)) {
+    return {
+      tone: 'ok',
+      text: `${counts} · no active operator warnings`,
+    };
+  }
+
+  return {
+    tone: failCount > 0 ? 'fail' : 'warn',
+    text: `${counts} · top ${top.summary}`,
+  };
 }
 
 export function residentDemoPickCue(

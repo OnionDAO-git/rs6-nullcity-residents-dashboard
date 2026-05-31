@@ -475,7 +475,7 @@ describe('resident loop helpers', () => {
       storyteller: { tone: 'warn', summary: 'No grounded Storyteller events for this resident.' },
     });
 
-    expect(lines).toHaveLength(10);
+    expect(lines).toHaveLength(11);
     expect(lines.map(line => line.label)).toEqual([
       'Moment',
       'Need',
@@ -486,6 +486,7 @@ describe('resident loop helpers', () => {
       'Action',
       'Memory',
       'Proof',
+      'Warnings',
       'Risk',
     ]);
     expect(lines[0]).toMatchObject({
@@ -501,6 +502,10 @@ describe('resident loop helpers', () => {
     });
     expect(lines.find(line => line.label === 'Risk')).toMatchObject({
       text: 'Resident is offline in the live controller snapshot. · Act from: Grant Attention',
+      tone: 'fail',
+    });
+    expect(lines.find(line => line.label === 'Warnings')).toMatchObject({
+      text: '1 fail · 2 warn · top Resident is offline in the live controller snapshot.',
       tone: 'fail',
     });
     expect(lines.find(line => line.label === 'Stack')).toMatchObject({
