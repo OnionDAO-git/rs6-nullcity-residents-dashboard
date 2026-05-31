@@ -82,14 +82,16 @@ describe('summarizeLiveEconomy', () => {
   });
 
   test('reports missing bridge configuration without pretending the economy is empty', () => {
-    expect(summarizeLiveEconomy({ available: false, error: 'not_configured' })).toEqual({
+    const summary = summarizeLiveEconomy({ available: false, error: 'not_configured' });
+    expect(summary).toEqual({
       tone: 'warn',
       headline: 'Live economy bridge not configured',
-      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN for AP/GP totals.',
+      detail: 'Connect the Null City bridge to show AP/GP totals.',
       eventLabel: 'no live events',
       proposalLabel: 'no live proposals',
       selfFundedLabel: 'no self-funded AP',
     });
+    expect(summary.detail).not.toContain('NULLCITY_');
   });
 });
 
@@ -256,12 +258,14 @@ describe('summarizeEconomyHeartbeat', () => {
   });
 
   test('warns when the heartbeat bridge is unavailable', () => {
-    expect(summarizeEconomyHeartbeat({ available: false, error: 'not_configured' })).toEqual({
+    const summary = summarizeEconomyHeartbeat({ available: false, error: 'not_configured' });
+    expect(summary).toEqual({
       tone: 'warn',
       headline: 'Economy heartbeat unavailable',
-      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN to show controller liveness.',
+      detail: 'Connect the Null City bridge to show controller liveness.',
       degradedLabel: 'bridge',
     });
+    expect(summary.detail).not.toContain('NULLCITY_');
   });
 });
 
@@ -340,11 +344,13 @@ describe('summarizeEconomyTransport', () => {
   });
 
   test('keeps bridge-missing copy distinct from a healthy polling fallback', () => {
-    expect(summarizeEconomyTransport('polling', { available: false, error: 'not_configured' }, { available: false, error: 'not_configured' })).toEqual({
+    const summary = summarizeEconomyTransport('polling', { available: false, error: 'not_configured' }, { available: false, error: 'not_configured' });
+    expect(summary).toEqual({
       tone: 'warn',
       label: 'bridge',
-      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+      detail: 'Connect the Null City bridge before stream or polling transport can load.',
     });
+    expect(summary.detail).not.toContain('NULLCITY_');
   });
 
   test('falls back from a stuck opening stream without downgrading an active stream', () => {

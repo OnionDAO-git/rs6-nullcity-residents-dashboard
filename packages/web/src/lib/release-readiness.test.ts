@@ -322,7 +322,7 @@ describe('buildReleaseReadiness', () => {
       economyTransport: economyTransport({
         tone: 'warn',
         label: 'bridge',
-        detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+        detail: 'Connect the Null City bridge before stream or polling transport can load.',
       }),
       benchmarkRuns: capabilityBenchmarks(),
       nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
@@ -1324,7 +1324,7 @@ describe('buildReleaseReadiness', () => {
       economyTransport: economyTransport({
         tone: 'warn',
         label: 'bridge',
-        detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+        detail: 'Connect the Null City bridge before stream or polling transport can load.',
       }),
       benchmarkRuns: [],
       nowMs: Date.parse('2026-05-30T09:10:00.000Z'),

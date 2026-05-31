@@ -63,7 +63,7 @@ export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse
     return {
       tone: 'warn',
       headline: 'Live economy bridge not configured',
-      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN for AP/GP totals.',
+      detail: 'Connect the Null City bridge to show AP/GP totals.',
       eventLabel: 'no live events',
       proposalLabel: 'no live proposals',
       selfFundedLabel: 'no self-funded AP',
@@ -95,7 +95,7 @@ export function summarizeEconomyHeartbeat(response: NullCityEconomyHeartbeatBrid
     return {
       tone: 'warn',
       headline: 'Economy heartbeat unavailable',
-      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN to show controller liveness.',
+      detail: 'Connect the Null City bridge to show controller liveness.',
       degradedLabel: 'bridge',
     };
   }
@@ -175,7 +175,7 @@ export function summarizeEconomyTransport(
     return {
       tone: 'warn',
       label: 'bridge',
-      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+      detail: 'Connect the Null City bridge before stream or polling transport can load.',
     };
   }
 
