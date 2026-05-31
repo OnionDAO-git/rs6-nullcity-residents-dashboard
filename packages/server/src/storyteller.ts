@@ -99,6 +99,8 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
   const digestId = stringField(digest, 'digestId') || runId;
   const topEvents = arrayField(digest.topEvents);
   const residents = arrayField(digest.residents);
+  const systemHealth = asRecord(digest.systemHealth);
+  const totalResidents = numberOrNullField(systemHealth, 'totalResidents');
   const summary = trimText(await readTextFile(path.join(runRoot, 'summary.txt')));
 
   if (!Object.keys(digest).length && !summary) return undefined;
@@ -141,7 +143,7 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
     windowEnd: stringField(digest, 'windowEnd'),
     topEventCount: topEvents.length,
     topEvents: topEvents.map(readTopEvent).filter((event): event is StorytellerDigestEventSummary => event !== undefined),
-    residentCount: residents.length,
+    residentCount: typeof totalResidents === 'number' ? Math.max(0, Math.trunc(totalResidents)) : residents.length,
     summary: summary ? redactPublicText(summary) : undefined,
     dispatch,
   };

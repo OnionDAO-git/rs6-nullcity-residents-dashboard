@@ -42,6 +42,7 @@ describe('readStorytellerDigestFeed', () => {
         builtAt: '2026-05-30T00:02:00.000Z',
         topEvents: [{ ref: 'e2' }, { ref: 'e3' }],
         residents: [{ residentName: 'res:agent' }, { residentName: 'res:hans' }],
+        systemHealth: { totalResidents: 25, activeResidents: 23, fadedResidents: 1, lowApResidents: 2 },
       }),
     );
     await fs.writeFile(
@@ -66,7 +67,7 @@ describe('readStorytellerDigestFeed', () => {
     expect(feed.items).toHaveLength(2);
     expect(feed.items[0]?.runId).toBe('run-b');
     expect(feed.items[0]?.topEventCount).toBe(2);
-    expect(feed.items[0]?.residentCount).toBe(2);
+    expect(feed.items[0]?.residentCount).toBe(25);
     expect(feed.items[0]?.dispatch?.dispatchId).toBe('dispatch-b');
     expect(feed.items[0]?.dispatch?.warningCount).toBe(3);
     expect(feed.items[0]?.dispatch?.publicTitle).toBe('Night in Lumbridge');
