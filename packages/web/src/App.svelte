@@ -27,6 +27,7 @@
     residentLoopSummaryLine,
     residentMemoryFreshness,
     residentNeedsApSupportSoon,
+    residentNextStepCue,
     residentOperatorWarnings,
     residentProofPulse,
     residentProofRollup,
@@ -4354,6 +4355,11 @@
           goalContract: cityResidentGoalContract,
           storyteller: cityResidentStorySignal,
         })}
+        {@const nextStepCue = residentNextStepCue(cityResident, {
+          benchmark: cityResidentBenchmarkStatus,
+          economyGp: cityResidentEconomyGpEvidence,
+          storyteller: cityResidentStorySignal,
+        })}
         {@const liveMoment = residentLiveMoment(cityResident)}
         <div class="city-panel span-2">
           <div class="row">
@@ -4370,6 +4376,13 @@
           <div class="panel-title">Resident Intent</div>
           {@render ResidentLoopFactGrid({ facts: residentIntentFacts(cityResident, { goalContract: cityResidentGoalContract, storyteller: cityResidentStorySignal }) })}
           <div class="city-record-list compact">
+            <article>
+              <span class={`tag ${nextStepCue.tone}`}>{nextStepCue.label}</span>
+              <div>
+                <strong>{nextStepCue.action}</strong>
+                <small>{nextStepCue.detail}</small>
+              </div>
+            </article>
             <article>
               <span class={`tag ${liveMoment.tone}`}>{liveMoment.label}</span>
               <div>

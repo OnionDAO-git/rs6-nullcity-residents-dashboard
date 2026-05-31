@@ -17,6 +17,7 @@ import {
   residentMemoryFreshness,
   residentNeedsAp,
   residentNeedsApSupportSoon,
+  residentNextStepCue,
   residentOperatorWarnings,
   residentProofPulse,
   residentProofRollup,
@@ -371,6 +372,55 @@ describe('resident loop helpers', () => {
     });
     expect(lines.some(line => line.label === 'Stack')).toBe(false);
     expect(lines.some(line => line.label === 'Storyteller')).toBe(false);
+  });
+
+  test('turns resident warning state into a concrete detail next step', () => {
+    expect(residentNextStepCue(row({
+      online: false,
+      attention: 7674,
+      thinking: { mode: 'offline', activePlan: 'Master woodcutting and supply the city with logs.', lastInferenceCause: 'evidence_record_failed' },
+      body: {
+        controlHeld: false,
+        lastAction: { kind: 'action', result: 'success', source: 'thinking', tick: 26 },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'The resident is making visible in-game progress.',
+        latestEventKind: 'stuck_recovered',
+        latestEventTick: 135996,
+      },
+    }))).toEqual({
+      tone: 'fail',
+      label: 'Next step',
+      action: 'Reconnect resident',
+      detail: 'Resident is offline in the live controller snapshot. Login or top up AP before expecting new actions.',
+    });
+
+    expect(residentNextStepCue(row({
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Earn GP safely' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 150 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 150,
+          ageMs: 2000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 1 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof collected.', latestEventKind: 'gp_observed', latestEventTick: 150 },
+    }), {
+      benchmark: { tone: 'ok', summary: 'Latest benchmark passed.', detail: 'score 1' },
+    })).toEqual({
+      tone: 'ok',
+      label: 'Next step',
+      action: 'Keep watching',
+      detail: 'Resident has current AP, GP, plan, feed, story, and benchmark signals.',
+    });
   });
 
   test('describes Library memory freshness as fresh, stale, or thin', () => {

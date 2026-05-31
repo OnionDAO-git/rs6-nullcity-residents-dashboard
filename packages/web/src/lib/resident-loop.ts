@@ -16,6 +16,13 @@ export interface ResidentRosterScanLine {
   priority: 'primary' | 'secondary';
 }
 
+export interface ResidentNextStepCue {
+  tone: 'ok' | 'warn' | 'fail';
+  label: 'Next step';
+  action: string;
+  detail: string;
+}
+
 export interface ResidentOperatorWarning {
   tone: 'ok' | 'warn' | 'fail';
   summary: string;
@@ -634,6 +641,20 @@ export function residentPrimaryWarning(
     tone: 'warn',
     summary: 'No operator warning available.',
     detail: 'Resident warnings are not yet populated.',
+  };
+}
+
+export function residentNextStepCue(
+  row: ResidentDashboardRow | undefined,
+  signals: ResidentProofPulseSignals = {},
+): ResidentNextStepCue {
+  const warning = residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
+
+  return {
+    tone: warning.tone,
+    label: 'Next step',
+    action: nextStepActionLabel(warning),
+    detail: warning.tone === 'ok' ? warning.detail : [warning.summary, warning.detail].filter(Boolean).join(' '),
   };
 }
 
@@ -1321,6 +1342,19 @@ function actionDetailWithoutCause(row: ResidentDashboardRow): string {
   const action = row.body?.lastAction;
   if (!action) return row.lastEvent?.text || '-';
   return [action.result, action.source].filter(Boolean).join(' | ') || '-';
+}
+
+function nextStepActionLabel(warning: ResidentOperatorWarning): string {
+  if (warning.tone === 'ok') return 'Keep watching';
+  if (warning.summary.startsWith('Resident is offline')) return 'Reconnect resident';
+  if (warning.summary.startsWith('AP low')) return 'Top up AP';
+  if (warning.summary.startsWith('No live feed') || warning.summary.startsWith('Feed stale')) return 'Attach live feed';
+  if (warning.summary.startsWith('Latest action')) return 'Repair latest action';
+  if (warning.summary.includes('GP')) return 'Capture GP proof';
+  if (warning.summary.startsWith('No active plan')) return 'Publish active plan';
+  if (warning.summary.startsWith('Library strategy')) return 'Ground story evidence';
+  if (warning.summary.toLowerCase().includes('benchmark')) return 'Run capability proof';
+  return 'Review resident signal';
 }
 
 function compactMomentCauseDetail(cause: ResidentCauseSignal): string {
