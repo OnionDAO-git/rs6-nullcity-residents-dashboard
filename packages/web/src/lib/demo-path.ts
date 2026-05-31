@@ -56,6 +56,7 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
     ? safeDemoPath(support.path, '/embassy')
     : supportReady ? '/embassy' : '/login';
   const residentPath = safeDemoPath(input.demoResident.path, '/residents');
+  const residentLabel = residentProofStepLabel(input.demoResident);
 
   return [
     {
@@ -81,7 +82,7 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
     {
       id: 'resident-proof',
       tone: input.demoResident.tone,
-      label: 'Watch resident react',
+      label: residentLabel,
       metric: displayResidentName(input.demoResident.name) || 'directory',
       action: input.demoResident.action,
       path: residentPath,
@@ -101,6 +102,11 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
 
 function displayResidentName(name: string | undefined): string {
   return (name || '').trim().replace(/^res:/i, '');
+}
+
+function residentProofStepLabel(resident: CityDemoResidentSignal): string {
+  if (resident.tone === 'ok') return 'Watch resident react';
+  return displayResidentName(resident.name) ? 'Review resident proof' : 'Wait for residents';
 }
 
 function safeDemoPath(path: string | undefined, fallback: string): string {

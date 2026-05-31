@@ -132,6 +132,36 @@ describe('cityDemoPathSteps', () => {
     });
   });
 
+  test('labels warning resident proof stops as review work instead of a live reaction', () => {
+    const steps = cityDemoPathSteps({
+      authenticated: true,
+      residentCount: 23,
+      onlineResidents: 21,
+      lowApResidents: 0,
+      demoResident: {
+        tone: 'warn',
+        name: 'res:unlinked-ready',
+        path: '/residents?triage=goal-link',
+        action: 'Review goal-action link',
+        detail: 'unlinked-ready is otherwise demo-ready; goal/action link needs review.',
+      },
+      story: {
+        tone: 'ok',
+        label: 'ready',
+        summary: 'Dispatch is grounded and ready for public review.',
+      },
+    });
+
+    expect(steps[2]).toMatchObject({
+      id: 'resident-proof',
+      tone: 'warn',
+      label: 'Review resident proof',
+      metric: 'unlinked-ready',
+      action: 'Review goal-action link',
+      path: '/residents?triage=goal-link',
+    });
+  });
+
   test('keeps dynamic demo destinations on known city routes', () => {
     const steps = cityDemoPathSteps({
       authenticated: true,
