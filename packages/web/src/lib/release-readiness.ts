@@ -9,7 +9,7 @@ export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
 export type ReleaseReadinessTone = 'ok' | 'warn' | 'fail';
 
 export interface ReleaseReadinessCheck {
-  id: 'residents' | 'plans' | 'loop' | 'ap' | 'gp' | 'economy-transport' | 'capabilities' | 'storyteller' | 'ncri-print';
+  id: 'residents' | 'identity' | 'plans' | 'loop' | 'ap' | 'gp' | 'economy-transport' | 'capabilities' | 'storyteller' | 'ncri-print';
   label: string;
   tone: ReleaseReadinessTone;
   value: string;
@@ -120,6 +120,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
 
   const checks: ReleaseReadinessCheck[] = [
     residentCheck(residents.length, onlineResidents),
+    identityCheck(onlineResidents, modelEndpointResidents, sparkModuleResidents),
     planCheck(activePlans, residents.length),
     residentLoopCheck(failedActionResidents, residents),
     apCheck(lowApResidents),
@@ -280,6 +281,7 @@ export function releaseReadinessActionQueue(summary: ReleaseReadinessSummary, li
 
 function readinessActionLabel(action: string): string {
   if (action.startsWith('Start or reconnect')) return 'Reconnect residents';
+  if (action.startsWith('Confirm model/endpoint')) return 'Confirm stack';
   if (action.startsWith('Restart or observe')) return 'Wake planning';
   if (action.startsWith('Inspect residents')) return 'Inspect actions';
   if (action.startsWith('Top up')) return 'Top up AP';
@@ -306,6 +308,7 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.tone === 'fail') return 0;
   if (action.label === 'Check economy' || action.label === 'Configure bridge') return 10;
   if (action.label === 'Check prints') return 20;
+  if (action.label === 'Confirm stack') return 25;
   if (action.label === 'Top up AP') return 30;
   if (action.label === 'Prove GP') return 40;
   if (action.label === 'Run capability QA') return 50;
@@ -423,6 +426,44 @@ function residentCheck(total: number, online: number): ReleaseReadinessCheck {
     tone: 'ok',
     value: `${online.toLocaleString()} online`,
     detail: `${total.toLocaleString()} resident${total === 1 ? '' : 's'} visible in the dashboard snapshot.`,
+  };
+}
+
+function identityCheck(online: number, modelEndpoint: number, sparkModule: number): ReleaseReadinessCheck {
+  if (online === 0) {
+    return {
+      id: 'identity',
+      label: 'Model+SPARK',
+      tone: 'ok',
+      value: '-',
+      detail: 'Model/endpoint and SPARK module identity will be checked once residents reconnect.',
+    };
+  }
+
+  const missingModel = Math.max(0, online - modelEndpoint);
+  const missingSpark = Math.max(0, online - sparkModule);
+  const value = `${modelEndpoint.toLocaleString()}/${online.toLocaleString()} model · ${sparkModule.toLocaleString()}/${online.toLocaleString()} SPARK`;
+  const missingParts = [
+    missingModel > 0 ? `${missingModel.toLocaleString()} online resident${missingModel === 1 ? '' : 's'} missing model/endpoint` : '',
+    missingSpark > 0 ? `${missingSpark.toLocaleString()} online resident${missingSpark === 1 ? '' : 's'} missing SPARK module` : '',
+  ].filter(Boolean);
+
+  if (missingParts.length > 0) {
+    return {
+      id: 'identity',
+      label: 'Model+SPARK',
+      tone: 'warn',
+      value,
+      detail: `${missingParts.join(' · ')}.`,
+    };
+  }
+
+  return {
+    id: 'identity',
+    label: 'Model+SPARK',
+    tone: 'ok',
+    value,
+    detail: 'Every online resident has model/endpoint and SPARK module identity visible.',
   };
 }
 
@@ -670,6 +711,7 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   const actions: string[] = [];
   const byId = new Map(checks.map(check => [check.id, check]));
   if (byId.get('residents')?.tone === 'fail') actions.push('Start or reconnect the controller before demoing the resident loop.');
+  if (byId.get('identity')?.tone === 'warn') actions.push('Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.');
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
   if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');

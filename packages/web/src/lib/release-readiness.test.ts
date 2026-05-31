@@ -170,6 +170,7 @@ describe('buildReleaseReadiness', () => {
     });
     expect(summary.checks.map(check => [check.id, check.tone])).toEqual([
       ['residents', 'ok'],
+      ['identity', 'ok'],
       ['plans', 'ok'],
       ['loop', 'ok'],
       ['ap', 'ok'],
@@ -452,14 +453,27 @@ describe('buildReleaseReadiness', () => {
       nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
     });
 
-    expect(summary.status).toBe('ready');
+    expect(summary.status).toBe('watch');
     expect(summary.metrics.modelEndpointResidents).toBe(1);
     expect(summary.metrics.sparkModuleResidents).toBe(1);
+    expect(summary.checks.find(check => check.id === 'identity')).toEqual({
+      id: 'identity',
+      label: 'Model+SPARK',
+      tone: 'warn',
+      value: '1/2 model · 1/2 SPARK',
+      detail: '1 online resident missing model/endpoint · 1 online resident missing SPARK module.',
+    });
+    expect(summary.nextActions).toContain('Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.');
     expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Model+SPARK')).toEqual({
       label: 'Model+SPARK',
       value: '1/2 model · 1/2 SPARK',
       tone: 'warn',
       detail: '1 online resident missing model/endpoint · 1 online resident missing SPARK module.',
+    });
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Confirm stack',
+      tone: 'warn',
+      detail: 'Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.',
     });
   });
 
