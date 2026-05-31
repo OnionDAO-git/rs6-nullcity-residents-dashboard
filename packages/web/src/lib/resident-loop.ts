@@ -1930,7 +1930,7 @@ export function residentLivenessDetail(
   };
 }
 
-function residentInferenceHealthFact(row: ResidentDashboardRow): ResidentLoopFact {
+export function residentInferenceHealthFact(row: ResidentDashboardRow): ResidentLoopFact {
   const entry = row.thinking?.latestInference;
   if (!entry) {
     const cause = row.thinking?.lastInferenceCause?.trim();

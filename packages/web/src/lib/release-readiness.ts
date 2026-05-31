@@ -2,7 +2,7 @@ import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-d
 import type { StorytellerDigestSummary } from './api';
 import type { EconomyTransportSummary } from './live-economy';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { residentCoinEvidenceAmount, residentGoalActionLink, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp, residentNormalLifeAuditSignal, residentOperatorWarnings } from './resident-loop';
+import { residentCoinEvidenceAmount, residentGoalActionLink, residentInferenceHealthFact, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp, residentNormalLifeAuditSignal, residentOperatorWarnings } from './resident-loop';
 import { storytellerGroundingAudit } from './resident-story';
 
 export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
@@ -25,6 +25,7 @@ export interface ReleaseReadinessMetrics {
   lowApResidents: number;
   failedActionResidents: number;
   recoveryWaitResidents: number;
+  inferenceRiskResidents: number;
   goalLinkGapResidents: number;
   observedGp: number;
   storytellerReviewBacklog: number;
@@ -132,6 +133,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const lowApResidents = residents.filter(row => residentNeedsAp(row)).length;
   const failedActionResidents = residents.filter(row => row.online && residentActionOutcomeFailed(row)).length;
   const recoveryWaitResidents = residents.filter(row => row.online && residentRecoveryWaitWarning(row)).length;
+  const inferenceRiskResidents = residents.filter(row => row.online && row.thinking?.latestInference && residentInferenceHealthFact(row).tone !== 'ok').length;
   const goalLinkGapResidents = residents.filter(row => row.online && row.thinking?.activePlan?.trim() && residentGoalActionLink(row).tone === 'warn').length;
   const activePlans = residents.filter(row => {
     const signal = residentLoopSignal(row);
@@ -152,7 +154,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     residentCheck(residents.length, onlineResidents),
     identityCheck(onlineResidents, modelEndpointResidents, sparkModuleResidents),
     planCheck(activePlans, residents.length),
-    residentLoopCheck(failedActionResidents, recoveryWaitResidents, goalLinkGapResidents, residents),
+    residentLoopCheck(failedActionResidents, recoveryWaitResidents, inferenceRiskResidents, goalLinkGapResidents, residents),
     normalLifeAuditCheck(normalLifeAudit),
     apCheck(lowApResidents),
     gpCheck(observedGp),
@@ -180,6 +182,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       lowApResidents,
       failedActionResidents,
       recoveryWaitResidents,
+      inferenceRiskResidents,
       goalLinkGapResidents,
       observedGp,
       storytellerReviewBacklog,
@@ -216,7 +219,7 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
   const gp = checksById.get('gp');
   const capabilities = checksById.get('capabilities');
   const storyteller = checksById.get('storyteller');
-  const actionRiskResidents = metrics.failedActionResidents + metrics.recoveryWaitResidents + metrics.goalLinkGapResidents;
+  const actionRiskResidents = metrics.failedActionResidents + metrics.recoveryWaitResidents + metrics.inferenceRiskResidents + metrics.goalLinkGapResidents;
   return [
     { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
     {
@@ -407,6 +410,7 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Restart or observe')) return 'Wake planning';
   if (action.startsWith('Inspect residents')) return 'Inspect actions';
   if (action.startsWith('Inspect low-health recovery')) return 'Inspect recovery';
+  if (action.startsWith('Inspect latest brain inference')) return 'Inspect brain output';
   if (action.startsWith('Review residents whose latest action')) return 'Review goal links';
   if (action.startsWith('Fix failing normal-life audit')) return 'Fix audit';
   if (action.startsWith('Run or sync a CQA10 normal-life audit')) return 'Run audit';
@@ -447,6 +451,7 @@ function readinessActionTarget(action: string): { target: string; destination: s
   if (action.startsWith('Restart or observe')) return { target: 'Residents', destination: 'Residents', path: '/residents' };
   if (action.startsWith('Inspect residents')) return { target: 'Residents', destination: 'Residents', path: '/residents' };
   if (action.startsWith('Inspect low-health recovery')) return { target: 'Residents', destination: 'Recovery wait', path: '/residents?triage=recovery' };
+  if (action.startsWith('Inspect latest brain inference')) return { target: 'Residents', destination: 'Brain output', path: '/residents?triage=inference' };
   if (action.startsWith('Review residents whose latest action')) return { target: 'Residents', destination: 'Goal link', path: '/residents?triage=goal-link' };
   if (action.startsWith('Fix failing normal-life audit')) return { target: 'Operator Readiness', destination: 'Operator Readiness', path: '/' };
   if (action.startsWith('Run or sync a CQA10 normal-life audit')) return { target: 'Operator Readiness', destination: 'Operator Readiness', path: '/' };
@@ -473,6 +478,7 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.label === 'Check economy' || action.label === 'Configure bridge') return 10;
   if (action.label === 'Check prints') return 20;
   if (action.label === 'Confirm stack') return 25;
+  if (action.label === 'Inspect brain output') return 26;
   if (action.label === 'Review goal links') return 26;
   if (action.label === 'Fix audit') return 28;
   if (action.label === 'Run audit') return 29;
@@ -726,6 +732,7 @@ function planCheck(activePlans: number, residents: number): ReleaseReadinessChec
 function residentLoopCheck(
   failedActionResidents: number,
   recoveryWaitResidents: number,
+  inferenceRiskResidents: number,
   goalLinkGapResidents: number,
   residents: ResidentDashboardRow[],
 ): ReleaseReadinessCheck {
@@ -764,6 +771,23 @@ function residentLoopCheck(
       label: 'Resident Loop',
       tone: 'warn',
       value: `${recoveryWaitResidents.toLocaleString()} recovery wait${recoveryWaitResidents === 1 ? '' : 's'}`,
+      detail,
+    };
+  }
+
+  if (inferenceRiskResidents > 0) {
+    const names = residents
+      .filter(row => row.online && row.thinking?.latestInference && residentInferenceHealthFact(row).tone !== 'ok')
+      .map(row => row.name)
+      .slice(0, 3);
+    const detail = inferenceRiskResidents === 1
+      ? `Latest brain inference timed out, failed, or emitted no usable action for ${names[0]}.`
+      : `Latest brain inference timed out, failed, or emitted no usable action for ${residentNameOverflowList(names, inferenceRiskResidents)}.`;
+    return {
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'warn',
+      value: `${inferenceRiskResidents.toLocaleString()} brain output risk${inferenceRiskResidents === 1 ? '' : 's'}`,
       detail,
     };
   }
@@ -1055,6 +1079,7 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
   if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
   if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('recovery wait')) actions.push('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
+  if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('brain output risk')) actions.push('Inspect latest brain inference output in Resident Triage before demoing cognition coverage.');
   if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('goal link gap')) actions.push('Review residents whose latest action is not tied to the active goal before presenting them as intentional.');
   if (byId.get('normal-life')?.tone === 'fail') actions.push('Fix failing normal-life audit evidence before claiming resident recurrence.');
   if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'no audit') actions.push('Run or sync a CQA10 normal-life audit before claiming resident recurrence.');

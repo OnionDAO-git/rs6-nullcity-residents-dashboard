@@ -579,6 +579,71 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('watches release readiness when latest brain inference failed despite usable action proof', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          name: 'res:brain-risk',
+          thinking: {
+            mode: 'idle',
+            activePlan: 'Answer patrons and keep moving',
+            latestInference: {
+              t: '2026-05-31T15:53:00.000Z',
+              cause: 'request_timeout',
+              actions_emitted: 0,
+              perception_tokens: 6400,
+            },
+          },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+            lastAction: { kind: 'say', result: 'success', source: 'nervous-system', cause: 'nervous:patron-memory-acknowledge', tick: 500 },
+          },
+          feed: {
+            attached: true,
+            tick: 500,
+            ageMs: 4_000,
+            latestEventKind: 'say',
+            latestEventText: 'I remember the patron gift.',
+            nearby: { players: 0, npcs: 1, objects: 4, worldItems: 1 },
+            events: 3,
+            availableActions: 7,
+          },
+        }),
+      ],
+      storyDigests: [digest(), dryRunDigest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.metrics.inferenceRiskResidents).toBe(1);
+    expect(summary.checks.find(check => check.id === 'loop')).toEqual({
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'warn',
+      value: '1 brain output risk',
+      detail: 'Latest brain inference timed out, failed, or emitted no usable action for res:brain-risk.',
+    });
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Action Risks')).toEqual({
+      label: 'Action Risks',
+      value: '1',
+      tone: 'warn',
+      detail: 'Latest brain inference timed out, failed, or emitted no usable action for res:brain-risk.',
+    });
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Inspect brain output',
+      tone: 'warn',
+      detail: 'Inspect latest brain inference output in Resident Triage before demoing cognition coverage.',
+      target: 'Residents',
+      destination: 'Brain output',
+      destinationLabel: 'Residents · Brain output',
+      path: '/residents?triage=inference',
+    });
+  });
+
   test('watches release readiness when latest actions are not tied to active goals', () => {
     const summary = buildReleaseReadiness({
       residents: [
