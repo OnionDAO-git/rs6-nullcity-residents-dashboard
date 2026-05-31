@@ -1216,6 +1216,10 @@ describe('resident loop helpers', () => {
         },
       },
       storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+      memory: {
+        files: ['facts/routes.md'],
+        facts: [{ topic: 'routes', path: 'facts/routes.md', text: 'Lumbridge bank is north of the castle.' }],
+      },
     });
     const low = row({
       name: 'res:low',
@@ -1247,6 +1251,7 @@ describe('resident loop helpers', () => {
       displayName: 'low',
       ap: '1 AP',
       gp: 'not observed',
+      memory: 'no qmd',
       nextAction: 'Top up AP',
       nextTarget: 'Grant Attention',
     });
@@ -1255,6 +1260,7 @@ describe('resident loop helpers', () => {
       displayName: 'ready',
       proof: '7/7 loop proofs live',
       gp: '42 GP',
+      memory: 'routes',
       nextAction: 'Keep watching',
       nextTarget: 'Resident Intent',
     });

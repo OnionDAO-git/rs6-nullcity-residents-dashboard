@@ -144,6 +144,7 @@ export interface ResidentLivenessLedgerEntry {
   gp: string;
   plan: string;
   story: string;
+  memory: string;
 }
 
 export interface ResidentLivenessDetail {
@@ -1561,6 +1562,7 @@ export function residentLivenessLedger(
       const checkpoints = residentLoopCheckpoints(row);
       const plan = checkpoints.find(checkpoint => checkpoint.key === 'plan');
       const story = checkpoints.find(checkpoint => checkpoint.key === 'story');
+      const memory = residentLedgerMemoryLabel(row);
       return {
         residentName: row.name,
         displayName: residentShortName(row.name),
@@ -1574,6 +1576,7 @@ export function residentLivenessLedger(
         gp: gp.value,
         plan: plan?.value || '-',
         story: story?.value || '-',
+        memory,
       };
     })
     .sort((left, right) => {
@@ -1584,6 +1587,14 @@ export function residentLivenessLedger(
       return left.residentName.localeCompare(right.residentName);
     })
     .slice(0, Math.max(0, limit));
+}
+
+function residentLedgerMemoryLabel(row: ResidentDashboardRow): string {
+  const facts = row.memory?.facts || [];
+  if (facts.length === 0) return 'no qmd';
+  const topics = [...new Set(facts.map(fact => fact.topic).filter(Boolean))];
+  if (topics.length === 0) return `${facts.length} qmd`;
+  return topics.slice(0, 2).join(', ');
 }
 
 export function residentLivenessDetail(

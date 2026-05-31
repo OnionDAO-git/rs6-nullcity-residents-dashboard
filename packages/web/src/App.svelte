@@ -4444,6 +4444,7 @@
               <small>GP <strong>{entry.gp}</strong></small>
               <small>Plan <strong>{entry.plan}</strong></small>
               <small>Story <strong>{entry.story}</strong></small>
+              <small>Memory <strong>{entry.memory}</strong></small>
             </span>
             <span class="resident-liveness-next">
               <small>{entry.nextTarget}</small>
