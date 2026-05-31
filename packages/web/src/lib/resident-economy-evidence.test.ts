@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentEconomy } from './api';
 import type { NullCityLiveEconomyBridgeResponse, NullCityLiveEconomySnapshot } from './city-api';
-import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence } from './resident-economy-evidence';
+import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment } from './resident-economy-evidence';
 
 function economy(recentEvents: ResidentEconomy['recentEvents']): ResidentEconomy {
   return { ap: 42, activeGoals: [], recentEvents };
@@ -121,5 +121,46 @@ describe('resident economy evidence', () => {
         },
       ],
     }), 'res:agent')).toBeUndefined();
+  });
+
+  test('summarizes live AP support as a resident economy moment', () => {
+    expect(residentLiveEconomyMoment(liveEconomy({
+      recentEvents: [
+        {
+          id: 'live-2',
+          ts: '2026-05-30T22:32:00.000Z',
+          kind: 'ap_topup',
+          residentName: 'res:thrand',
+          apDelta: 75,
+          note: 'patron support',
+        },
+      ],
+    }), 'thrand')).toEqual({
+      tone: 'ok',
+      label: 'AP support',
+      title: 'Recent AP support landed.',
+      detail: '+75 AP · patron support',
+    });
+  });
+
+  test('summarizes live AP-for-GP exchanges as a resident economy moment', () => {
+    expect(residentLiveEconomyMoment(liveEconomy({
+      recentEvents: [
+        {
+          id: 'live-3',
+          ts: '2026-05-30T22:33:00.000Z',
+          kind: 'ap_gp_exchange',
+          residentName: 'res:agent',
+          apDelta: 20,
+          gpDelta: -10,
+          note: 'exchanged 10 GP for 20 AP',
+        },
+      ],
+    }), 'res:agent')).toEqual({
+      tone: 'ok',
+      label: 'AP/GP exchange',
+      title: 'Converted real GP into AP.',
+      detail: '+20 AP · -10 GP · exchanged 10 GP for 20 AP',
+    });
   });
 });

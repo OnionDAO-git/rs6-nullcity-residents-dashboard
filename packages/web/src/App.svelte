@@ -11,7 +11,7 @@
   import { buildEconomyProofSummary, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
-  import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, type ResidentEconomyGpEvidence } from './lib/resident-economy-evidence';
+  import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
   import {
     residentGuestTrailFacts,
@@ -209,6 +209,7 @@
   let cityResidentBenchmarkStatus = residentBenchmarkSignal(undefined);
   let cityResidentGoalContract: ResidentGoalContractSignal = residentGoalContractSignal(undefined);
   let cityResidentEconomyGpEvidence: ResidentEconomyGpEvidence | undefined;
+  let cityResidentEconomyMoment: ResidentEconomyMoment | undefined;
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
@@ -390,6 +391,7 @@
   $: cityResidentBenchmarkStatus = residentBenchmarkLabel(cityResident);
   $: cityResidentGoalContract = residentGoalContractSignal(cityResidentEconomy);
   $: cityResidentEconomyGpEvidence = residentEconomyGpEvidence(cityResidentEconomy);
+  $: cityResidentEconomyMoment = cityResident ? residentLiveEconomyMoment(cityLiveEconomy, cityResident.name) : undefined;
   $: cityResidentProofPulse = residentProofPulse(cityResident, {
     benchmark: cityResidentBenchmarkStatus,
     economyGp: cityResidentEconomyGpEvidence,
@@ -4166,6 +4168,17 @@
           <strong>{cityResidentReadModel?.goal || 'No public goal recorded'}</strong>
           <p>{cityResidentReadModel?.latestThought || 'No resident post has been projected yet.'}</p>
         </div>
+        {#if cityResidentEconomyMoment}
+          <div class="city-record-list compact">
+            <article>
+              <span class={`tag ${cityResidentEconomyMoment.tone}`}>{cityResidentEconomyMoment.label}</span>
+              <div>
+                <strong>{cityResidentEconomyMoment.title}</strong>
+                <small>{cityResidentEconomyMoment.detail}</small>
+              </div>
+            </article>
+          </div>
+        {/if}
       </div>
       {#if cityResident}
         <div class="city-panel span-2">
