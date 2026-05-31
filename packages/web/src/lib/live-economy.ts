@@ -12,6 +12,7 @@ export interface LiveEconomySummary {
   detail: string;
   eventLabel: string;
   proposalLabel: string;
+  selfFundedLabel: string;
 }
 
 export interface EconomyHeartbeatSummary {
@@ -56,10 +57,12 @@ export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse
       detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN for AP/GP totals.',
       eventLabel: 'no live events',
       proposalLabel: 'no live proposals',
+      selfFundedLabel: 'no self-funded AP',
     };
   }
 
   const snapshot = response.snapshot;
+  const selfFundedLabel = summarizeSelfFundedAp(snapshot.recentEvents);
   const apGpEvents = (snapshot.countsByKind.ap_topup || 0) +
     (snapshot.countsByKind.ap_grant || 0) +
     (snapshot.countsByKind.ap_decay || 0) +
@@ -74,6 +77,7 @@ export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse
     detail: `${snapshot.city.activeResidentCount.toLocaleString()} active in economy window · AP Δ ${signed(snapshot.city.attentionDelta)} · GP Δ ${signed(snapshot.city.gpNetDelta)}`,
     eventLabel: `${apGpEvents.toLocaleString()} AP/GP events`,
     proposalLabel: pendingFunding === 1 ? '1 Soul funding' : `${pendingFunding.toLocaleString()} Souls funding`,
+    selfFundedLabel,
   };
 }
 
@@ -209,6 +213,17 @@ export function economyResidentDisplay(resident: NullCityLiveEconomyResident): E
 
 function signed(value: number): string {
   return value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
+}
+
+function summarizeSelfFundedAp(events: NullCityLiveEconomyEvent[]): string {
+  const exchanges = events
+    .filter(event => event.kind === 'ap_gp_exchange' && (event.apDelta ?? 0) > 0 && (event.gpDelta ?? 0) < 0)
+    .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts));
+  if (!exchanges.length) return 'no self-funded AP';
+
+  const apTotal = exchanges.reduce((total, event) => total + Math.max(0, event.apDelta ?? 0), 0);
+  const latestResident = exchanges[0]?.residentName || 'resident GP';
+  return `${apTotal.toLocaleString()} AP via ${latestResident}`;
 }
 
 function formatFreshness(value: string, reference: string): string {

@@ -30,7 +30,29 @@ describe('summarizeLiveEconomy', () => {
       detail: '5 active in economy window · AP Δ +125 · GP Δ -20',
       eventLabel: '3 AP/GP events',
       proposalLabel: '1 Soul funding',
+      selfFundedLabel: 'no self-funded AP',
     });
+  });
+
+  test('summarizes resident GP-to-AP exchanges as self-funded AP', () => {
+    const response: NullCityLiveEconomyBridgeResponse = {
+      available: true,
+      snapshot: {
+        asOf: '2026-05-31T06:50:00.000Z',
+        window: { since: '2026-05-31T06:35:00.000Z', windowMs: 900000 },
+        city: { residentCount: 23, activeResidentCount: 8, attentionTotal: 50000, attentionDelta: 542, gpNetDelta: -271 },
+        countsByKind: { ap_gp_exchange: 2 },
+        topResidentsByAttention: [],
+        residents: [],
+        recentEvents: [
+          { id: 'exchange-1', ts: '2026-05-31T06:49:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:trader', apDelta: 492, gpDelta: -246 },
+          { id: 'exchange-2', ts: '2026-05-31T06:42:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:woodcutter', apDelta: 50, gpDelta: -25 },
+        ],
+        pendingProposals: [],
+      },
+    };
+
+    expect(summarizeLiveEconomy(response).selfFundedLabel).toBe('542 AP via res:trader');
   });
 
   test('reports missing bridge configuration without pretending the economy is empty', () => {
@@ -40,6 +62,7 @@ describe('summarizeLiveEconomy', () => {
       detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN for AP/GP totals.',
       eventLabel: 'no live events',
       proposalLabel: 'no live proposals',
+      selfFundedLabel: 'no self-funded AP',
     });
   });
 });

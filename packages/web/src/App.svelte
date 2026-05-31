@@ -3493,6 +3493,7 @@
     </div>
     <div class="city-resident-profile-grid">
       <span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>
+      <span><small>Self-funded AP</small><strong>{cityLiveEconomySummary.selfFundedLabel}</strong></span>
       <span><small>Soul Queue</small><strong>{cityLiveEconomySummary.proposalLabel}</strong></span>
       <span><small>Window</small><strong>{cityLiveEconomy.snapshot ? `${Math.round(cityLiveEconomy.snapshot.window.windowMs / 60000)}m` : '-'}</strong></span>
       <span><small>Top AP</small><strong>{cityLiveEconomy.snapshot?.topResidentsByAttention[0]?.residentName || '-'}</strong></span>
@@ -3627,6 +3628,7 @@
         <span><small>Residents</small><strong>{cityLiveEconomy.snapshot?.city.residentCount?.toLocaleString() || cityResidents.length.toLocaleString()}</strong></span>
         <span><small>Active</small><strong>{cityLiveEconomy.snapshot?.city.activeResidentCount?.toLocaleString() || cityEconomyHeartbeat.heartbeat?.activeResidentCount?.toLocaleString() || '-'}</strong></span>
         <span><small>AP Total</small><strong>{cityLiveEconomy.snapshot?.city.attentionTotal?.toLocaleString() || '-'}</strong></span>
+        <span><small>Self-funded AP</small><strong>{cityLiveEconomySummary.selfFundedLabel}</strong></span>
         <span><small>AP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.attentionDelta.toLocaleString() : '-'}</strong></span>
         <span><small>GP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString() : '-'}</strong></span>
         <span><small>Window</small><strong>{cityLiveEconomy.snapshot ? `${Math.round(cityLiveEconomy.snapshot.window.windowMs / 60000)}m` : '-'}</strong></span>
