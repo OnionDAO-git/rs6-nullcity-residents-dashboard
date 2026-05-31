@@ -873,7 +873,7 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
-  test('points no-digest Storyteller readiness at the deterministic dry-run command', () => {
+  test('points no-digest Storyteller readiness at command-free dry-run guidance', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],
       storyDigests: [],
@@ -889,11 +889,11 @@ describe('buildReleaseReadiness', () => {
       value: 'no digest',
       detail: 'No Storyteller digest is available for operator or public narrative context.',
     });
-    expect(summary.nextActions).toContain('Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.');
+    expect(summary.nextActions).toContain('Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.');
     expect(releaseReadinessActionQueue(summary)).toContainEqual({
-      label: 'Run dry-run',
+      label: 'Prepare dry-run',
       tone: 'warn',
-      detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
+      detail: 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.',
       target: 'Story',
       destination: 'Story',
       destinationLabel: 'Story',
@@ -902,7 +902,7 @@ describe('buildReleaseReadiness', () => {
     expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
       label: 'Dry-run',
       tone: 'warn',
-      detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
+      detail: 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.',
     });
   });
 
@@ -923,7 +923,7 @@ describe('buildReleaseReadiness', () => {
     expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
       label: 'Dry-run',
       tone: 'warn',
-      detail: 'No deterministic dry-run digest is loaded; run `npm run storyteller:dry-run -- --fixture` for fresh demo evidence.',
+      detail: 'No deterministic dry-run digest is loaded; prepare deterministic Storyteller dry-run evidence for the demo.',
     });
   });
 

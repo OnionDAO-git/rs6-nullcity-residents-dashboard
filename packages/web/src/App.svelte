@@ -3671,7 +3671,7 @@
       {:else}
         <div class="city-empty-state">
           <strong>No digest runs yet</strong>
-          <span>Run `storyteller:dry-run` or model dispatch to populate this feed.</span>
+          <span>Grounded Storyteller runs appear here once a digest or dispatch is available.</span>
         </div>
       {/if}
     </div>

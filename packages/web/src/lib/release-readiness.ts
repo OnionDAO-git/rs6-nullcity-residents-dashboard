@@ -95,6 +95,8 @@ const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
 const FIRST_FIVE_CAPTURE_EVIDENCE = 'resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence';
+const DRY_RUN_DEMO_ACTION = 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.';
+const DRY_RUN_FRESH_EVIDENCE = 'prepare deterministic Storyteller dry-run evidence for the demo';
 
 type CapabilityGroupId = 'ap-gp' | 'trade' | 'combat' | 'gear' | 'memory';
 
@@ -292,7 +294,7 @@ export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary):
     };
   const apGp = worstCheck([checksById.get('ap'), checksById.get('gp'), checksById.get('economy-transport'), apGpCapabilityCheck]);
   const story = checksById.get('storyteller');
-  const dryRunAction = summary.nextActions.find(action => action.startsWith('Run `npm run storyteller:dry-run'));
+  const dryRunAction = summary.nextActions.find(action => action.startsWith('Prepare a deterministic Storyteller dry-run'));
   const dryRun = dryRunAction
     ? { tone: 'warn' as const, detail: dryRunAction }
     : summary.demoProofs.dryRun;
@@ -405,7 +407,7 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Review and clear')) return 'Review Storyteller';
   if (action.startsWith('Review Storyteller grounding')) return 'Review grounding';
   if (action.startsWith('Run Storyteller with grounded')) return 'Ground Story';
-  if (action.startsWith('Run `npm run storyteller:dry-run')) return 'Run dry-run';
+  if (action.startsWith('Prepare a deterministic Storyteller dry-run')) return 'Prepare dry-run';
   if (action.startsWith('Run or review Storyteller')) return 'Review Storyteller';
   if (action.startsWith('Assign blocked print')) return 'Check prints';
   return 'Next action';
@@ -444,7 +446,7 @@ function readinessActionTarget(action: string): { target: string; destination: s
   if (action.startsWith('Review and clear')) return { target: 'Story', destination: 'Story', path: '/story' };
   if (action.startsWith('Review Storyteller grounding')) return { target: 'Story', destination: 'Story', path: '/story' };
   if (action.startsWith('Run Storyteller with grounded')) return { target: 'Story', destination: 'Story', path: '/story' };
-  if (action.startsWith('Run `npm run storyteller:dry-run')) return { target: 'Story', destination: 'Story', path: '/story' };
+  if (action.startsWith('Prepare a deterministic Storyteller dry-run')) return { target: 'Story', destination: 'Story', path: '/story' };
   if (action.startsWith('Run or review Storyteller')) return { target: 'Story', destination: 'Story', path: '/story' };
   if (action.startsWith('Assign blocked print')) return { target: 'Prints', destination: 'Prints', path: '/prints' };
   return { target: 'Overview', destination: 'Overview', path: '/' };
@@ -464,7 +466,7 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.label === 'Top up AP') return 30;
   if (action.label === 'Prove GP') return 40;
   if (action.label === 'Run capability QA') return 50;
-  if (action.label === 'Review Storyteller' || action.label === 'Review grounding' || action.label === 'Ground Story' || action.label === 'Run dry-run') return 60;
+  if (action.label === 'Review Storyteller' || action.label === 'Review grounding' || action.label === 'Ground Story' || action.label === 'Prepare dry-run') return 60;
   return 100;
 }
 
@@ -539,18 +541,17 @@ function capabilityRunLabel(run: BenchmarkArtifactSummary): string {
 
 function dryRunDemoProofSignal(digests: StorytellerDigestSummary[], nowMs: number): ReleaseReadinessDemoProofSignal {
   const digest = latestDryRunDigest(digests);
-  const command = '`npm run storyteller:dry-run -- --fixture`';
   if (!digest) {
     return {
       tone: 'warn',
-      detail: `No deterministic dry-run digest is loaded; run ${command} for fresh demo evidence.`,
+      detail: `No deterministic dry-run digest is loaded; ${DRY_RUN_FRESH_EVIDENCE}.`,
     };
   }
 
   if (digest.topEventCount <= 0 || digest.topEvents.length === 0) {
     return {
       tone: 'warn',
-      detail: `Latest dry-run digest has no grounded top events; run ${command} for fresh demo evidence.`,
+      detail: `Latest dry-run digest has no grounded top events; ${DRY_RUN_FRESH_EVIDENCE}.`,
     };
   }
 
@@ -558,7 +559,7 @@ function dryRunDemoProofSignal(digests: StorytellerDigestSummary[], nowMs: numbe
   if (age * 60 * 1000 > STORYTELLER_STALE_MS) {
     return {
       tone: 'warn',
-      detail: `Dry-run digest evidence is ${age.toLocaleString()}m old; rerun ${command} for fresh demo evidence.`,
+      detail: `Dry-run digest evidence is ${age.toLocaleString()}m old; ${DRY_RUN_FRESH_EVIDENCE}.`,
     };
   }
 
@@ -1049,7 +1050,7 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
     } else if (byId.get('storyteller')?.value.includes('no top events')) {
       actions.push('Run Storyteller with grounded event evidence before using public canon narration.');
     } else if (byId.get('storyteller')?.value.includes('no digest')) {
-      actions.push('Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.');
+      actions.push(DRY_RUN_DEMO_ACTION);
     } else {
       actions.push('Run or review Storyteller before using public canon narration.');
     }
