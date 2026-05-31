@@ -477,6 +477,16 @@ function storytellerCheck(
     };
   }
 
+  if (digest.topEventCount <= 0 || digest.topEvents.length === 0) {
+    return {
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: 'no top events',
+      detail: 'Latest Storyteller dispatch has no grounded top events selected.',
+    };
+  }
+
   const needsReview = Boolean(digest.dispatch?.needsReview || (digest.dispatch?.warningCount ?? 0) > 0);
   const stale = ageMinutes !== undefined && ageMinutes * 60 * 1000 > STORYTELLER_STALE_MS;
   if (needsReview || stale) {
@@ -582,6 +592,8 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
       actions.push('Review and clear pending Storyteller dispatches before using public canon narration.');
     } else if (byId.get('storyteller')?.value.includes('missing ref')) {
       actions.push('Review Storyteller grounding audit before using public canon narration.');
+    } else if (byId.get('storyteller')?.value.includes('no top events')) {
+      actions.push('Run Storyteller with grounded event evidence before using public canon narration.');
     } else {
       actions.push('Run or review Storyteller before using public canon narration.');
     }

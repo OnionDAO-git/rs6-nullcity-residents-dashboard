@@ -436,6 +436,42 @@ describe('buildReleaseReadiness', () => {
     expect(summary.nextActions).toContain('Review Storyteller grounding audit before using public canon narration.');
   });
 
+  test('warns when the latest Storyteller dispatch has no grounded top events', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest({
+        topEventCount: 0,
+        residentCount: 0,
+        topEvents: [],
+        dispatch: {
+          dispatchId: 'dispatch-empty',
+          generatedAt: '2026-05-30T09:05:00.000Z',
+          modelProfile: 'default',
+          needsReview: false,
+          warningCount: 0,
+          publicBullets: [],
+          operatorWarnings: [],
+          reviewReasons: [],
+          eventRefCount: 0,
+          eventRefsUsed: [],
+        },
+      })],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'storyteller')).toEqual({
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: 'no top events',
+      detail: 'Latest Storyteller dispatch has no grounded top events selected.',
+    });
+    expect(summary.nextActions).toContain('Run Storyteller with grounded event evidence before using public canon narration.');
+  });
+
   test('mentions overflow when more than three residents have failed latest actions', () => {
     const failedResident = (name: string): ResidentDashboardRow => resident({
       name,
