@@ -515,6 +515,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.',
       target: 'Residents',
+      destination: 'Recovery wait',
+      destinationLabel: 'Residents · Recovery wait',
       path: '/residents?triage=recovery',
     });
   });
@@ -601,6 +603,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.',
       target: 'Residents',
+      destination: 'Residents',
+      destinationLabel: 'Residents',
       path: '/residents',
     });
   });
@@ -762,6 +766,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Inspect top stuck-churn residents (qa-trader, agent, qa-social) before the next normal-life recurrence claim.',
       target: 'Residents',
+      destination: 'Quiet loop',
+      destinationLabel: 'Residents · Quiet loop',
       path: '/residents?triage=quiet',
     });
   });
@@ -808,6 +814,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.',
       target: 'Economy',
+      destination: 'Economy',
+      destinationLabel: 'Economy',
       path: '/economy',
     });
   });
@@ -887,6 +895,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
       target: 'Story',
+      destination: 'Story',
+      destinationLabel: 'Story',
       path: '/story',
     });
     expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
@@ -976,6 +986,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Run Storyteller with grounded event evidence before using public canon narration.',
       target: 'Story',
+      destination: 'Story',
+      destinationLabel: 'Story',
       path: '/story',
     });
   });
@@ -1025,6 +1037,8 @@ describe('buildReleaseReadiness', () => {
       tone: 'warn',
       detail: 'Review Storyteller grounding audit before using public canon narration.',
       target: 'Story',
+      destination: 'Story',
+      destinationLabel: 'Story',
       path: '/story',
     });
   });
@@ -1204,6 +1218,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
         target: 'Prints',
+        destination: 'Prints',
+        destinationLabel: 'Prints',
         path: '/prints',
       },
       {
@@ -1211,6 +1227,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
         target: 'Operator Readiness',
+        destination: 'Operator Readiness',
+        destinationLabel: 'Operator Readiness',
         path: '/',
       },
       {
@@ -1218,6 +1236,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
         target: 'Residents',
+        destination: 'Low AP',
+        destinationLabel: 'Residents · Low AP',
         path: '/residents?triage=attention',
       },
       {
@@ -1225,6 +1245,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
         target: 'Economy',
+        destination: 'Economy',
+        destinationLabel: 'Economy',
         path: '/economy',
       },
     ]);
@@ -1255,6 +1277,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Restore the economy stream or confirm polling fallback before relying on live AP/GP state.',
         target: 'Economy',
+        destination: 'Economy',
+        destinationLabel: 'Economy',
         path: '/economy',
       },
       {
@@ -1262,6 +1286,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
         target: 'Prints',
+        destination: 'Prints',
+        destinationLabel: 'Prints',
         path: '/prints',
       },
       {
@@ -1269,6 +1295,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
         target: 'Operator Readiness',
+        destination: 'Operator Readiness',
+        destinationLabel: 'Operator Readiness',
         path: '/',
       },
       {
@@ -1276,6 +1304,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
         target: 'Residents',
+        destination: 'Low AP',
+        destinationLabel: 'Residents · Low AP',
         path: '/residents?triage=attention',
       },
     ]);
@@ -1306,6 +1336,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Configure the live economy bridge before claiming AP/GP state is current.',
         target: 'Economy',
+        destination: 'Economy',
+        destinationLabel: 'Economy',
         path: '/economy',
       },
       {
@@ -1313,6 +1345,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
         target: 'Prints',
+        destination: 'Prints',
+        destinationLabel: 'Prints',
         path: '/prints',
       },
       {
@@ -1320,6 +1354,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
         target: 'Operator Readiness',
+        destination: 'Operator Readiness',
+        destinationLabel: 'Operator Readiness',
         path: '/',
       },
       {
@@ -1327,6 +1363,8 @@ describe('buildReleaseReadiness', () => {
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
         target: 'Residents',
+        destination: 'Low AP',
+        destinationLabel: 'Residents · Low AP',
         path: '/residents?triage=attention',
       },
     ]);

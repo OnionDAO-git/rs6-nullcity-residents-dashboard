@@ -3497,9 +3497,9 @@
             <span class={`tag ${action.tone}`}>{action.label}</span>
             <div class="city-readiness-action-copy">
               <strong>{action.detail}</strong>
-              <small>Readiness queue · {action.target}</small>
+              <small>Readiness queue · {action.destinationLabel}</small>
               <button class="city-readiness-action-link" type="button" onclick={() => cityNav(action.path)}>
-                Open {action.target}
+                Open {action.destination}
               </button>
             </div>
           </article>
