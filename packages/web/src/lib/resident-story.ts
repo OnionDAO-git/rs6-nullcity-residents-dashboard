@@ -30,6 +30,7 @@ export interface StorytellerDigestStatus {
 export interface StorytellerDigestRunList {
   visible: StorytellerDigestSummary[];
   collapsedDryRuns: number;
+  selectedCollapsedDryRun: boolean;
   summary: string;
 }
 
@@ -185,14 +186,21 @@ export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs 
   };
 }
 
-export function storytellerDigestRunList(digests: StorytellerDigestSummary[]): StorytellerDigestRunList {
+export function storytellerDigestRunList(digests: StorytellerDigestSummary[], selectedRunId = ''): StorytellerDigestRunList {
   const visible: StorytellerDigestSummary[] = [];
+  const selectedId = selectedRunId.trim();
   let dryRunSeen = false;
   let collapsedDryRuns = 0;
+  let selectedCollapsedDryRun = false;
 
   for (const digest of digests) {
     if (isDryRunDigest(digest)) {
       if (dryRunSeen) {
+        if (digestMatchesSelectedRun(digest, selectedId)) {
+          visible.push(digest);
+          selectedCollapsedDryRun = true;
+          continue;
+        }
         collapsedDryRuns += 1;
         continue;
       }
@@ -204,8 +212,11 @@ export function storytellerDigestRunList(digests: StorytellerDigestSummary[]): S
   return {
     visible,
     collapsedDryRuns,
+    selectedCollapsedDryRun,
     summary: collapsedDryRuns > 0
-      ? `Showing canon/review runs plus latest dry-run; ${collapsedDryRuns.toLocaleString()} older dry-run${collapsedDryRuns === 1 ? '' : 's'} collapsed.`
+      ? selectedCollapsedDryRun
+        ? `Showing canon/review runs, latest dry-run, and selected dry-run; ${collapsedDryRuns.toLocaleString()} other older dry-run${collapsedDryRuns === 1 ? '' : 's'} collapsed.`
+        : `Showing canon/review runs plus latest dry-run; ${collapsedDryRuns.toLocaleString()} older dry-run${collapsedDryRuns === 1 ? '' : 's'} collapsed.`
       : visible.length > 0
         ? 'Showing all loaded Storyteller runs.'
         : 'No Storyteller runs loaded yet.',
@@ -390,6 +401,10 @@ function hasDispatchWarnings(digest: StorytellerDigestSummary): boolean {
 
 function isDryRunDigest(digest: StorytellerDigestSummary): boolean {
   return digest.queue === 'dry-run' || !digest.dispatch;
+}
+
+function digestMatchesSelectedRun(digest: StorytellerDigestSummary, selectedRunId: string): boolean {
+  return selectedRunId.length > 0 && (digest.runId === selectedRunId || digest.digestId === selectedRunId);
 }
 
 function parseTimestamp(stamp: string | undefined): number {

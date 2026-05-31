@@ -403,7 +403,7 @@
   $: cityStoryDigest = cityStoryRunId
     ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
     : cityStoryDigests[0];
-  $: cityStoryRunList = storytellerDigestRunList(cityStoryDigests);
+  $: cityStoryRunList = storytellerDigestRunList(cityStoryDigests, cityStoryRunId);
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);

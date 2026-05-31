@@ -327,6 +327,22 @@ describe('storytellerDigestRunList', () => {
     expect(list.collapsedDryRuns).toBe(2);
     expect(list.summary).toBe('Showing canon/review runs plus latest dry-run; 2 older dry-runs collapsed.');
   });
+
+  test('pins a selected older dry-run so deep links remain visible in the run list', () => {
+    const latestDryRun = digest({ runId: 'dry-run-latest', digestId: 'digest-dry-latest', builtAt: '2026-05-30T04:03:00.000Z' });
+    const selectedDryRun = digest({ runId: 'dry-run-selected', digestId: 'digest-dry-selected', builtAt: '2026-05-30T03:55:00.000Z' });
+    const hiddenDryRun = digest({ runId: 'dry-run-hidden', digestId: 'digest-dry-hidden', builtAt: '2026-05-30T03:50:00.000Z' });
+
+    const list = storytellerDigestRunList([latestDryRun, selectedDryRun, hiddenDryRun], 'dry-run-selected');
+
+    expect(list.visible.map(item => item.runId)).toEqual([
+      'dry-run-latest',
+      'dry-run-selected',
+    ]);
+    expect(list.collapsedDryRuns).toBe(1);
+    expect(list.selectedCollapsedDryRun).toBe(true);
+    expect(list.summary).toBe('Showing canon/review runs, latest dry-run, and selected dry-run; 1 other older dry-run collapsed.');
+  });
 });
 
 describe('storytellerGroundingAudit', () => {
