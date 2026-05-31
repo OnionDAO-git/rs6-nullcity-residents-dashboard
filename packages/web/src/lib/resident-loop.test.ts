@@ -2196,6 +2196,11 @@ describe('resident loop helpers', () => {
       name: 'res:ready',
       attention: 75,
       thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      stack: {
+        model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: [] },
+      },
       body: {
         controlHeld: true,
         lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 100 },
@@ -2233,7 +2238,7 @@ describe('resident loop helpers', () => {
       nextAction: 'Keep watching',
       nextTarget: 'Resident Intent',
     });
-    expect(detail.facts.map(fact => fact.label)).toEqual(['AP runway', 'GP proof', 'Plan', 'Action', 'Speech', 'Story', 'Memory']);
+    expect(detail.facts.map(fact => fact.label)).toEqual(['AP runway', 'GP proof', 'Stack', 'Plan', 'Action', 'Speech', 'Story', 'Memory']);
     expect(detail.facts.find(fact => fact.label === 'GP proof')).toMatchObject({
       value: '42 GP',
       tone: 'ok',
@@ -2241,6 +2246,11 @@ describe('resident loop helpers', () => {
     expect(detail.facts.find(fact => fact.label === 'Plan')).toMatchObject({
       value: 'Earn GP for AP',
       detail: 'mode executing',
+      tone: 'ok',
+    });
+    expect(detail.facts.find(fact => fact.label === 'Stack')).toMatchObject({
+      value: 'openrouter/haiku | onion.runescape.standard@0.3.0',
+      detail: 'model/endpoint and SPARK module identity',
       tone: 'ok',
     });
   });

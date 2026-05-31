@@ -390,6 +390,17 @@ export function residentStackSummary(row: ResidentDashboardRow): string {
   return `${modelLabel} | ${moduleLabel}`;
 }
 
+function residentStackFact(row: ResidentDashboardRow): ResidentLoopFact {
+  const model = modelParts(row);
+  const module = activeModule(row);
+  return {
+    label: 'Stack',
+    value: residentStackSummary(row),
+    detail: 'model/endpoint and SPARK module identity',
+    tone: model.value !== '-' && module ? 'ok' : 'warn',
+  };
+}
+
 export function residentIntentFacts(row: ResidentDashboardRow, signals: ResidentIntentSignals = {}): ResidentLoopFact[] {
   const speech = recentSpeechSignal(row);
   const action = row.body?.lastAction?.kind || row.lastEvent?.kind;
@@ -1634,6 +1645,7 @@ export function residentLivenessDetail(
     facts: [
       { label: 'AP runway', value: ap.value, detail: ap.detail, tone: ap.tone },
       { label: 'GP proof', value: gp.value, detail: gp.detail, tone: gp.tone },
+      residentStackFact(row),
       checkpointFact('plan'),
       checkpointFact('action'),
       checkpointFact('speech'),
