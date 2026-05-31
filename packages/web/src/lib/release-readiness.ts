@@ -2,14 +2,14 @@ import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-d
 import type { StorytellerDigestSummary } from './api';
 import type { EconomyTransportSummary } from './live-economy';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp, residentOperatorWarnings } from './resident-loop';
+import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp, residentNormalLifeAuditSignal, residentOperatorWarnings } from './resident-loop';
 import { storytellerGroundingAudit } from './resident-story';
 
 export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
 export type ReleaseReadinessTone = 'ok' | 'warn' | 'fail';
 
 export interface ReleaseReadinessCheck {
-  id: 'residents' | 'identity' | 'plans' | 'loop' | 'ap' | 'gp' | 'economy-transport' | 'capabilities' | 'storyteller' | 'ncri-print';
+  id: 'residents' | 'identity' | 'plans' | 'loop' | 'normal-life' | 'ap' | 'gp' | 'economy-transport' | 'capabilities' | 'storyteller' | 'ncri-print';
   label: string;
   tone: ReleaseReadinessTone;
   value: string;
@@ -135,6 +135,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const storytellerReviewBacklog = storytellerDigestsNeedingReview(input.storyDigests).length;
 
   const capabilityQa = summarizeCapabilityQa(input.benchmarkRuns || [], nowMs);
+  const normalLifeAudit = residentNormalLifeAuditSignal(input.benchmarkRuns || []);
   const apGpCapability = apGpCapabilityProofSignal(capabilityQa);
   const dryRun = dryRunDemoProofSignal(input.storyDigests, nowMs);
   const economyTransport = economyTransportCheck(input.economyTransport);
@@ -144,6 +145,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     identityCheck(onlineResidents, modelEndpointResidents, sparkModuleResidents),
     planCheck(activePlans, residents.length),
     residentLoopCheck(failedActionResidents, recoveryWaitResidents, residents),
+    normalLifeAuditCheck(normalLifeAudit),
     apCheck(lowApResidents),
     gpCheck(observedGp),
     ...(economyTransport ? [economyTransport] : []),
@@ -200,6 +202,7 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
   const economyTransport = checksById.get('economy-transport');
   const ncriPrint = checksById.get('ncri-print');
   const loop = checksById.get('loop');
+  const normalLife = checksById.get('normal-life');
   const ap = checksById.get('ap');
   const gp = checksById.get('gp');
   const capabilities = checksById.get('capabilities');
@@ -234,6 +237,12 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
       value: (metrics.failedActionResidents + metrics.recoveryWaitResidents).toLocaleString(),
       ...(metrics.failedActionResidents + metrics.recoveryWaitResidents > 0 && loop ? { detail: loop.detail } : {}),
       ...(metrics.failedActionResidents + metrics.recoveryWaitResidents > 0 && loop ? { tone: loop.tone } : {}),
+    },
+    {
+      label: 'Normal-life',
+      value: normalLife?.value || '-',
+      ...(normalLife && normalLife.tone !== 'ok' ? { detail: normalLife.detail } : {}),
+      ...(normalLife && normalLife.tone !== 'ok' ? { tone: normalLife.tone } : {}),
     },
     {
       label: 'Low AP',
@@ -367,6 +376,9 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Restart or observe')) return 'Wake planning';
   if (action.startsWith('Inspect residents')) return 'Inspect actions';
   if (action.startsWith('Inspect low-health recovery')) return 'Inspect recovery';
+  if (action.startsWith('Fix failing normal-life audit')) return 'Fix audit';
+  if (action.startsWith('Run or sync a CQA10 normal-life audit')) return 'Run audit';
+  if (action.startsWith('Use the latest normal-life audit caveat')) return 'Use caveat';
   if (action.startsWith('Top up')) return 'Top up AP';
   if (action.startsWith('Run an AP/GP')) return 'Prove GP';
   if (action.startsWith('Configure the live economy')) return 'Configure bridge';
@@ -393,6 +405,9 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.label === 'Check economy' || action.label === 'Configure bridge') return 10;
   if (action.label === 'Check prints') return 20;
   if (action.label === 'Confirm stack') return 25;
+  if (action.label === 'Fix audit') return 28;
+  if (action.label === 'Run audit') return 29;
+  if (action.label === 'Use caveat') return 35;
   if (action.label === 'Top up AP') return 30;
   if (action.label === 'Prove GP') return 40;
   if (action.label === 'Run capability QA') return 50;
@@ -690,6 +705,36 @@ function residentLoopCheck(
   };
 }
 
+function normalLifeAuditCheck(signal: ReturnType<typeof residentNormalLifeAuditSignal>): ReleaseReadinessCheck {
+  if (signal.tone === 'fail') {
+    return {
+      id: 'normal-life',
+      label: 'Normal-life Audit',
+      tone: 'fail',
+      value: 'failing',
+      detail: signal.detail,
+    };
+  }
+
+  if (signal.tone === 'warn') {
+    return {
+      id: 'normal-life',
+      label: 'Normal-life Audit',
+      tone: 'warn',
+      value: signal.summary.startsWith('No normal-life audit') ? 'no audit' : 'watch',
+      detail: signal.detail,
+    };
+  }
+
+  return {
+    id: 'normal-life',
+    label: 'Normal-life Audit',
+    tone: 'ok',
+    value: 'clear',
+    detail: signal.detail,
+  };
+}
+
 function residentNameOverflowList(names: string[], total: number): string {
   const overflow = total - names.length;
   if (overflow <= 0) return names.join(', ');
@@ -914,6 +959,9 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
   if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
   if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('recovery wait')) actions.push('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
+  if (byId.get('normal-life')?.tone === 'fail') actions.push('Fix failing normal-life audit evidence before claiming resident recurrence.');
+  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value === 'no audit') actions.push('Run or sync a CQA10 normal-life audit before claiming resident recurrence.');
+  if (byId.get('normal-life')?.tone === 'warn' && byId.get('normal-life')?.value !== 'no audit') actions.push('Use the latest normal-life audit caveat when describing AP/GP recurrence and stuck recovery.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
   const economyTransport = byId.get('economy-transport');

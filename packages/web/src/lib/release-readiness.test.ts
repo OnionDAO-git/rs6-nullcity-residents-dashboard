@@ -147,6 +147,25 @@ function benchmark(overrides: Partial<BenchmarkArtifactSummary> = {}): Benchmark
   };
 }
 
+function normalLifeBenchmark(overrides: Partial<BenchmarkArtifactSummary> = {}): BenchmarkArtifactSummary {
+  return benchmark({
+    runId: 'normal_life_audit_20260530T090000Z',
+    task: { id: 'normal-life-audit', version: '1' },
+    metrics: {
+      totalActionAttempts: 300,
+      successfulActionSubmissions: 300,
+      failedActionSubmissions: 0,
+      cause_low_health_heal_wait: 0,
+      timeline_city_ap_gp_exchange: 2,
+      timeline_trade_completed: 1,
+      timeline_stuck_detected: 5,
+      timeline_stuck_recovered: 5,
+      durationMs: 20 * 60 * 1000,
+    },
+    ...overrides,
+  });
+}
+
 function capabilityBenchmarks(): BenchmarkArtifactSummary[] {
   return [
     benchmark({ runId: 'bench_apgp', task: { id: 'ap-gp-exchange-5m', version: '1' } }),
@@ -154,6 +173,7 @@ function capabilityBenchmarks(): BenchmarkArtifactSummary[] {
     benchmark({ runId: 'bench_combat', task: { id: 'combat-prayer-10m', version: '1' } }),
     benchmark({ runId: 'named_equip_soak_20260530120900', task: { id: 'named-equip-soak', version: '1' } }),
     benchmark({ runId: 'bench_memory', task: { id: 'memory-route-recall-5m', version: '1' } }),
+    normalLifeBenchmark(),
   ];
 }
 
@@ -187,6 +207,7 @@ describe('buildReleaseReadiness', () => {
       ['identity', 'ok'],
       ['plans', 'ok'],
       ['loop', 'ok'],
+      ['normal-life', 'ok'],
       ['ap', 'ok'],
       ['gp', 'ok'],
       ['economy-transport', 'ok'],
@@ -524,6 +545,7 @@ describe('buildReleaseReadiness', () => {
       'NCRI Prints',
       'Plans',
       'Action Risks',
+      'Normal-life',
       'Low AP',
       'Observed GP',
       'Capability QA',
@@ -649,6 +671,47 @@ describe('buildReleaseReadiness', () => {
       value: '2',
       tone: 'warn',
       detail: '2 Storyteller digest dispatches still need operator review.',
+    });
+  });
+
+  test('warns when latest normal-life audit shows recovery clear but no AP/GP recurrence', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks().map(run => run.task?.id === 'normal-life-audit'
+        ? normalLifeBenchmark({
+          runId: 'normal_life_audit_20260530T091000Z',
+          metrics: {
+            totalActionAttempts: 2677,
+            successfulActionSubmissions: 2677,
+            failedActionSubmissions: 0,
+            cause_low_health_heal_wait: 0,
+            timeline_city_ap_gp_exchange: 0,
+            timeline_trade_completed: 0,
+            timeline_stuck_detected: 592,
+            timeline_stuck_recovered: 590,
+            durationMs: 20 * 60 * 1000,
+          },
+        })
+        : run),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'normal-life')).toEqual({
+      id: 'normal-life',
+      label: 'Normal-life Audit',
+      tone: 'warn',
+      value: 'watch',
+      detail: 'latest audit: 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, trade closures 0, stuck recovered 590/592.',
+    });
+    expect(summary.nextActions).toContain('Use the latest normal-life audit caveat when describing AP/GP recurrence and stuck recovery.');
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Normal-life')).toEqual({
+      label: 'Normal-life',
+      value: 'watch',
+      tone: 'warn',
+      detail: 'latest audit: 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, trade closures 0, stuck recovered 590/592.',
     });
   });
 
@@ -1039,6 +1102,11 @@ describe('buildReleaseReadiness', () => {
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
       },
       {
+        label: 'Run audit',
+        tone: 'warn',
+        detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+      },
+      {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
@@ -1047,11 +1115,6 @@ describe('buildReleaseReadiness', () => {
         label: 'Prove GP',
         tone: 'warn',
         detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
-      },
-      {
-        label: 'Run capability QA',
-        tone: 'warn',
-        detail: 'Run missing or stale capability benchmarks before relying on unproven resident loops.',
       },
     ]);
   });
@@ -1087,14 +1150,14 @@ describe('buildReleaseReadiness', () => {
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
       },
       {
+        label: 'Run audit',
+        tone: 'warn',
+        detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+      },
+      {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
-      },
-      {
-        label: 'Prove GP',
-        tone: 'warn',
-        detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
       },
     ]);
   });
@@ -1130,14 +1193,14 @@ describe('buildReleaseReadiness', () => {
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
       },
       {
+        label: 'Run audit',
+        tone: 'warn',
+        detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+      },
+      {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
-      },
-      {
-        label: 'Prove GP',
-        tone: 'warn',
-        detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
       },
     ]);
   });
