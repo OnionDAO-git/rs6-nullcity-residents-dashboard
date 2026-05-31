@@ -285,7 +285,7 @@ export class RuntimeRepository {
     };
   }
 
-  async recentLetters(limit = 20): Promise<RecentLetterSummary[]> {
+  async recentLetters(limit = 20, options: RecentLettersOptions = {}): Promise<RecentLetterSummary[]> {
     const lettersRoot = path.join(this.memoryRoot, 'data', 'letters');
     const files = (await listFiles(lettersRoot, ['inbox.jsonl'])).filter(isDirectInboxFile);
     const inboxes = await Promise.all(
@@ -294,8 +294,9 @@ export class RuntimeRepository {
         return entries.flatMap((entry, index) => normalizeRecentLetter(entry, file, index));
       }),
     );
-    return inboxes
-      .flat()
+    const letters = inboxes.flat();
+    const visibleLetters = options.excludeSyntheticSenders ? letters.filter(letter => !isSyntheticLetterSender(letter)) : letters;
+    return visibleLetters
       .sort((a, b) => timestampMs(b.dispatchedAt) - timestampMs(a.dispatchedAt))
       .slice(0, Math.max(0, limit));
   }
@@ -518,6 +519,10 @@ export class RuntimeRepository {
   }
 }
 
+type RecentLettersOptions = {
+  excludeSyntheticSenders?: boolean;
+};
+
 function isDirectInboxFile(file: string): boolean {
   const parts = file.split(path.sep);
   return parts.length === 2 && parts[1] === 'inbox.jsonl' && Boolean(parts[0]?.trim());
@@ -554,6 +559,10 @@ function normalizeRecentLetter(value: unknown, file: string, index: number): Rec
       deliveryChannels: stringArray(record.deliveryChannels) || [],
     },
   ];
+}
+
+function isSyntheticLetterSender(letter: RecentLetterSummary): boolean {
+  return letter.senderResident ? /^res-(qa-|bench-|test-|tmp-|synthetic-|bmk[_-])/i.test(residentSlug(letter.senderResident)) : false;
 }
 
 function normalizeStoryArc(value: unknown): StoryArcDashboardSummary | undefined {

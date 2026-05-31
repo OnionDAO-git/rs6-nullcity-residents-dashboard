@@ -149,6 +149,39 @@ describe('routePublicEventApi', () => {
     });
   });
 
+  test('filters synthetic wall letters before applying the public snapshot limit', async () => {
+    await withPublicApi(async ({ config, runtime }) => {
+      await fs.mkdir(path.join(config.memoryRoot, 'data', 'letters', 'bob-onion'), { recursive: true });
+      await fs.writeFile(
+        path.join(config.memoryRoot, 'data', 'letters', 'bob-onion', 'inbox.jsonl'),
+        `${JSON.stringify({
+          kind: 'broadcast',
+          recipient: 'bob@onion',
+          senderResident: 'res:qa-trader',
+          subject: '[Broadcast] On the passing of res:qa-trader',
+          body: '',
+          dispatchedAt: '2026-05-27T12:03:00.000Z',
+          deliveryChannels: ['web-inbox'],
+        })}\n`,
+      );
+
+      const wall = await routePublicEventApi(
+        new Request('http://local/v1/wall/snapshot?limit=1'),
+        new URL('http://local/v1/wall/snapshot?limit=1'),
+        { config, runtime },
+      );
+
+      expect(wall?.status).toBe(200);
+      const payload = await wall!.json() as { recentLetters: Array<{ senderResident?: string; subject: string }> };
+      expect(payload.recentLetters).toEqual([
+        expect.objectContaining({
+          senderResident: 'res:fern',
+          subject: 'Welcome',
+        }),
+      ]);
+    });
+  });
+
   test('credits daily patron check-ins and persists the dashboard-side ledgers', async () => {
     await withPublicApi(async ({ config, runtime }) => {
       const url = new URL('http://local/v1/patron/checkin?human=alice%40onion');

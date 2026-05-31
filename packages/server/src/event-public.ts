@@ -44,7 +44,7 @@ async function routeInbox(url: URL, memoryRoot: string): Promise<Response> {
 async function routeWall(url: URL, context: PublicRouteContext): Promise<Response> {
   const limit = numberParam(url.searchParams.get('limit'), 40);
   const [recentLetters, library, graveyard, stockpiles] = await Promise.all([
-    context.runtime.recentLetters(limit),
+    context.runtime.recentLetters(limit, { excludeSyntheticSenders: true }),
     readLibraryEntries(context.config.memoryRoot),
     readGraveyardEntries(context.config.memoryRoot),
     readFactionStockpiles(context.config.memoryRoot),
