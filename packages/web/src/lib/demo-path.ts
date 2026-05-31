@@ -1,3 +1,5 @@
+import { cityPath, isKnownCityRoute } from './routes';
+
 export type CityDemoPathTone = 'ok' | 'warn' | 'fail';
 
 export interface CityDemoResidentSignal {
@@ -50,6 +52,10 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
   const lowApResidents = Math.max(0, input.lowApResidents);
   const storyMetric = input.story.title?.trim() || input.story.label;
   const support = supportReady ? input.apSupport : undefined;
+  const supportPath = support
+    ? safeDemoPath(support.path, '/embassy')
+    : supportReady ? '/embassy' : '/login';
+  const residentPath = safeDemoPath(input.demoResident.path, '/residents');
 
   return [
     {
@@ -67,7 +73,7 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       label: 'Support with AP',
       metric: support?.metric || (supportReady ? `${lowApResidents.toLocaleString()} AP needs` : 'guest'),
       action: support?.action || (supportReady ? 'Open Embassy' : 'Login for AP support'),
-      path: support?.path || (supportReady ? '/embassy' : '/login'),
+      path: supportPath,
       detail: support?.detail || (supportReady
         ? 'Embassy funding is ready; profile AP/GP balances are available for support flows.'
         : 'Sign in before demonstrating AP funding, resident grants, or AP/GP balances.'),
@@ -78,7 +84,7 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       label: 'Watch resident react',
       metric: displayResidentName(input.demoResident.name) || 'directory',
       action: input.demoResident.action,
-      path: input.demoResident.path || '/residents',
+      path: residentPath,
       detail: input.demoResident.detail,
     },
     {
@@ -95,4 +101,11 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
 
 function displayResidentName(name: string | undefined): string {
   return (name || '').trim().replace(/^res:/i, '');
+}
+
+function safeDemoPath(path: string | undefined, fallback: string): string {
+  const rawPath = (path || '').trim();
+  if (!rawPath) return fallback;
+  const normalized = cityPath(rawPath);
+  return isKnownCityRoute(normalized) ? normalized : fallback;
 }
