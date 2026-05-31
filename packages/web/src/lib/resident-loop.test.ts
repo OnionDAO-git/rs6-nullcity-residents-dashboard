@@ -1670,11 +1670,12 @@ describe('resident loop helpers', () => {
       recoveryWait: 0,
       recentSpeech: 2,
       storyEvidence: 3,
+      memoryEvidence: 3,
       observedGp: 250,
     })).toEqual({
       tone: 'ok',
-      headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
-      detail: 'Recovery is clear when no online resident is waiting at low health. AP is the resident life force; GP still needs coin-995 evidence.',
+      headline: 'Follow AP, GP, plan, action, recovery, speech, story, and memory.',
+      detail: 'Recovery is clear when no online resident is waiting at low health. AP is the resident life force; GP still needs coin-995 evidence. Memory is backed by qmd facts/*.md snippets.',
     });
   });
 
@@ -1689,11 +1690,12 @@ describe('resident loop helpers', () => {
       recoveryWaitMaxStuckTicks: 37,
       recentSpeech: 2,
       storyEvidence: 4,
+      memoryEvidence: 0,
       observedGp: 250,
     })).toEqual({
       tone: 'warn',
-      headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
-      detail: 'survivor, guardian +2 more waiting; worst stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness. AP, GP, speech, and story still need live proof before demoing liveness.',
+      headline: 'Follow AP, GP, plan, action, recovery, speech, story, and memory.',
+      detail: 'survivor, guardian +2 more waiting; worst stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness. AP, GP, speech, story, and memory still need live proof before demoing liveness.',
     });
   });
 
@@ -1705,10 +1707,11 @@ describe('resident loop helpers', () => {
       recentAction: 0,
       recentSpeech: 0,
       storyEvidence: 0,
+      memoryEvidence: 0,
       observedGp: 0,
     })).toEqual({
       tone: 'warn',
-      headline: 'Follow AP, GP, plan, action, recovery, speech, and story.',
+      headline: 'Follow AP, GP, plan, action, recovery, speech, story, and memory.',
       detail: 'Waiting for the live resident roster before reading recovery or demo liveness.',
     });
   });
