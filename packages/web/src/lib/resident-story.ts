@@ -643,7 +643,12 @@ function eventVerb(kind: string): string {
 function eventBody(event: StorytellerDigestEventSummary, actor: string): string | undefined {
   if (event.kind === 'stuck_recovered') return `${actor} recovered and kept moving.`;
   if (isSpeechEvent(event)) return speechEventBody(event);
-  return event.note?.trim() || undefined;
+  const note = event.note?.trim();
+  return note ? humanizeResidentHandles(note) : undefined;
+}
+
+function humanizeResidentHandles(value: string): string {
+  return value.replace(/\b(?:(?:city-user:)?res|resident):[a-z0-9][a-z0-9_-]*\b/gi, match => residentDisplayName(match));
 }
 
 function speechEventBody(event: StorytellerDigestEventSummary): string | undefined {

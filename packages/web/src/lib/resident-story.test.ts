@@ -834,6 +834,20 @@ describe('storytellerMythCard', () => {
     });
   });
 
+  test('humanizes resident handles in public event notes', () => {
+    expect(storytellerMythCard({
+      ref: 'goal-progress-1',
+      kind: 'goal_progress',
+      residentName: 'res:ada-lamp',
+      note: 'res:ada-lamp carried proof back to Lumbridge.',
+      evidenceLabels: ['goal:lamp-route'],
+    })).toEqual({
+      title: 'Ada Lamp advanced a goal',
+      body: 'Ada Lamp carried proof back to Lumbridge.',
+      evidenceLabels: ['goal:lamp-route'],
+    });
+  });
+
   test('falls back to a grounded evidence label when event labels are empty', () => {
     expect(storytellerMythCard({
       ref: 'empty-evidence-1',
