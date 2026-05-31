@@ -632,9 +632,9 @@ export function residentRosterScanLines(
     },
     {
       label: 'Risk',
-      text: warning.summary,
+      text: `${warning.summary} · Act from: ${nextStepTargetLabel(warning)}`,
       tone: warning.tone,
-      limit: 76,
+      limit: 96,
       priority: 'secondary',
     },
   ];

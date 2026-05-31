@@ -371,6 +371,10 @@ describe('resident loop helpers', () => {
       text: 'because thinking recorded evidence record failed (evidence_record_failed)',
       tone: 'ok',
     });
+    expect(lines.find(line => line.label === 'Risk')).toMatchObject({
+      text: 'Resident is offline in the live controller snapshot. · Act from: Grant Attention',
+      tone: 'fail',
+    });
     expect(lines.some(line => line.label === 'Stack')).toBe(false);
     expect(lines.some(line => line.label === 'Storyteller')).toBe(false);
   });
