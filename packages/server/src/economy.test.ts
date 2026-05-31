@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readResidentEconomy } from './economy';
+import { readNewestTextLines, readResidentEconomy } from './economy';
 
 async function makeMemoryRoot(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-economy-'));
@@ -96,6 +96,47 @@ describe('readResidentEconomy', () => {
     const economy = await readResidentEconomy(memoryRoot, 'res:agent');
     expect(economy.recentEvents).toHaveLength(1);
     expect(economy.recentEvents[0]?.id).toBe('e1');
+  });
+
+  test('reads newest text lines from the end of a JSONL file across chunk boundaries', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const cityDir = path.join(memoryRoot, 'city-integration');
+    await fs.mkdir(cityDir, { recursive: true });
+    const lines = [
+      JSON.stringify({ id: 'old', ts: '2026-05-29T00:00:00.000Z', kind: 'ap_grant', residentName: 'res:agent' }),
+      JSON.stringify({ id: 'middle', ts: '2026-05-29T00:01:00.000Z', kind: 'ap_grant', residentName: 'res:agent', note: 'x'.repeat(40) }),
+      JSON.stringify({ id: 'new', ts: '2026-05-29T00:02:00.000Z', kind: 'gp_earned', residentName: 'res:agent' }),
+    ];
+    const logPath = path.join(cityDir, 'economy-events.jsonl');
+    await fs.writeFile(logPath, `${lines.join('\n')}\n`);
+    const newest = lines[2]!;
+    const middle = lines[1]!;
+
+    await expect(readNewestTextLines(logPath, 2, { chunkBytes: 17 })).resolves.toEqual([
+      newest,
+      middle,
+    ]);
+  });
+
+  test('finds recent resident events even when newer rows belong to other residents', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const cityDir = path.join(memoryRoot, 'city-integration');
+    await fs.mkdir(cityDir, { recursive: true });
+    const lines = [
+      JSON.stringify({ schemaVersion: 1, id: 'agent-old', ts: '2026-05-29T00:00:00.000Z', kind: 'ap_grant', residentName: 'res:agent', apDelta: 1 }),
+      ...Array.from({ length: 25 }, (_, index) =>
+        JSON.stringify({ schemaVersion: 1, id: `other-a-${index}`, ts: `2026-05-29T00:00:${String(index).padStart(2, '0')}.000Z`, kind: 'ap_decay', residentName: 'res:other', apDelta: -1 }),
+      ),
+      JSON.stringify({ schemaVersion: 1, id: 'agent-middle', ts: '2026-05-29T00:01:00.000Z', kind: 'gp_earned', residentName: 'res:agent', gpDelta: 10 }),
+      ...Array.from({ length: 25 }, (_, index) =>
+        JSON.stringify({ schemaVersion: 1, id: `other-b-${index}`, ts: `2026-05-29T00:01:${String(index).padStart(2, '0')}.000Z`, kind: 'ap_decay', residentName: 'res:other', apDelta: -1 }),
+      ),
+      JSON.stringify({ schemaVersion: 1, id: 'agent-new', ts: '2026-05-29T00:02:00.000Z', kind: 'ap_grant', residentName: 'res:agent', apDelta: 5 }),
+    ];
+    await fs.writeFile(path.join(cityDir, 'economy-events.jsonl'), `${lines.join('\n')}\n`);
+
+    const economy = await readResidentEconomy(memoryRoot, 'res:agent', { recentEventLimit: 2 });
+    expect(economy.recentEvents.map(event => event.id)).toEqual(['agent-new', 'agent-middle']);
   });
 
   test('returns active goals owned by this resident', async () => {

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { Buffer } from 'node:buffer';
 import path from 'node:path';
 import { asRecord, residentSlug } from './util';
 
@@ -47,6 +48,13 @@ export interface ReadResidentEconomyOptions {
   recentEventLimit?: number;
 }
 
+export interface ReadNewestTextLinesOptions {
+  /** Read chunk size for backwards scans. Default 64 KiB. */
+  chunkBytes?: number;
+}
+
+const DEFAULT_TAIL_CHUNK_BYTES = 64 * 1024;
+
 export async function readResidentEconomy(
   memoryRoot: string,
   resident: string,
@@ -86,30 +94,68 @@ async function readApBalance(memoryRoot: string, slug: string): Promise<number> 
 
 async function readRecentEconomyEvents(memoryRoot: string, residentName: string, limit: number): Promise<EconomyEventSummary[]> {
   const logPath = path.join(memoryRoot, 'city-integration', 'economy-events.jsonl');
-  let raw: string;
+  const out: EconomyEventSummary[] = [];
   try {
-    raw = await fs.readFile(logPath, 'utf8');
+    for await (const line of newestTextLines(logPath)) {
+      if (out.length >= limit) break;
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (typeof parsed.residentName === 'string' && parsed.residentName !== residentName) continue;
+      if (typeof parsed.residentName !== 'string') continue; // skip non-resident events
+      const summary = toEventSummary(parsed);
+      if (summary) out.push(summary);
+    }
   } catch {
     return [];
   }
-  const out: EconomyEventSummary[] = [];
-  // Walk the log newest-line-first via a reversed iteration so we can stop after `limit`.
-  const lines = raw.split('\n');
-  for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
-    const line = lines[i]?.trim();
-    if (!line) continue;
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    if (typeof parsed.residentName === 'string' && parsed.residentName !== residentName) continue;
-    if (typeof parsed.residentName !== 'string') continue; // skip non-resident events
-    const summary = toEventSummary(parsed);
-    if (summary) out.push(summary);
-  }
   return out;
+}
+
+export async function readNewestTextLines(filePath: string, lineLimit: number, options: ReadNewestTextLinesOptions = {}): Promise<string[]> {
+  const limit = Math.max(0, Math.floor(lineLimit));
+  if (limit === 0) return [];
+
+  const lines: string[] = [];
+  for await (const line of newestTextLines(filePath, options)) {
+    lines.push(line);
+    if (lines.length >= limit) break;
+  }
+  return lines;
+}
+
+async function* newestTextLines(filePath: string, options: ReadNewestTextLinesOptions = {}): AsyncGenerator<string> {
+  const chunkBytes = Math.max(1, Math.floor(options.chunkBytes ?? DEFAULT_TAIL_CHUNK_BYTES));
+  const file = await fs.open(filePath, 'r');
+  try {
+    const stat = await file.stat();
+    let position = stat.size;
+    let carry = '';
+
+    while (position > 0) {
+      const readSize = Math.min(chunkBytes, position);
+      position -= readSize;
+      const buffer = Buffer.allocUnsafe(readSize);
+      const { bytesRead } = await file.read(buffer, 0, readSize, position);
+      if (bytesRead <= 0) break;
+
+      const text = buffer.subarray(0, bytesRead).toString('utf8') + carry;
+      const parts = text.split(/\r?\n/);
+      carry = parts.shift() ?? '';
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const line = parts[i]?.trim();
+        if (line) yield line;
+      }
+    }
+
+    const line = carry.trim();
+    if (line) yield line;
+  } finally {
+    await file.close();
+  }
 }
 
 function toEventSummary(value: Record<string, unknown>): EconomyEventSummary | undefined {
