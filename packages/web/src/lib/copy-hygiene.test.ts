@@ -7,7 +7,7 @@ describe('dashboard copy hygiene', () => {
   test('keeps guest session copy attendee-facing instead of naming API internals', () => {
     expect(appSource).not.toContain('`/api/session`');
     expect(appSource).toContain('Sign in as an attendee to unlock AP, GP, inbox, Embassy actions, and prints.');
-    expect(appSource).toContain('The shell switches from guest mode after attendee login succeeds.');
+    expect(appSource).toContain('This dashboard remains in guest mode until attendee login is connected.');
   });
 
   test('keeps admin bridge empty states command-free and endpoint-free', () => {
@@ -31,5 +31,12 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('<h1>Storyteller Dispatches</h1>');
     expect(appSource).toContain('<div class="panel-title">Public Dispatch Preview</div>');
     expect(appSource).toContain('<div class="panel-title">Latest Public Dispatch</div>');
+  });
+
+  test('keeps guest login fallback from linking attendees back to the same unavailable route', () => {
+    expect(appSource).not.toContain('<a class="city-link-button" href={citySession.loginUrl}>Open Login</a>');
+    expect(appSource).toContain('Ask event staff for the attendee QR or staff login link.');
+    expect(appSource).toContain('Open Onion DAO Login');
+    expect(appSource).toContain('cityLoginUrlReady');
   });
 });

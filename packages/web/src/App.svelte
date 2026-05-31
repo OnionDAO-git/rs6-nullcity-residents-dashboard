@@ -426,6 +426,7 @@
     : cityStoryDigests[0];
   $: cityStoryRunList = storytellerDigestRunList(cityStoryDigests, cityStoryRunId);
   $: cityLibraryStoryPreview = storytellerLibraryPreview(cityStoryDigests[0]);
+  $: cityLoginUrlReady = loginUrlIsReady(citySession.loginUrl);
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
@@ -955,6 +956,19 @@
 
   function cityRouteRequiresLogin(activeRoute: string): boolean {
     return isProtectedCityRoute(activeRoute) && !(activeRoute === '/profile' && publicPatronHandleFromSearch(browserSearch));
+  }
+
+  function loginUrlIsReady(loginUrl: string): boolean {
+    const trimmed = loginUrl.trim();
+    if (!trimmed) return false;
+
+    try {
+      const url = new URL(trimmed, browserOrigin);
+      const path = url.pathname.replace(/\/+$/, '') || '/';
+      return !(url.origin === browserOrigin && path === '/login');
+    } catch {
+      return trimmed !== '/login';
+    }
   }
 
   function cityRouteShowsTrades(activeRoute: string): boolean {
@@ -4098,8 +4112,13 @@
       <p class="kicker">Attendee Session</p>
       <strong>{label}</strong>
       <span>Use the Onion DAO login to load AP, GP, inbox, Embassy actions, and print workflows.</span>
+      {#if !cityLoginUrlReady}
+        <small>Ask event staff for the attendee QR or staff login link.</small>
+      {/if}
     </div>
-    <a class="city-link-button" href={citySession.loginUrl}>Open Login</a>
+    {#if cityLoginUrlReady}
+      <a class="city-link-button" href={citySession.loginUrl}>Open Onion DAO Login</a>
+    {/if}
   </section>
 {/snippet}
 
@@ -5554,10 +5573,12 @@
   </section>
   <section class="city-panel">
     <div class="city-empty-state">
-      <strong>Login endpoint unavailable</strong>
-      <span>The shell switches from guest mode after attendee login succeeds.</span>
+      <strong>{cityLoginUrlReady ? 'Attendee login ready' : 'Attendee login not connected'}</strong>
+      <span>{cityLoginUrlReady ? 'Open the Onion DAO login to unlock AP, GP, inbox, Embassy actions, and print workflows.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
     </div>
-    <a class="city-link-button" href={citySession.loginUrl}>Open Login</a>
+    {#if cityLoginUrlReady}
+      <a class="city-link-button" href={citySession.loginUrl}>Open Onion DAO Login</a>
+    {/if}
   </section>
 {/snippet}
 
