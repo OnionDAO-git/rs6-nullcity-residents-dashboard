@@ -93,4 +93,42 @@ describe('cityDemoPathSteps', () => {
       action: 'Wait for residents',
     });
   });
+
+  test('routes authenticated AP support to a resident grant recommendation when available', () => {
+    const steps = cityDemoPathSteps({
+      authenticated: true,
+      residentCount: 23,
+      onlineResidents: 21,
+      lowApResidents: 1,
+      apSupport: {
+        tone: 'warn',
+        metric: '32 AP suggested',
+        action: 'Open AP grant recommendation',
+        path: '/residents/watch',
+        detail: 'Grant 32 AP to restore runway. watch has 18 AP; this restores the resident to the 50 AP stable runway target.',
+      },
+      demoResident: {
+        tone: 'warn',
+        name: 'res:watch',
+        path: '/residents/watch',
+        action: 'Open resident needing AP',
+        detail: 'watch needs AP support before the demo.',
+      },
+      story: {
+        tone: 'ok',
+        label: 'ready',
+        summary: 'Dispatch is grounded and ready for public review.',
+      },
+    });
+
+    expect(steps[1]).toEqual({
+      id: 'ap-support',
+      tone: 'warn',
+      label: 'Support with AP',
+      metric: '32 AP suggested',
+      action: 'Open AP grant recommendation',
+      path: '/residents/watch',
+      detail: 'Grant 32 AP to restore runway. watch has 18 AP; this restores the resident to the 50 AP stable runway target.',
+    });
+  });
 });

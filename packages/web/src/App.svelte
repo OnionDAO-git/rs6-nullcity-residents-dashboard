@@ -8,7 +8,7 @@
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
-  import { cityDemoPathSteps } from './lib/demo-path';
+  import { cityDemoPathSteps, type CityDemoApSupportSignal } from './lib/demo-path';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
   import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, selfFundedApResidentRows, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary, type SelfFundedApResidentRow } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
@@ -240,6 +240,7 @@
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
   let cityResidentDemoPick = residentDemoPickCue([]);
+  let cityDemoApSupport: CityDemoApSupportSignal | undefined;
   let cityResidentLoopAvailability = residentLoopAvailabilityState({ hasLiveResident: false, hasProjectedResident: false });
   let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
@@ -486,12 +487,14 @@
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
   }));
+  $: cityDemoApSupport = cityDemoApSupportSignal();
   $: cityLatestStoryStatus = cityStoryDigests[0] ? storytellerDigestStatus(cityStoryDigests[0]) : undefined;
   $: cityDemoPath = cityDemoPathSteps({
     authenticated: citySession.authenticated,
     residentCount: cityResidents.length,
     onlineResidents: cityOnlineResidents.length,
     lowApResidents: cityLowAttentionResidents.length,
+    ...(cityDemoApSupport ? { apSupport: cityDemoApSupport } : {}),
     demoResident: {
       tone: cityResidentDemoPick.tone,
       ...(cityResidentDemoPick.residentName ? { name: cityResidentDemoPick.residentName } : {}),
@@ -1311,6 +1314,21 @@
 
   function residentDisplayName(name: string): string {
     return residentSlug(name);
+  }
+
+  function cityDemoApSupportSignal(): CityDemoApSupportSignal | undefined {
+    if (!cityResidentDemoPick.residentName) return undefined;
+    const row = cityResidents.find(candidate => candidate.name === cityResidentDemoPick.residentName);
+    if (!row) return undefined;
+    const recommendation = residentApSupportRecommendation(row);
+    const suggested = recommendation.suggestedAp > 0;
+    return {
+      tone: recommendation.tone,
+      metric: suggested ? `${recommendation.suggestedAp.toLocaleString()} AP suggested` : `${cityLowAttentionResidents.length.toLocaleString()} AP needs`,
+      action: suggested ? 'Open AP grant recommendation' : 'Review AP runway',
+      path: `/residents/${encodeURIComponent(residentSlug(row.name))}`,
+      detail: `${recommendation.title}. ${recommendation.detail}`,
+    };
   }
 
   function residentIdFromInput(input: string): string {

@@ -15,11 +15,20 @@ export interface CityDemoStorySignal {
   summary: string;
 }
 
+export interface CityDemoApSupportSignal {
+  tone: CityDemoPathTone;
+  metric: string;
+  action: string;
+  path: string;
+  detail: string;
+}
+
 export interface CityDemoPathInput {
   authenticated: boolean;
   residentCount: number;
   onlineResidents: number;
   lowApResidents: number;
+  apSupport?: CityDemoApSupportSignal;
   demoResident: CityDemoResidentSignal;
   story: CityDemoStorySignal;
 }
@@ -40,6 +49,7 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
   const supportReady = input.authenticated;
   const lowApResidents = Math.max(0, input.lowApResidents);
   const storyMetric = input.story.title?.trim() || input.story.label;
+  const support = supportReady ? input.apSupport : undefined;
 
   return [
     {
@@ -53,14 +63,14 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
     },
     {
       id: 'ap-support',
-      tone: supportReady ? lowApResidents > 0 ? 'warn' : 'ok' : 'warn',
+      tone: support?.tone || (supportReady ? lowApResidents > 0 ? 'warn' : 'ok' : 'warn'),
       label: 'Support with AP',
-      metric: supportReady ? `${lowApResidents.toLocaleString()} AP needs` : 'guest',
-      action: supportReady ? 'Open Embassy' : 'Login for AP support',
-      path: supportReady ? '/embassy' : '/login',
-      detail: supportReady
+      metric: support?.metric || (supportReady ? `${lowApResidents.toLocaleString()} AP needs` : 'guest'),
+      action: support?.action || (supportReady ? 'Open Embassy' : 'Login for AP support'),
+      path: support?.path || (supportReady ? '/embassy' : '/login'),
+      detail: support?.detail || (supportReady
         ? 'Embassy funding is ready; profile AP/GP balances are available for support flows.'
-        : 'Sign in before demonstrating AP funding, resident grants, or AP/GP balances.',
+        : 'Sign in before demonstrating AP funding, resident grants, or AP/GP balances.'),
     },
     {
       id: 'resident-proof',
