@@ -27,6 +27,16 @@ export interface StorytellerDigestStatus {
   summary: string;
 }
 
+export interface StorytellerGroundingAudit {
+  tone: 'ok' | 'warn';
+  summary: string;
+  citedKnownRefs: string[];
+  missingRefs: string[];
+  uncitedTopRefs: string[];
+  warningCount: number;
+  reviewReasonCount: number;
+}
+
 export function residentStoryEvents(
   resident: ResidentDashboardRow | undefined,
   digests: StorytellerDigestSummary[],
@@ -169,9 +179,80 @@ export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs 
   };
 }
 
+export function storytellerGroundingAudit(digest: StorytellerDigestSummary): StorytellerGroundingAudit {
+  const topRefs = uniqueRefs(digest.topEvents.map(event => event.ref));
+  const dispatchRefs = uniqueRefs(digest.dispatch?.eventRefsUsed || []);
+  const topRefSet = new Set(topRefs);
+  const dispatchRefSet = new Set(dispatchRefs);
+  const citedKnownRefs = dispatchRefs.filter(ref => topRefSet.has(ref));
+  const missingRefs = dispatchRefs.filter(ref => !topRefSet.has(ref));
+  const uncitedTopRefs = topRefs.filter(ref => !dispatchRefSet.has(ref));
+  const warningCount = digest.dispatch
+    ? Math.max(digest.dispatch.warningCount || 0, digest.dispatch.operatorWarnings.length)
+    : 0;
+  const reviewReasonCount = digest.dispatch?.reviewReasons.length || 0;
+  const hasReviewSignals = Boolean(digest.dispatch?.needsReview || warningCount > 0 || reviewReasonCount > 0);
+  const tone: StorytellerGroundingAudit['tone'] = !digest.dispatch || missingRefs.length > 0 || hasReviewSignals ? 'warn' : 'ok';
+
+  return {
+    tone,
+    summary: storytellerGroundingSummary({
+      hasDispatch: Boolean(digest.dispatch),
+      citedKnownRefs: citedKnownRefs.length,
+      missingRefs: missingRefs.length,
+      uncitedTopRefs: uncitedTopRefs.length,
+      hasReviewSignals,
+    }),
+    citedKnownRefs,
+    missingRefs,
+    uncitedTopRefs,
+    warningCount,
+    reviewReasonCount,
+  };
+}
+
 function residentMatches(wanted: string, residentName: string | undefined): boolean {
   if (!residentName) return false;
   return normalizeResident(residentName) === wanted;
+}
+
+function storytellerGroundingSummary(input: {
+  hasDispatch: boolean;
+  citedKnownRefs: number;
+  missingRefs: number;
+  uncitedTopRefs: number;
+  hasReviewSignals: boolean;
+}): string {
+  if (!input.hasDispatch) {
+    return 'No dispatch refs to audit yet.';
+  }
+  if (input.missingRefs > 0) {
+    const review = input.hasReviewSignals ? '; review signals present' : '';
+    return `${plural(input.missingRefs, 'dispatch ref')} missing from top events${review}.`;
+  }
+
+  const uncited = input.uncitedTopRefs > 0
+    ? `${plural(input.uncitedTopRefs, 'top event')} uncited`
+    : 'all top events cited';
+  const review = input.hasReviewSignals ? '; review signals present' : '';
+  const matchVerb = input.citedKnownRefs === 1 ? 'matches' : 'match';
+  return `${plural(input.citedKnownRefs, 'dispatch ref')} ${matchVerb} top events; ${uncited}${review}.`;
+}
+
+function uniqueRefs(refs: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const ref of refs) {
+    const normalized = ref.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function plural(count: number, singular: string): string {
+  return `${count.toLocaleString()} ${singular}${count === 1 ? '' : 's'}`;
 }
 
 function normalizeResident(name: string): string {

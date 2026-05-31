@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -273,6 +273,97 @@ describe('storytellerDigestStatus', () => {
     expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-31T05:10:00.000Z'))).toMatchObject({
       label: 'stale',
       tone: 'warn',
+    });
+  });
+});
+
+describe('storytellerGroundingAudit', () => {
+  test('audits dispatch refs against top event refs without penalizing uncited events', () => {
+    expect(storytellerGroundingAudit(digest({
+      dispatch: {
+        dispatchId: 'dispatch-1',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 0,
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: [],
+        eventRefCount: 1,
+        eventRefsUsed: ['e1'],
+        estimatedCostUsd: null,
+      },
+    }))).toEqual({
+      tone: 'ok',
+      summary: '1 dispatch ref matches top events; 1 top event uncited.',
+      citedKnownRefs: ['e1'],
+      missingRefs: [],
+      uncitedTopRefs: ['e2'],
+      warningCount: 0,
+      reviewReasonCount: 0,
+    });
+  });
+
+  test('warns when dispatch cites refs that are missing from top events or has review signals', () => {
+    expect(storytellerGroundingAudit(digest({
+      dispatch: {
+        dispatchId: 'dispatch-2',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 2,
+        publicBullets: [],
+        operatorWarnings: ['unknown ref cited'],
+        reviewReasons: ['missing_ref'],
+        eventRefCount: 2,
+        eventRefsUsed: ['e1', 'ghost'],
+        estimatedCostUsd: null,
+      },
+    }))).toEqual({
+      tone: 'warn',
+      summary: '1 dispatch ref missing from top events; review signals present.',
+      citedKnownRefs: ['e1'],
+      missingRefs: ['ghost'],
+      uncitedTopRefs: ['e2'],
+      warningCount: 2,
+      reviewReasonCount: 1,
+    });
+  });
+
+  test('marks dry-run digests as unaudited until a dispatch exists', () => {
+    expect(storytellerGroundingAudit(digest())).toEqual({
+      tone: 'warn',
+      summary: 'No dispatch refs to audit yet.',
+      citedKnownRefs: [],
+      missingRefs: [],
+      uncitedTopRefs: ['e1', 'e2'],
+      warningCount: 0,
+      reviewReasonCount: 0,
+    });
+  });
+
+  test('keeps zero-ref dispatch audit grammar readable', () => {
+    expect(storytellerGroundingAudit(digest({
+      topEventCount: 0,
+      topEvents: [],
+      dispatch: {
+        dispatchId: 'dispatch-empty',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 2,
+        publicBullets: [],
+        operatorWarnings: ['fallback dispatch'],
+        reviewReasons: ['no_events'],
+        eventRefCount: 0,
+        eventRefsUsed: [],
+        estimatedCostUsd: null,
+      },
+    }))).toMatchObject({
+      tone: 'warn',
+      summary: '0 dispatch refs match top events; all top events cited; review signals present.',
+      warningCount: 2,
+      reviewReasonCount: 1,
     });
   });
 });

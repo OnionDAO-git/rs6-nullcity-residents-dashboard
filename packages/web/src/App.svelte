@@ -36,7 +36,7 @@
     type ResidentGuestTrailPulse,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -3695,6 +3695,7 @@
       </div>
       {#if cityStoryDigest}
         {@const selectedStoryStatus = storytellerDigestStatus(cityStoryDigest)}
+        {@const selectedStoryAudit = storytellerGroundingAudit(cityStoryDigest)}
         <div class="city-resident-profile-grid">
           <span><small>Run</small><strong>{cityStoryDigest.runId}</strong></span>
           <span><small>Queue</small><strong>{cityStoryDigest.queue || 'dry-run'}</strong></span>
@@ -3707,6 +3708,30 @@
           <span><small>Status</small><strong>{selectedStoryStatus.label}</strong></span>
         </div>
         <div class={`notice ${selectedStoryStatus.tone === 'warn' ? 'amber' : ''}`}>{selectedStoryStatus.summary}</div>
+        <div class="city-review-block">
+          <div class="row">
+            <div class="panel-title">Grounding Audit</div>
+            <span class={`tag ${selectedStoryAudit.tone}`}>{selectedStoryAudit.tone}</span>
+          </div>
+          <strong>{selectedStoryAudit.summary}</strong>
+          <div class="story-evidence-list" aria-label="Storyteller grounding audit">
+            {#each selectedStoryAudit.citedKnownRefs.slice(0, 8) as ref}
+              <span>matched {ref}</span>
+            {/each}
+            {#each selectedStoryAudit.missingRefs.slice(0, 8) as ref}
+              <span>missing {ref}</span>
+            {/each}
+            {#each selectedStoryAudit.uncitedTopRefs.slice(0, 8) as ref}
+              <span>uncited {ref}</span>
+            {/each}
+            {#if selectedStoryAudit.warningCount > 0}
+              <span>{selectedStoryAudit.warningCount} warnings</span>
+            {/if}
+            {#if selectedStoryAudit.reviewReasonCount > 0}
+              <span>{selectedStoryAudit.reviewReasonCount} review reasons</span>
+            {/if}
+          </div>
+        </div>
         <div class="city-copy-block">
           <strong>{cityStoryDigest.dispatch?.publicTitle || 'No model dispatch title yet'}</strong>
           <p>{cityStoryDigest.dispatch?.publicBody || cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>
