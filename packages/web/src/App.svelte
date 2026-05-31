@@ -4402,7 +4402,7 @@
         <div class="panel-title">Public State</div>
         <div class="city-resident-profile-grid">
           {#if cityResident}
-            {#each residentPublicStateTiles(cityResident) as tile (tile.label)}
+            {#each residentPublicStateTiles(cityResident, { economyGp: cityResidentEconomyGpEvidence }) as tile (tile.label)}
               <span><small>{tile.label}</small><strong class={tile.tone || ''}>{tile.value}</strong>{#if tile.detail}<small>{tile.detail}</small>{/if}</span>
             {/each}
           {:else}
@@ -4446,15 +4446,15 @@
             <div class="panel-title">Resident Intelligence Loop</div>
             <button onclick={() => cityResident && debugNav(residentDebugRoute(cityResident.name))}>Open Ops View</button>
           </div>
-          {@render ResidentLoopFactGrid({ facts: residentIntelligenceFacts(cityResident) })}
+          {@render ResidentLoopFactGrid({ facts: residentIntelligenceFacts(cityResident, { economyGp: cityResidentEconomyGpEvidence }) })}
           <div class="city-empty-state subtle">
-            <strong>{residentLoopSummaryLine(cityResident)}</strong>
+            <strong>{residentLoopSummaryLine(cityResident, { economyGp: cityResidentEconomyGpEvidence })}</strong>
             <span>GP is shown only when coin-995 inventory evidence appears in the live dashboard snapshot.</span>
           </div>
         </div>
         <div class="city-panel span-2">
           <div class="panel-title">Resident Intent</div>
-          {@render ResidentLoopFactGrid({ facts: residentIntentFacts(cityResident, { goalContract: cityResidentGoalContract, storyteller: cityResidentStorySignal }) })}
+          {@render ResidentLoopFactGrid({ facts: residentIntentFacts(cityResident, { economyGp: cityResidentEconomyGpEvidence, goalContract: cityResidentGoalContract, storyteller: cityResidentStorySignal }) })}
           <div class="city-record-list compact">
             <article>
               <span class={`tag ${nextStepCue.tone}`}>{nextStepCue.label}</span>

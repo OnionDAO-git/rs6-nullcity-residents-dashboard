@@ -61,6 +61,10 @@ export interface ResidentPublicStateTile {
   tone?: 'ok' | 'warn' | 'fail';
 }
 
+export interface ResidentPublicStateSignals {
+  economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
+}
+
 export interface ResidentProofPulse {
   tone: 'ok' | 'warn' | 'fail';
   summary: string;
@@ -184,6 +188,7 @@ interface ResidentRecoveryWaitSignal {
 
 export interface ResidentIntentSignals {
   goalContract?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
+  economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
   storyteller?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
 }
 
@@ -243,14 +248,17 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
   return pulse;
 }
 
-export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLoopFact[] {
+export function residentIntelligenceFacts(
+  row: ResidentDashboardRow,
+  signals: ResidentPublicStateSignals = {},
+): ResidentLoopFact[] {
   const module = activeModule(row);
   const model = modelIdentityParts(row);
   const endpoint = endpointParts(row);
   const action = row.body?.lastAction;
   const story = row.storyArc;
   const feed = row.feed || row.body?.feed;
-  const gp = residentGoldEvidenceLabel(row);
+  const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
   const currentPlan = row.thinking?.activePlan?.trim();
 
   return [
@@ -307,7 +315,10 @@ export function residentIntelligenceFacts(row: ResidentDashboardRow): ResidentLo
   ];
 }
 
-export function residentLoopSummaryLine(row: ResidentDashboardRow): string {
+export function residentLoopSummaryLine(
+  row: ResidentDashboardRow,
+  signals: ResidentPublicStateSignals = {},
+): string {
   const model = modelParts(row).value;
   const module = activeModule(row)?.id || 'no SPARK';
   const action = row.body?.lastAction?.kind || row.lastEvent?.kind || 'no action';
@@ -319,7 +330,8 @@ export function residentLoopSummaryLine(row: ResidentDashboardRow): string {
       : runway.label === 'short'
         ? 'AP runway short'
         : runway.value;
-  const gp = residentGoldEvidenceLabel(row).value === 'not observed' ? 'GP unobserved' : residentGoldEvidenceLabel(row).value;
+  const gpEvidence = residentPublicGpEvidenceLabel(row, signals.economyGp);
+  const gp = gpEvidence.source === 'none' ? 'GP unobserved' : gpEvidence.value;
   return `${model} · ${module} · ${action} · ${ap} · ${gp}`;
 }
 
@@ -336,12 +348,12 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
   const action = row.body?.lastAction?.kind || row.lastEvent?.kind;
   const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
   const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
-  const gp = residentGoldEvidenceLabel(row);
+  const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
   const apRunway = residentAttentionRunway(row);
   const memory = residentMemoryFreshness(row);
   const cause = residentCauseSignal(row);
   const needsAp = residentNeedsAp(row);
-  const needsGpEvidence = gp.value === 'not observed';
+  const needsGpEvidence = gp.tone === 'warn';
   const storyValue = memory.label === 'thin' ? signals.storyteller?.summary || '-' : memory.summary;
   const storyDetailParts = [
     memory.label === 'thin' ? '' : memory.detail,
@@ -1098,8 +1110,11 @@ export function residentCoinEvidenceAmount(row: ResidentDashboardRow): number {
   return coin995Amount(row);
 }
 
-export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPublicStateTile[] {
-  const gp = residentGoldEvidenceLabel(row);
+export function residentPublicStateTiles(
+  row: ResidentDashboardRow,
+  signals: ResidentPublicStateSignals = {},
+): ResidentPublicStateTile[] {
+  const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
   const apRunway = residentAttentionRunway(row);
   const needsAp = residentNeedsApSupportSoon(row);
   const needsGpEvidence = gp.tone === 'warn';
@@ -1119,7 +1134,9 @@ export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPub
         }
       : {
           value: 'steady',
-          detail: 'AP and GP evidence are both visible.',
+          detail: gp.source === 'economy'
+            ? 'AP stable and recent economy GP evidence is available.'
+            : 'AP and GP evidence are both visible.',
           tone: 'ok' as const,
         };
 
@@ -1148,6 +1165,23 @@ export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPub
       tone: gp.tone,
     },
   ];
+}
+
+function residentPublicGpEvidenceLabel(
+  row: ResidentDashboardRow,
+  economyGp: ResidentPublicStateSignals['economyGp'],
+): { value: string; detail: string; tone: 'ok' | 'warn'; source: 'inventory' | 'economy' | 'none' } {
+  const inventory = residentGoldEvidenceLabel(row);
+  if (inventory.tone === 'ok') return { ...inventory, source: 'inventory' };
+  if (economyGp?.tone === 'ok') {
+    return {
+      value: 'recent GP proof',
+      detail: economyGp.detail,
+      tone: 'ok',
+      source: 'economy',
+    };
+  }
+  return { ...inventory, source: 'none' };
 }
 
 function residentPublicIdentityTiles(row: ResidentDashboardRow): ResidentPublicStateTile[] {

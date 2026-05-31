@@ -73,6 +73,41 @@ describe('resident loop helpers', () => {
     ]);
   });
 
+  test('summarizes economy-backed GP consistently across resident detail helpers', () => {
+    const economyGp = {
+      tone: 'ok' as const,
+      summary: 'Recent economy GP evidence is available.',
+      detail: 'gp_observed: observed 24133 GP in item 995',
+    };
+    const resident = row({
+      attention: 42,
+      thinking: { mode: 'deciding', activePlan: 'Keep the Agent status visible.' },
+      stack: {
+        model: { endpoint: 'default' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.1.0', source: 'inference-log', activeFacets: ['thinking'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'say', result: 'success', source: 'thinking', cause: 'agent_keepalive', tick: 77 },
+      },
+    });
+
+    expect(residentIntelligenceFacts(resident, { economyGp }).find(fact => fact.label === 'GP evidence')).toEqual({
+      label: 'GP evidence',
+      value: 'recent GP proof',
+      detail: 'gp_observed: observed 24133 GP in item 995',
+      tone: 'ok',
+    });
+    expect(residentLoopSummaryLine(resident, { economyGp })).toContain('recent GP proof');
+    expect(residentIntentFacts(resident, { economyGp }).find(fact => fact.label === 'Needs')).toEqual({
+      label: 'Needs',
+      value: 'steady',
+      detail: '32 AP above support floor. · recent GP proof',
+      tone: 'ok',
+    });
+  });
+
   test('flags low AP and never fabricates resident GP when coin evidence is missing', () => {
     const low = row({
       attention: 2,
@@ -134,6 +169,21 @@ describe('resident loop helpers', () => {
       { label: 'AP', value: '2 AP', detail: 'At/below 10 AP support floor.', tone: 'warn' },
       { label: 'Support need', value: 'AP support', detail: 'Resident is at or below the AP safety floor.', tone: 'warn' },
       { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
+    ]);
+  });
+
+  test('uses economy-backed GP proof in public state when inventory coin evidence is absent', () => {
+    expect(residentPublicStateTiles(row({ attention: 42 }), {
+      economyGp: {
+        tone: 'ok',
+        summary: 'Recent economy GP evidence is available.',
+        detail: 'gp_observed: observed 24133 GP in item 995',
+      },
+    })).toEqual([
+      { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
+      { label: 'AP', value: '42 AP', detail: '32 AP above support floor.', tone: 'ok' },
+      { label: 'Support need', value: 'steady', detail: 'AP stable and recent economy GP evidence is available.', tone: 'ok' },
+      { label: 'GP evidence', value: 'recent GP proof', detail: 'gp_observed: observed 24133 GP in item 995', tone: 'ok' },
     ]);
   });
 
