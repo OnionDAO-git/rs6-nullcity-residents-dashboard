@@ -37,6 +37,34 @@ describe('buildSparkRuntimeSummary', () => {
 });
 
 describe('RuntimeRepository resident feeds', () => {
+  test('synthesizes resident summaries from fresh controller runtime files when the gateway roster is empty', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-runtime-roster-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    const freshState = path.join(memoryRoot, 'res-hans', 'runtime-state.json');
+    const staleState = path.join(memoryRoot, 'res-pip', 'runtime-state.json');
+    await fs.mkdir(path.dirname(freshState), { recursive: true });
+    await fs.mkdir(path.dirname(staleState), { recursive: true });
+    await fs.writeFile(freshState, JSON.stringify({ resident: 'res:hans', tick: 12 }), 'utf8');
+    await fs.writeFile(staleState, JSON.stringify({ resident: 'res:pip', tick: 3 }), 'utf8');
+    await fs.utimes(freshState, new Date('2026-05-30T19:00:00.000Z'), new Date('2026-05-30T19:00:00.000Z'));
+    await fs.utimes(staleState, new Date('2026-05-30T18:30:00.000Z'), new Date('2026-05-30T18:30:00.000Z'));
+
+    await expect(repository.listRuntimeResidentSummaries({ now: new Date('2026-05-30T19:01:00.000Z'), onlineWindowMs: 5 * 60_000 })).resolves.toEqual([
+      { name: 'res:hans', online: true },
+      { name: 'res:pip', online: false },
+    ]);
+    await expect(repository.listRuntimeResidentSummaries({ filter: 'online', now: new Date('2026-05-30T19:01:00.000Z'), onlineWindowMs: 5 * 60_000 })).resolves.toEqual([
+      { name: 'res:hans', online: true },
+    ]);
+  });
+
   test('summarizes latest resident progress evidence from controller memory', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-progress-'));

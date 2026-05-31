@@ -571,7 +571,7 @@ export function residentTriageSummary(
     const checkpoints = residentLoopCheckpoints(row);
     const action = checkpoints.find(checkpoint => checkpoint.key === 'action');
     const speech = checkpoints.find(checkpoint => checkpoint.key === 'speech');
-    return action?.tone === 'warn' || speech?.tone === 'warn' || feedTone(row) === 'warn';
+    return feedTone(row) === 'warn' || (action?.tone === 'warn' && speech?.tone === 'warn');
   });
   const missingPlanRows = rows.filter(row => row.online && !row.thinking?.activePlan?.trim());
   const missingGpRows = rows.filter(row => {

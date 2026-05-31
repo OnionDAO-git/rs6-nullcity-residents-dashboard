@@ -552,6 +552,36 @@ describe('resident loop helpers', () => {
     expect(triage.buckets.every(bucket => bucket.count === 0 && bucket.tone === 'ok')).toBe(true);
   });
 
+  test('does not call an acting resident quiet just because no fresh speech line is visible', () => {
+    const triage = residentTriageSummary([
+      row({
+        name: 'res:active-but-silent',
+        attention: 4000,
+        thinking: { mode: 'executing', activePlan: 'Patrol Lumbridge and keep moving.' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'move_to', result: 'success', source: 'body', tick: 100 },
+          feed: {
+            attached: true,
+            tick: 101,
+            ageMs: 500,
+            nearby: { players: 0, npcs: 1, objects: 2, worldItems: 0 },
+            events: 0,
+            availableActions: 8,
+          },
+        },
+        storyArc: { phase: 'progress', latestEventKind: 'movement_progress', latestEventTick: 100 },
+      }),
+    ], () => ({
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited movement' },
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+    }));
+
+    expect(triage.buckets.find(bucket => bucket.key === 'quiet')).toMatchObject({ count: 0, tone: 'ok' });
+    expect(triage.urgentResidents).toBe(0);
+  });
+
   test('returns syncing rollup when no online residents are visible', () => {
     const rollup = residentProofRollup([
       row({ name: 'res:offline-a', online: false }),

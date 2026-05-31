@@ -68,6 +68,24 @@ export class RuntimeRepository {
     };
   }
 
+  async listRuntimeResidentSummaries(options: { filter?: 'online' | 'offline' | 'all'; now?: Date; onlineWindowMs?: number } = {}): Promise<ResidentSummary[]> {
+    const filter = options.filter || 'all';
+    const nowMs = (options.now || new Date()).getTime();
+    const onlineWindowMs = options.onlineWindowMs ?? 10 * 60_000;
+    const files = await listFiles(this.memoryRoot, ['runtime-state.json']);
+    const summaries = await Promise.all(
+      files.map(async file => {
+        const statePath = path.join(this.memoryRoot, file);
+        const [state, stat] = await Promise.all([readJsonFile<RuntimeState>(statePath), fs.stat(statePath).catch(() => undefined)]);
+        const slug = path.dirname(file);
+        const name = typeof state?.resident === 'string' && state.resident.trim() ? state.resident.trim() : runtimeResidentNameFromSlug(slug);
+        const ageMs = stat ? Math.max(0, nowMs - stat.mtimeMs) : Number.POSITIVE_INFINITY;
+        return { name, online: ageMs <= onlineWindowMs };
+      }),
+    );
+    return summaries.filter(summary => residentMatchesFilter(summary, filter));
+  }
+
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
@@ -530,6 +548,18 @@ function isDirectInboxFile(file: string): boolean {
 
 function feedKey(resident: string): string {
   return resident.trim().toLowerCase().replace(/^res:/, '');
+}
+
+function runtimeResidentNameFromSlug(slug: string): string {
+  const clean = slug.split(path.sep).at(-1)?.trim() || slug.trim();
+  if (clean.startsWith('res-')) return `res:${clean.slice('res-'.length)}`;
+  return clean;
+}
+
+function residentMatchesFilter(summary: ResidentSummary, filter: 'online' | 'offline' | 'all'): boolean {
+  if (filter === 'online') return summary.online;
+  if (filter === 'offline') return !summary.online;
+  return true;
 }
 
 function normalizedResidentSet(residents: Iterable<string>): Set<string> {

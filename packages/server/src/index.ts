@@ -384,11 +384,15 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
 }
 
 async function safeResidents(filter: string) {
+  const normalized = normalizeFilter(filter);
   try {
-    return await gateway.listResidents(normalizeFilter(filter));
+    const residents = await gateway.listResidents(normalized);
+    if (residents.length > 0) return residents;
   } catch {
-    return [];
+    // Runtime fallback below keeps the operator dashboard truthful when the
+    // gateway roster is temporarily empty but controller memory is hot.
   }
+  return runtime.listRuntimeResidentSummaries({ filter: normalized }).catch(() => []);
 }
 
 async function enrichResidentRows(residents: Awaited<ReturnType<typeof safeResidents>>) {
