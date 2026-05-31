@@ -3353,7 +3353,9 @@
     </div>
     <div class="city-resident-profile-grid city-readiness-metrics">
       {#each releaseReadinessMetricTiles(cityReleaseReadiness) as metric (metric.label)}
-        <span><small>{metric.label}</small><strong class={metric.tone || ''}>{metric.value}</strong></span>
+        <span title={metric.detail} aria-label={metric.detail ? `${metric.label}: ${metric.value}. ${metric.detail}` : undefined}>
+          <small>{metric.label}</small><strong class={metric.tone || ''}>{metric.value}</strong>
+        </span>
       {/each}
     </div>
     <div class="city-record-list compact">

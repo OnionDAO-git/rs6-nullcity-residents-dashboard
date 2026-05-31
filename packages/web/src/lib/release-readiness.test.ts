@@ -228,6 +228,7 @@ describe('buildReleaseReadiness', () => {
       label: 'Transport',
       value: 'polling',
       tone: 'warn',
+      detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
     });
   });
 
@@ -271,6 +272,7 @@ describe('buildReleaseReadiness', () => {
       label: 'NCRI Prints',
       value: 'no live signal',
       tone: 'warn',
+      detail: 'No active print request or NCRI trade signal is visible yet.',
     });
   });
 
@@ -330,6 +332,7 @@ describe('buildReleaseReadiness', () => {
       label: 'NCRI Prints',
       value: '1 blocker',
       tone: 'warn',
+      detail: 'Print queue or NCRI trade records need operator attention before relying on the loop live.',
     });
   });
 
@@ -413,6 +416,7 @@ describe('buildReleaseReadiness', () => {
       label: 'Action Risks',
       value: '1',
       tone: 'fail',
+      detail: 'res:hans latest action outcome is failed, timed out, or cancelled.',
     });
   });
 
@@ -490,6 +494,7 @@ describe('buildReleaseReadiness', () => {
       label: 'Story Review',
       value: '2',
       tone: 'warn',
+      detail: '2 Storyteller digest dispatches still need operator review.',
     });
   });
 

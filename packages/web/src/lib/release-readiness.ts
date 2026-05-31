@@ -52,6 +52,7 @@ export interface ReleaseReadinessMetricTile {
   label: string;
   value: string;
   tone?: ReleaseReadinessTone;
+  detail?: string;
 }
 
 export interface ReleaseReadinessFirstFiveStep {
@@ -151,14 +152,21 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
 
 export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): ReleaseReadinessMetricTile[] {
   const { metrics } = summary;
-  const economyTransport = summary.checks.find(check => check.id === 'economy-transport');
-  const ncriPrint = summary.checks.find(check => check.id === 'ncri-print');
+  const checksById = new Map(summary.checks.map(check => [check.id, check]));
+  const economyTransport = checksById.get('economy-transport');
+  const ncriPrint = checksById.get('ncri-print');
+  const loop = checksById.get('loop');
+  const ap = checksById.get('ap');
+  const gp = checksById.get('gp');
+  const capabilities = checksById.get('capabilities');
+  const storyteller = checksById.get('storyteller');
   return [
     { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
     ...(economyTransport
       ? [{
         label: 'Transport',
         value: economyTransport.value,
+        ...(economyTransport.tone !== 'ok' ? { detail: economyTransport.detail } : {}),
         ...(economyTransport.tone !== 'ok' ? { tone: economyTransport.tone } : {}),
       }]
       : []),
@@ -166,6 +174,7 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
       ? [{
         label: 'NCRI Prints',
         value: ncriPrint.value,
+        ...(ncriPrint.tone !== 'ok' ? { detail: ncriPrint.detail } : {}),
         ...(ncriPrint.tone !== 'ok' ? { tone: ncriPrint.tone } : {}),
       }]
       : []),
@@ -173,26 +182,31 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
     {
       label: 'Action Risks',
       value: metrics.failedActionResidents.toLocaleString(),
+      ...(metrics.failedActionResidents > 0 && loop ? { detail: loop.detail } : {}),
       ...(metrics.failedActionResidents > 0 ? { tone: 'fail' as const } : {}),
     },
     {
       label: 'Low AP',
       value: metrics.lowApResidents.toLocaleString(),
+      ...(metrics.lowApResidents > 0 && ap ? { detail: ap.detail } : {}),
       ...(metrics.lowApResidents > 0 ? { tone: 'warn' as const } : {}),
     },
     {
       label: 'Observed GP',
       value: metrics.observedGp.toLocaleString(),
+      ...(metrics.observedGp <= 0 && gp ? { detail: gp.detail } : {}),
       ...(metrics.observedGp <= 0 ? { tone: 'warn' as const } : {}),
     },
     {
       label: 'Capability QA',
       value: `${metrics.capabilityProofs.toLocaleString()}/${(metrics.capabilityProofs + metrics.capabilityMissing).toLocaleString()}`,
+      ...(metrics.capabilityMissing > 0 && capabilities ? { detail: capabilities.detail } : {}),
       ...(metrics.capabilityMissing > 0 ? { tone: 'warn' as const } : {}),
     },
     {
       label: 'Story Review',
       value: metrics.storytellerReviewBacklog.toLocaleString(),
+      ...(metrics.storytellerReviewBacklog > 0 && storyteller ? { detail: storyteller.detail } : {}),
       ...(metrics.storytellerReviewBacklog > 0 ? { tone: 'warn' as const } : {}),
     },
     { label: 'Story Age', value: metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${metrics.latestStorytellerAgeMinutes.toLocaleString()}m` },
