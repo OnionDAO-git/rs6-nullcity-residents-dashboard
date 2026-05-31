@@ -1320,7 +1320,11 @@ describe('buildReleaseReadiness', () => {
       residents: [
         resident({
           attention: 4,
-          body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [] } },
+            lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+          },
         }),
       ],
       storyDigests: [],
@@ -1374,7 +1378,11 @@ describe('buildReleaseReadiness', () => {
       residents: [
         resident({
           attention: 4,
-          body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [] } },
+            lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+          },
         }),
       ],
       storyDigests: [],
@@ -1433,7 +1441,11 @@ describe('buildReleaseReadiness', () => {
       residents: [
         resident({
           attention: 4,
-          body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [] } },
+            lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+          },
         }),
       ],
       storyDigests: [],
