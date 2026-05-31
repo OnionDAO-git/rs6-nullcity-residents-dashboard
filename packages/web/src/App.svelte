@@ -509,7 +509,7 @@
     demoResident: {
       tone: cityResidentDemoPick.tone,
       ...(cityResidentDemoPick.residentName ? { name: cityResidentDemoPick.residentName } : {}),
-      ...(cityResidentDemoPick.residentName ? { path: `/residents/${encodeURIComponent(residentSlug(cityResidentDemoPick.residentName))}` } : {}),
+      path: cityResidentDemoPick.path,
       action: cityResidentDemoPick.action,
       detail: cityResidentDemoPick.detail,
     },
@@ -4591,7 +4591,7 @@
         <small>{cityResidentDemoPick.detail}</small>
         <div class="story-evidence-list resident-triage-residents" aria-label="Demo pick resident">
           {#if cityResidentDemoPick.residentName}
-            <button class="resident-triage-link" onclick={() => cityResidentDemoPick.residentName && cityNav(`/residents/${encodeURIComponent(residentSlug(cityResidentDemoPick.residentName))}`)}>
+            <button class="resident-triage-link" onclick={() => cityNav(cityResidentDemoPick.path)}>
               {residentDisplayName(cityResidentDemoPick.residentName)}
             </button>
           {:else}

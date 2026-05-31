@@ -561,6 +561,7 @@ describe('resident loop helpers', () => {
       label: 'Demo pick',
       residentName: 'res:ready-resident',
       target: 'Resident Detail',
+      path: '/residents/ready-resident',
       action: 'Open demo-ready resident',
       detail: 'ready-resident has 7/7 loop proofs live; all tracked proof signals are live.',
     });
@@ -622,6 +623,7 @@ describe('resident loop helpers', () => {
       tone: 'ok',
       residentName: 'res:linked-ready',
       target: 'Resident Detail',
+      path: '/residents/linked-ready',
       action: 'Open demo-ready resident',
       detail: 'linked-ready has 6/6 loop proofs live; all tracked proof signals are live.',
     });
@@ -659,6 +661,7 @@ describe('resident loop helpers', () => {
       label: 'Demo pick',
       residentName: 'res:unlinked-ready',
       target: 'Goal link',
+      path: '/residents?triage=goal-link',
       action: 'Review goal-action link',
       detail: 'unlinked-ready is otherwise demo-ready; goal/action link needs review: Latest picked up coin-995 is visible, but no action cause links it to "Earn GP safely".',
     });
@@ -674,6 +677,7 @@ describe('resident loop helpers', () => {
       label: 'Demo pick',
       residentName: 'res:woodcutter',
       target: 'Grant Attention',
+      path: '/residents/woodcutter',
       action: 'Reconnect resident',
       detail: 'woodcutter needs attention first: Resident is offline in the live controller snapshot.',
     });
@@ -684,6 +688,7 @@ describe('resident loop helpers', () => {
       tone: 'warn',
       label: 'Demo pick',
       target: 'Residents',
+      path: '/residents',
       action: 'Wait for residents',
       detail: 'No resident roster loaded yet.',
     });

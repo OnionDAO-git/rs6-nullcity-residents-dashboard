@@ -1,5 +1,6 @@
 import type { BenchmarkArtifactSummary, ResidentDashboardRow, SparkModuleSummary } from '@nullcity-dashboard/shared';
 import type { ResidentBenchmarkSignal } from './resident-benchmark';
+import { residentRouteSlug } from './resident-route';
 
 export interface ResidentLoopFact {
   label: string;
@@ -29,6 +30,7 @@ export interface ResidentDemoPickCue {
   label: 'Demo pick';
   residentName?: string;
   target: string;
+  path: string;
   action: string;
   detail: string;
 }
@@ -1069,6 +1071,7 @@ export function residentDemoPickCue(
       tone: 'warn',
       label: 'Demo pick',
       target: 'Residents',
+      path: '/residents',
       action: 'Wait for residents',
       detail: 'No resident roster loaded yet.',
     };
@@ -1092,6 +1095,7 @@ export function residentDemoPickCue(
         label: 'Demo pick',
         residentName: ready.row.name,
         target: 'Goal link',
+        path: '/residents?triage=goal-link',
         action: 'Review goal-action link',
         detail: `${residentShortName(ready.row.name)} is otherwise demo-ready; goal/action link needs review: ${ready.goalActionLink.detail}.`,
       };
@@ -1101,6 +1105,7 @@ export function residentDemoPickCue(
       label: 'Demo pick',
       residentName: ready.row.name,
       target: 'Resident Detail',
+      path: residentDemoPickResidentPath(ready.row.name),
       action: 'Open demo-ready resident',
       detail: `${residentShortName(ready.row.name)} has ${ready.pulse.summary}; ${ready.pulse.detail}.`,
     };
@@ -1118,6 +1123,7 @@ export function residentDemoPickCue(
       label: 'Demo pick',
       residentName: fallback.row.name,
       target: fallback.nextStep.target,
+      path: residentDemoPickResidentPath(fallback.row.name),
       action: fallback.nextStep.action,
       detail: `${residentShortName(fallback.row.name)} needs attention first: ${fallback.warning.summary}`,
     };
@@ -1127,9 +1133,14 @@ export function residentDemoPickCue(
     tone: 'warn',
     label: 'Demo pick',
     target: 'Residents',
+    path: '/residents',
     action: 'Wait for residents',
     detail: 'No resident roster loaded yet.',
   };
+}
+
+function residentDemoPickResidentPath(name: string): string {
+  return `/residents/${encodeURIComponent(residentRouteSlug(name))}`;
 }
 
 function demoPickToneRank(tone: ResidentDemoPickCue['tone']): number {
