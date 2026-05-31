@@ -296,15 +296,15 @@ function residentLoopCheck(failedActionResidents: number, residents: ResidentDas
       .filter(row => row.online && residentActionOutcomeFailed(row))
       .map(row => row.name)
       .slice(0, 3);
-    const detailPrefix = names.length === 1
-      ? `${names[0]} latest action outcome is`
-      : `${names.join(', ')} latest action outcomes are`;
+    const detail = failedActionResidents === 1
+      ? `${names[0]} latest action outcome is failed, timed out, or cancelled.`
+      : `Latest action outcomes are failed, timed out, or cancelled for ${residentNameOverflowList(names, failedActionResidents)}.`;
     return {
       id: 'loop',
       label: 'Resident Loop',
       tone: 'fail',
       value: `${failedActionResidents.toLocaleString()} failed action${failedActionResidents === 1 ? '' : 's'}`,
-      detail: `${detailPrefix} failed, timed out, or cancelled.`,
+      detail,
     };
   }
 
@@ -315,6 +315,12 @@ function residentLoopCheck(failedActionResidents: number, residents: ResidentDas
     value: 'actions usable',
     detail: 'No visible online resident has a failed or timed-out latest action outcome.',
   };
+}
+
+function residentNameOverflowList(names: string[], total: number): string {
+  const overflow = total - names.length;
+  if (overflow <= 0) return names.join(', ');
+  return `${names.join(', ')}, and ${overflow.toLocaleString()} more resident${overflow === 1 ? '' : 's'}`;
 }
 
 function apCheck(lowApResidents: number): ReleaseReadinessCheck {

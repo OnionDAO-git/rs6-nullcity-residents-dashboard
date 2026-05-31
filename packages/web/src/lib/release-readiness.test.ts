@@ -284,6 +284,41 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('mentions overflow when more than three residents have failed latest actions', () => {
+    const failedResident = (name: string): ResidentDashboardRow => resident({
+      name,
+      body: {
+        controlHeld: true,
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        lastAction: { kind: 'attack', result: 'failed', source: 'body', tick: 500 },
+      },
+      feed: {
+        attached: true,
+        tick: 500,
+        ageMs: 4_000,
+        nearby: { players: 0, npcs: 1, objects: 4, worldItems: 1 },
+        events: 3,
+        availableActions: 7,
+      },
+    });
+    const summary = buildReleaseReadiness({
+      residents: ['res:a', 'res:b', 'res:c', 'res:d'].map(failedResident),
+      storyDigests: [digest()],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.checks.find(check => check.id === 'loop')).toEqual({
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'fail',
+      value: '4 failed actions',
+      detail: 'Latest action outcomes are failed, timed out, or cancelled for res:a, res:b, res:c, and 1 more resident.',
+    });
+    expect(summary.blockers).toContain('Latest action outcomes are failed, timed out, or cancelled for res:a, res:b, res:c, and 1 more resident.');
+  });
+
   test('warns when core capability proof groups are missing or stale', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],
