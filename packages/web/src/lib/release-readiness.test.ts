@@ -1325,7 +1325,7 @@ describe('buildReleaseReadiness', () => {
       {
         label: 'Capture',
         tone: 'warn',
-        detail: 'After the blocker clears, capture resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence before the public demo.',
+        detail: 'After the blocker clears, capture resident roster, goal/action link proof, AP/GP proof, Storyteller review, and dry-run digest evidence before the public demo.',
       },
     ]);
   });
@@ -1343,7 +1343,7 @@ describe('buildReleaseReadiness', () => {
     expect(releaseReadinessFirstFiveSteps(summary)[2]).toEqual({
       label: 'Capture',
       tone: 'ok',
-      detail: 'Capture resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence before the public demo.',
+      detail: 'Capture resident roster, goal/action link proof, AP/GP proof, Storyteller review, and dry-run digest evidence before the public demo.',
     });
   });
 

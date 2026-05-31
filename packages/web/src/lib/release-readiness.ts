@@ -95,7 +95,7 @@ export interface ReleaseReadinessDemoProofSignals {
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
-const FIRST_FIVE_CAPTURE_EVIDENCE = 'resident roster, AP/GP proof, Storyteller review, and dry-run digest evidence';
+const FIRST_FIVE_CAPTURE_EVIDENCE = 'resident roster, goal/action link proof, AP/GP proof, Storyteller review, and dry-run digest evidence';
 const DRY_RUN_DEMO_ACTION = 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.';
 const DRY_RUN_FRESH_EVIDENCE = 'prepare deterministic Storyteller dry-run evidence for the demo';
 
