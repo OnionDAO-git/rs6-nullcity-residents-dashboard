@@ -153,7 +153,7 @@ export function residentStoryDigestSignal(
 }
 
 export function storytellerMythCard(event: StorytellerDigestEventSummary): StorytellerMythCard {
-  const actor = residentDisplayName(event.residentName);
+  const actor = eventActorDisplayName(event);
   const title = eventTitle(event, actor);
   const body = eventBody(event, actor);
   const evidenceLabels = event.evidenceLabels.filter(label => label.trim().length > 0);
@@ -167,6 +167,10 @@ export function storytellerMythCard(event: StorytellerDigestEventSummary): Story
 function eventTitle(event: StorytellerDigestEventSummary, actor: string): string {
   if (isSpeechEvent(event)) return `${actor} spoke in the city`;
   return `${actor} ${eventVerb(event.kind)}`;
+}
+
+function eventActorDisplayName(event: StorytellerDigestEventSummary): string {
+  return speechEventSpeakerDisplayName(event) || residentDisplayName(event.residentName);
 }
 
 export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs = Date.now()): StorytellerDigestStatus {
@@ -559,6 +563,14 @@ function speechEventBody(event: StorytellerDigestEventSummary): string | undefin
   if (!note) return undefined;
   const said = note.match(/^[^:]+:[^\s]+\s+said:\s*(.+)$/i) || note.match(/^.+?\s+said:\s*(.+)$/i);
   return (said?.[1] || note).trim();
+}
+
+function speechEventSpeakerDisplayName(event: StorytellerDigestEventSummary): string | undefined {
+  if (!isSpeechEvent(event)) return undefined;
+  const note = event.note?.trim();
+  if (!note) return undefined;
+  const speaker = note.match(/^((?:city-user:)?res:[^\s]+|resident:[^\s]+)\s+said:/i)?.[1];
+  return speaker ? residentDisplayName(speaker) : undefined;
 }
 
 function isSpeechEvent(event: StorytellerDigestEventSummary): boolean {

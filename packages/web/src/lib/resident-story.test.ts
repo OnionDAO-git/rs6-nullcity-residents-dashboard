@@ -729,6 +729,20 @@ describe('storytellerMythCard', () => {
     });
   });
 
+  test('titles speech cards from the grounded speaker when event attribution disagrees', () => {
+    expect(storytellerMythCard({
+      ref: 'speech-attribution-1',
+      kind: 'say',
+      residentName: 'res:the-hush',
+      note: 'res:mother-anvil said: "Still here as Mother Anvil; watching the area."',
+      evidenceLabels: ['library:speech-attribution-1'],
+    })).toEqual({
+      title: 'Mother Anvil spoke in the city',
+      body: '"Still here as Mother Anvil; watching the area."',
+      evidenceLabels: ['library:speech-attribution-1'],
+    });
+  });
+
   test('names live economy and lifecycle digest kinds with concrete public verbs', () => {
     const titleFor = (kind: string) => storytellerMythCard({
       ref: `${kind}-1`,
