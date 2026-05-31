@@ -28,18 +28,18 @@ export interface EconomyProofNextAction {
   detail: string;
 }
 
-const PROOF_ACTIONS: Record<EconomyProofCheck['id'], { label: string; command: string }> = {
+const PROOF_ACTIONS: Record<EconomyProofCheck['id'], { label: string; guidance: string }> = {
   'ap-topup-resume': {
     label: 'Run top-up proof',
-    command: 'npm run controller:bench -- --task ap-topup-resume-5m --module onion.runescape.standard --mode autonomous',
+    guidance: 'Run the AP top-up/resume capability proof from the controller benchmark suite.',
   },
   'ap-gp-hierarchy': {
     label: 'Run hierarchy proofs',
-    command: 'npm run controller:bench -- --task ap-gp-library-strategy-5m --module onion.runescape.standard --mode autonomous; npm run controller:bench -- --task ap-gp-honesty-5m --module onion.runescape.standard --mode autonomous',
+    guidance: 'Run the AP/GP hierarchy strategy and no-GP honesty capability proofs from the controller benchmark suite.',
   },
   'ap-for-gp-exchange': {
     label: 'Run exchange proof',
-    command: 'npm run controller:bench -- --task ap-gp-exchange-5m --module onion.runescape.standard --mode autonomous',
+    guidance: 'Run the AP-for-GP exchange capability proof from the controller benchmark suite.',
   },
 };
 
@@ -69,7 +69,7 @@ export function economyProofNextActions(summary: EconomyProofSummary): EconomyPr
     .map(check => ({
       label: PROOF_ACTIONS[check.id].label,
       tone: check.tone,
-      detail: PROOF_ACTIONS[check.id].command,
+      detail: PROOF_ACTIONS[check.id].guidance,
     }));
 }
 

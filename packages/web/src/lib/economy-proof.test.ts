@@ -98,23 +98,25 @@ describe('buildEconomyProofSummary', () => {
     expect(exchange?.detail).not.toContain(longRunId);
   });
 
-  test('builds operator next actions for missing AP/GP proofs', () => {
+  test('builds command-free operator next actions for missing AP/GP proofs', () => {
     const summary = buildEconomyProofSummary([
       run({ runId: 'bench_strategy', task: { id: 'ap-gp-library-strategy-5m', version: '1' } }),
       run({ runId: 'bench_honesty', task: { id: 'ap-gp-honesty-5m', version: '1' } }),
     ], Date.parse('2026-05-30T12:00:00.000Z'));
 
-    expect(economyProofNextActions(summary)).toEqual([
+    const actions = economyProofNextActions(summary);
+    expect(actions).toEqual([
       {
         label: 'Run top-up proof',
         tone: 'warn',
-        detail: 'npm run controller:bench -- --task ap-topup-resume-5m --module onion.runescape.standard --mode autonomous',
+        detail: 'Run the AP top-up/resume capability proof from the controller benchmark suite.',
       },
       {
         label: 'Run exchange proof',
         tone: 'warn',
-        detail: 'npm run controller:bench -- --task ap-gp-exchange-5m --module onion.runescape.standard --mode autonomous',
+        detail: 'Run the AP-for-GP exchange capability proof from the controller benchmark suite.',
       },
     ]);
+    expect(actions.map(action => action.detail).join(' ')).not.toContain('npm run');
   });
 });
