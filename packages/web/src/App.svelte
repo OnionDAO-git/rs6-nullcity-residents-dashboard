@@ -483,6 +483,9 @@
     ticketUser: gameClientTicketUser,
   });
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
+  $: cityControlledResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === true);
+  $: cityPausedOnlineResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === false);
+  $: cityHasCohortSignals = cityControlledResidents.length > 0 || cityPausedOnlineResidents.length > 0;
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
@@ -511,6 +514,10 @@
     authenticated: citySession.authenticated,
     residentCount: cityResidents.length,
     onlineResidents: cityOnlineResidents.length,
+    ...(cityHasCohortSignals ? {
+      activeResidents: cityControlledResidents.length,
+      pausedResidents: cityPausedOnlineResidents.length,
+    } : {}),
     lowApResidents: cityLowAttentionResidents.length,
     ...(cityDemoApSupport ? { apSupport: cityDemoApSupport } : {}),
     demoResident: {

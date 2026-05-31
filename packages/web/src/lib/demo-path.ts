@@ -29,6 +29,8 @@ export interface CityDemoPathInput {
   authenticated: boolean;
   residentCount: number;
   onlineResidents: number;
+  activeResidents?: number;
+  pausedResidents?: number;
   lowApResidents: number;
   apSupport?: CityDemoApSupportSignal;
   demoResident: CityDemoResidentSignal;
@@ -48,6 +50,10 @@ export interface CityDemoPathStep {
 export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] {
   const online = Math.max(0, input.onlineResidents);
   const residentCount = Math.max(0, input.residentCount);
+  const active = input.activeResidents === undefined ? undefined : Math.max(0, input.activeResidents);
+  const paused = input.pausedResidents === undefined ? undefined : Math.max(0, input.pausedResidents);
+  const hasCohortCounts = active !== undefined || paused !== undefined;
+  const activeCount = active ?? online;
   const supportReady = input.authenticated;
   const lowApResidents = Math.max(0, input.lowApResidents);
   const storyMetric = input.story.title?.trim() || input.story.label;
@@ -61,12 +67,16 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
   return [
     {
       id: 'city-alive',
-      tone: online > 0 ? 'ok' : 'warn',
+      tone: activeCount > 0 ? 'ok' : 'warn',
       label: 'City alive',
-      metric: `${online.toLocaleString()} / ${residentCount.toLocaleString()} online`,
+      metric: hasCohortCounts
+        ? `${activeCount.toLocaleString()} / ${residentCount.toLocaleString()} active`
+        : `${online.toLocaleString()} / ${residentCount.toLocaleString()} online`,
       action: 'Open resident directory',
       path: '/residents',
-      detail: 'Live residents are visible; use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+      detail: hasCohortCounts
+        ? `${activeCount.toLocaleString()} controller-held residents are active; ${(paused ?? Math.max(0, online - activeCount)).toLocaleString()} online rows are paused/cohort-excluded. Use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.`
+        : 'Live residents are visible; use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
     },
     {
       id: 'ap-support',

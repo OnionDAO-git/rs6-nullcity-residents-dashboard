@@ -61,6 +61,36 @@ describe('cityDemoPathSteps', () => {
     ]);
   });
 
+  test('uses active controller cohort counts when online residents include paused rows', () => {
+    const steps = cityDemoPathSteps({
+      authenticated: true,
+      residentCount: 23,
+      onlineResidents: 23,
+      activeResidents: 10,
+      pausedResidents: 13,
+      lowApResidents: 0,
+      demoResident: {
+        tone: 'ok',
+        name: 'res:agent',
+        path: '/residents/agent',
+        action: 'Open demo-ready resident',
+        detail: 'agent has a clean live loop.',
+      },
+      story: {
+        tone: 'ok',
+        label: 'ready',
+        summary: 'Dispatch is grounded and ready for public review.',
+      },
+    });
+
+    expect(steps[0]).toMatchObject({
+      id: 'city-alive',
+      tone: 'ok',
+      metric: '10 / 23 active',
+      detail: '10 controller-held residents are active; 13 online rows are paused/cohort-excluded. Use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+    });
+  });
+
   test('keeps guest and empty-state demo steps honest instead of implying support is ready', () => {
     const steps = cityDemoPathSteps({
       authenticated: false,
