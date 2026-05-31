@@ -140,6 +140,7 @@ export interface ResidentGuestTrailPulse {
   lowAp: number;
   planPublished: number;
   recentAction: number;
+  recoveryWait?: number;
   recentSpeech: number;
   storyEvidence: number;
   observedGp: number;
@@ -197,6 +198,7 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
     lowAp: 0,
     planPublished: 0,
     recentAction: 0,
+    recoveryWait: 0,
     recentSpeech: 0,
     storyEvidence: 0,
     observedGp: 0,
@@ -211,6 +213,7 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
     if (residentNeedsAp(row)) pulse.lowAp += 1;
     if (signal.plan !== '-' && signal.plan !== 'No active plan published') pulse.planPublished += 1;
     if (actionCheckpoint?.tone === 'ok') pulse.recentAction += 1;
+    if (residentRecoveryWaitSignal(row)) pulse.recoveryWait = (pulse.recoveryWait ?? 0) + 1;
     if (signal.speech !== '-') pulse.recentSpeech += 1;
     if (signal.story !== '-') pulse.storyEvidence += 1;
     pulse.observedGp += residentCoinEvidenceAmount(row);
@@ -542,6 +545,7 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
   const online = Math.max(0, pulse.online);
   const denominator = online > 0 ? `/${online}` : '';
   const stableAp = Math.max(0, online - Math.max(0, pulse.lowAp));
+  const recoveryWait = Math.max(0, pulse.recoveryWait ?? 0);
 
   return [
     {
@@ -567,6 +571,16 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
       value: `${Math.max(0, pulse.recentAction)}${denominator} recent`,
       detail: 'latest visible action',
       tone: pulse.recentAction > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Recovery',
+      value: online > 0 ? `${recoveryWait}${denominator} waiting` : 'syncing',
+      detail: online > 0
+        ? recoveryWait > 0
+          ? LOW_HEALTH_RECOVERY_WAIT_GUIDANCE
+          : 'no low-health recovery waits visible'
+        : 'waiting for live resident roster',
+      tone: recoveryWait > 0 || online === 0 ? 'warn' : 'ok',
     },
     {
       label: 'Speech',

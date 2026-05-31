@@ -1478,6 +1478,7 @@ describe('resident loop helpers', () => {
       lowAp: 1,
       planPublished: 3,
       recentAction: 2,
+      recoveryWait: 1,
       recentSpeech: 1,
       storyEvidence: 2,
       observedGp: 995,
@@ -1486,9 +1487,28 @@ describe('resident loop helpers', () => {
       { label: 'GP evidence', value: '995 GP', detail: 'coin-995 observed', tone: 'ok' },
       { label: 'Plan', value: '3/4 live', detail: 'current goals residents are pursuing', tone: 'ok' },
       { label: 'Action', value: '2/4 recent', detail: 'latest visible action', tone: 'ok' },
+      { label: 'Recovery', value: '1/4 waiting', detail: 'inspect food/cook/eat recovery before trusting combat liveness', tone: 'warn' },
       { label: 'Speech', value: '1/4 recent', detail: 'latest public say/feed line', tone: 'ok' },
       { label: 'Story', value: '2/4 grounded', detail: 'Library or Storyteller evidence', tone: 'ok' },
     ]);
+  });
+
+  test('marks guest trail recovery as clear when no online residents are waiting', () => {
+    expect(residentGuestTrailFacts({
+      online: 4,
+      lowAp: 0,
+      planPublished: 4,
+      recentAction: 4,
+      recoveryWait: 0,
+      recentSpeech: 2,
+      storyEvidence: 3,
+      observedGp: 250,
+    }).find(fact => fact.label === 'Recovery')).toEqual({
+      label: 'Recovery',
+      value: '0/4 waiting',
+      detail: 'no low-health recovery waits visible',
+      tone: 'ok',
+    });
   });
 
   test('builds guest trail pulse from online resident evidence only', () => {
@@ -1531,10 +1551,48 @@ describe('resident loop helpers', () => {
       lowAp: 0,
       planPublished: 1,
       recentAction: 1,
+      recoveryWait: 0,
       recentSpeech: 1,
       storyEvidence: 1,
       observedGp: 17,
     });
+  });
+
+  test('counts low-health recovery waits in guest trail pulse for online residents only', () => {
+    const pulse = residentGuestTrailPulse([
+      row({
+        name: 'res:survivor',
+        online: true,
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait' },
+        },
+      }),
+      row({
+        name: 'res:guardian',
+        online: true,
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'noop', result: 'success', source: 'thinking', ruleId: 'low_health_hold_position' },
+        },
+      }),
+      row({
+        name: 'res:priest',
+        online: true,
+        thinking: { mode: 'executing', lastInferenceCause: 'runescape:low-health-stranded' },
+      }),
+      row({
+        name: 'res:offline',
+        online: false,
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait' },
+        },
+      }),
+    ]);
+
+    expect(pulse.online).toBe(3);
+    expect(pulse.recoveryWait).toBe(3);
   });
 
   test('marks guest trail facts as syncing while resident data is unavailable', () => {
@@ -1551,6 +1609,7 @@ describe('resident loop helpers', () => {
       { label: 'GP evidence', value: '0 GP', detail: 'no coin-995 evidence yet', tone: 'warn' },
       { label: 'Plan', value: '0 live', detail: 'current goals residents are pursuing', tone: 'warn' },
       { label: 'Action', value: '0 recent', detail: 'latest visible action', tone: 'warn' },
+      { label: 'Recovery', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
       { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
       { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
     ]);
@@ -1562,6 +1621,7 @@ describe('resident loop helpers', () => {
       lowAp: -1,
       planPublished: -4,
       recentAction: -5,
+      recoveryWait: -6,
       recentSpeech: -6,
       storyEvidence: -7,
       observedGp: -995,
@@ -1570,6 +1630,7 @@ describe('resident loop helpers', () => {
       { label: 'GP evidence', value: '0 GP', detail: 'no coin-995 evidence yet', tone: 'warn' },
       { label: 'Plan', value: '0 live', detail: 'current goals residents are pursuing', tone: 'warn' },
       { label: 'Action', value: '0 recent', detail: 'latest visible action', tone: 'warn' },
+      { label: 'Recovery', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
       { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
       { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
     ]);
