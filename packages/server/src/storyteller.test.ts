@@ -154,6 +154,17 @@ describe('readStorytellerDigestFeed', () => {
               evidenceSource: 'quest_complete',
             },
           },
+          {
+            ref: 'library-1',
+            kind: 'stuck_recovered',
+            residentName: 'res:the-hush',
+            note: 'The Hush recovered after moving toward a landmark for human:event-demo.',
+            evidence: {
+              source: 'library.timeline',
+              tick: 196,
+              reasons: ['position_changed', 'human:event-demo', ''],
+            },
+          },
         ],
       }),
     );
@@ -177,6 +188,13 @@ describe('readStorytellerDigestFeed', () => {
         note: 'Bob completed a bounded quest step for [human].',
         importance: 'medium',
         evidenceLabels: ['quest:cooks_assistant', 'evidence:quest_complete'],
+      },
+      {
+        ref: 'library-1',
+        kind: 'stuck_recovered',
+        residentName: 'res:the-hush',
+        note: 'The Hush recovered after moving toward a landmark for [human].',
+        evidenceLabels: ['source:library.timeline', 'tick 196', 'reason:position_changed'],
       },
     ]);
     expect(JSON.stringify(feed.items[0])).not.toContain('patron:james');

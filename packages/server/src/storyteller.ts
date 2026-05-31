@@ -214,6 +214,9 @@ function evidenceLabels(evidence: Record<string, unknown>): string[] {
   appendStringLabel(labels, 'ncri', evidence.ncriId);
   appendStringLabel(labels, 'quest', evidence.questId, ':');
   appendStringLabel(labels, 'evidence', evidence.evidenceSource, ':');
+  appendStringLabel(labels, 'source', evidence.source, ':');
+  appendTickLabel(labels, evidence.tick);
+  appendReasonLabels(labels, evidence.reasons);
   return labels;
 }
 
@@ -239,6 +242,18 @@ function appendThresholdLabel(labels: string[], value: unknown): void {
   const amount = finiteNumber(value);
   if (amount === undefined) return;
   labels.push(`threshold ${amount.toLocaleString()} AP`);
+}
+
+function appendTickLabel(labels: string[], value: unknown): void {
+  const tick = finiteNumber(value);
+  if (tick === undefined) return;
+  labels.push(`tick ${Math.trunc(tick).toLocaleString()}`);
+}
+
+function appendReasonLabels(labels: string[], value: unknown): void {
+  for (const reason of stringArrayField(value)) {
+    appendStringLabel(labels, 'reason', reason, ':');
+  }
 }
 
 function appendStringLabel(labels: string[], prefix: string, value: unknown, separator = ' '): void {
