@@ -114,6 +114,48 @@ describe('residentStoryEvents', () => {
     const events = residentStoryEvents(resident('res:hans'), [aliased]);
     expect(events.map(event => event.event.ref)).toEqual(['alias-1']);
   });
+
+  test('uses grounded speech speaker attribution when filtering resident events', () => {
+    const speech = digest({
+      runId: 'run-speech',
+      digestId: 'dig-speech',
+      topEvents: [
+        {
+          ref: 'speech-1',
+          kind: 'say',
+          residentName: 'res:the-hush',
+          ts: '2026-05-30T04:15:00.000Z',
+          note: 'res:mother-anvil said: "Still here as Mother Anvil; watching the area."',
+          importance: 'medium',
+          evidenceLabels: ['library:speech-1'],
+        },
+      ],
+    });
+
+    expect(residentStoryEvents(resident('res:mother-anvil'), [speech]).map(event => event.event.ref)).toEqual(['speech-1']);
+    expect(residentStoryEvents(resident('res:the-hush'), [speech]).map(event => event.event.ref)).toEqual([]);
+  });
+
+  test('uses grounded speaker attribution for Library writeback speech when filtering resident events', () => {
+    const speech = digest({
+      runId: 'run-library-speech',
+      digestId: 'dig-library-speech',
+      topEvents: [
+        {
+          ref: 'library-speech-1',
+          kind: 'library_writeback',
+          residentName: 'res:the-hush',
+          ts: '2026-05-30T04:17:00.000Z',
+          note: 'res:mother-anvil said: "Still here as Mother Anvil; watching the area."',
+          importance: 'medium',
+          evidenceLabels: ['library:writeback-1'],
+        },
+      ],
+    });
+
+    expect(residentStoryEvents(resident('res:mother-anvil'), [speech]).map(event => event.event.ref)).toEqual(['library-speech-1']);
+    expect(residentStoryEvents(resident('res:the-hush'), [speech]).map(event => event.event.ref)).toEqual([]);
+  });
 });
 
 describe('residentStoryDigestSignal', () => {

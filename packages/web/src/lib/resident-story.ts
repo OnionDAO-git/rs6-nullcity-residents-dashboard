@@ -75,7 +75,7 @@ export function residentStoryEvents(
 
   for (const digest of digests) {
     for (const event of digest.topEvents) {
-      if (!residentMatches(wanted, event.residentName)) continue;
+      if (!eventMatchesResident(wanted, event)) continue;
       const key = event.ref || `${digest.runId}:${event.kind}:${event.ts || ''}`;
       if (seenRefs.has(key)) continue;
       seenRefs.add(key);
@@ -170,7 +170,8 @@ function eventTitle(event: StorytellerDigestEventSummary, actor: string): string
 }
 
 function eventActorDisplayName(event: StorytellerDigestEventSummary): string {
-  return speechEventSpeakerDisplayName(event) || residentDisplayName(event.residentName);
+  const speaker = speechEventSpeakerName(event);
+  return speaker ? residentDisplayName(speaker) : residentDisplayName(event.residentName);
 }
 
 export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs = Date.now()): StorytellerDigestStatus {
@@ -411,6 +412,11 @@ function residentMatches(wanted: string, residentName: string | undefined): bool
   return normalizeResident(residentName) === wanted;
 }
 
+function eventMatchesResident(wanted: string, event: StorytellerDigestEventSummary): boolean {
+  const speechSpeaker = speechEventSpeakerName(event);
+  return residentMatches(wanted, speechSpeaker || event.residentName);
+}
+
 function storytellerGroundingSummary(input: {
   hasDispatch: boolean;
   citedKnownRefs: number;
@@ -566,11 +572,15 @@ function speechEventBody(event: StorytellerDigestEventSummary): string | undefin
 }
 
 function speechEventSpeakerDisplayName(event: StorytellerDigestEventSummary): string | undefined {
+  const speaker = speechEventSpeakerName(event);
+  return speaker ? residentDisplayName(speaker) : undefined;
+}
+
+function speechEventSpeakerName(event: StorytellerDigestEventSummary): string | undefined {
   if (!isSpeechEvent(event)) return undefined;
   const note = event.note?.trim();
   if (!note) return undefined;
-  const speaker = note.match(/^((?:city-user:)?res:[^\s]+|resident:[^\s]+)\s+said:/i)?.[1];
-  return speaker ? residentDisplayName(speaker) : undefined;
+  return note.match(/^((?:city-user:)?res:[^\s]+|resident:[^\s]+)\s+said:/i)?.[1];
 }
 
 function isSpeechEvent(event: StorytellerDigestEventSummary): boolean {
