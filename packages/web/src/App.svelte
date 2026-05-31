@@ -54,7 +54,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { findResidentReadModel, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
-  import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
+  import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
   import EconomyPanel from './lib/EconomyPanel.svelte';
@@ -3369,6 +3369,17 @@
         <span title={metric.detail} aria-label={metric.detail ? `${metric.label}: ${metric.value}. ${metric.detail}` : undefined}>
           <small>{metric.label}</small><strong class={metric.tone || ''}>{metric.value}</strong>
         </span>
+      {/each}
+    </div>
+    <div class="city-record-list compact">
+      {#each releaseReadinessDemoProofRail(cityReleaseReadiness) as proof (proof.label)}
+        <article>
+          <span class={`tag ${proof.tone}`}>{proof.label}</span>
+          <div>
+            <strong>{proof.detail}</strong>
+            <small>Demo proof</small>
+          </div>
+        </article>
       {/each}
     </div>
     <div class="city-record-list compact">

@@ -3,7 +3,7 @@ import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-d
 import type { StorytellerDigestSummary } from './api';
 import type { EconomyTransportSummary } from './live-economy';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles } from './release-readiness';
+import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles } from './release-readiness';
 
 function resident(overrides: Partial<ResidentDashboardRow> = {}): ResidentDashboardRow {
   return {
@@ -192,6 +192,28 @@ describe('buildReleaseReadiness', () => {
       label: 'Model+SPARK',
       value: '1/1 model · 1/1 SPARK',
     });
+    expect(releaseReadinessDemoProofRail(summary)).toEqual([
+      {
+        label: 'Residents',
+        tone: 'ok',
+        detail: 'Residents, plans, and latest action outcomes are visible.',
+      },
+      {
+        label: 'AP/GP',
+        tone: 'ok',
+        detail: 'AP support and coin-995 GP evidence are present.',
+      },
+      {
+        label: 'Story',
+        tone: 'ok',
+        detail: '2 grounded events across 1 resident.',
+      },
+      {
+        label: 'Dry-run',
+        tone: 'ok',
+        detail: 'Latest digest is 10m old; rerun `npm run storyteller:dry-run -- --fixture` for fresh demo evidence.',
+      },
+    ]);
   });
 
   test('blocks when no residents are visible', () => {
@@ -574,6 +596,11 @@ describe('buildReleaseReadiness', () => {
     expect(summary.nextActions).toContain('Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.');
     expect(releaseReadinessActionQueue(summary)).toContainEqual({
       label: 'Run dry-run',
+      tone: 'warn',
+      detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
+    });
+    expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
+      label: 'Dry-run',
       tone: 'warn',
       detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
     });

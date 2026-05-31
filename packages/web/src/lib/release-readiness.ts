@@ -69,6 +69,12 @@ export interface ReleaseReadinessActionQueueItem {
   detail: string;
 }
 
+export interface ReleaseReadinessDemoProofItem {
+  label: 'Residents' | 'AP/GP' | 'Story' | 'Dry-run';
+  tone: ReleaseReadinessTone;
+  detail: string;
+}
+
 const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
@@ -237,6 +243,37 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
   ];
 }
 
+export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary): ReleaseReadinessDemoProofItem[] {
+  const checksById = new Map(summary.checks.map(check => [check.id, check]));
+  const residents = worstCheck([checksById.get('residents'), checksById.get('plans'), checksById.get('loop')]);
+  const apGp = worstCheck([checksById.get('ap'), checksById.get('gp'), checksById.get('economy-transport')]);
+  const story = checksById.get('storyteller');
+  const dryRunAction = summary.nextActions.find(action => action.startsWith('Run `npm run storyteller:dry-run'));
+
+  return [
+    {
+      label: 'Residents',
+      tone: residents?.tone || 'warn',
+      detail: residents && residents.tone !== 'ok' ? residents.detail : 'Residents, plans, and latest action outcomes are visible.',
+    },
+    {
+      label: 'AP/GP',
+      tone: apGp?.tone || 'warn',
+      detail: apGp && apGp.tone !== 'ok' ? apGp.detail : 'AP support and coin-995 GP evidence are present.',
+    },
+    {
+      label: 'Story',
+      tone: story?.tone || 'warn',
+      detail: story?.detail || 'Storyteller digest evidence is not loaded.',
+    },
+    {
+      label: 'Dry-run',
+      tone: dryRunAction ? 'warn' : story?.tone === 'ok' ? 'ok' : 'warn',
+      detail: dryRunAction || dryRunDetail(summary),
+    },
+  ];
+}
+
 export function releaseReadinessFirstFiveSteps(summary: ReleaseReadinessSummary): ReleaseReadinessFirstFiveStep[] {
   const stateTone = summary.status === 'blocked' ? 'fail' : summary.status === 'watch' ? 'warn' : 'ok';
   const firstBlocker = summary.blockers[0];
@@ -260,6 +297,24 @@ export function releaseReadinessFirstFiveSteps(summary: ReleaseReadinessSummary)
         : `Capture ${FIRST_FIVE_CAPTURE_EVIDENCE} before the public demo.`,
     },
   ];
+}
+
+function worstCheck(checks: Array<ReleaseReadinessCheck | undefined>): ReleaseReadinessCheck | undefined {
+  return checks
+    .filter((check): check is ReleaseReadinessCheck => Boolean(check))
+    .sort((a, b) => tonePriority(b.tone) - tonePriority(a.tone))[0];
+}
+
+function tonePriority(tone: ReleaseReadinessTone): number {
+  if (tone === 'fail') return 2;
+  if (tone === 'warn') return 1;
+  return 0;
+}
+
+function dryRunDetail(summary: ReleaseReadinessSummary): string {
+  const age = summary.metrics.latestStorytellerAgeMinutes;
+  const ageLabel = age === undefined ? 'available' : `${age.toLocaleString()}m old`;
+  return `Latest digest is ${ageLabel}; rerun \`npm run storyteller:dry-run -- --fixture\` for fresh demo evidence.`;
 }
 
 export function releaseReadinessActionQueue(summary: ReleaseReadinessSummary, limit = 4): ReleaseReadinessActionQueueItem[] {
