@@ -686,6 +686,33 @@ describe('buildReleaseReadiness', () => {
     ]);
   });
 
+  test('counts goal-link gaps in the compact action-risk metric', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          name: 'res:unlinked',
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+            lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 500 },
+          },
+        }),
+      ],
+      storyDigests: [digest(), dryRunDigest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Action Risks')).toEqual({
+      label: 'Action Risks',
+      value: '1',
+      detail: 'Latest actions are visible but not explicitly tied to active goals for res:unlinked.',
+      tone: 'warn',
+    });
+  });
+
   test('warns when online residents are missing model or SPARK identity signals', () => {
     const summary = buildReleaseReadiness({
       residents: [

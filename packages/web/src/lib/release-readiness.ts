@@ -25,6 +25,7 @@ export interface ReleaseReadinessMetrics {
   lowApResidents: number;
   failedActionResidents: number;
   recoveryWaitResidents: number;
+  goalLinkGapResidents: number;
   observedGp: number;
   storytellerReviewBacklog: number;
   latestStorytellerAgeMinutes?: number;
@@ -179,6 +180,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       lowApResidents,
       failedActionResidents,
       recoveryWaitResidents,
+      goalLinkGapResidents,
       observedGp,
       storytellerReviewBacklog,
       ...(latestStorytellerAgeMinutes !== undefined ? { latestStorytellerAgeMinutes } : {}),
@@ -214,6 +216,7 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
   const gp = checksById.get('gp');
   const capabilities = checksById.get('capabilities');
   const storyteller = checksById.get('storyteller');
+  const actionRiskResidents = metrics.failedActionResidents + metrics.recoveryWaitResidents + metrics.goalLinkGapResidents;
   return [
     { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
     {
@@ -241,9 +244,9 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
     { label: 'Plans', value: metrics.activePlans.toLocaleString() },
     {
       label: 'Action Risks',
-      value: (metrics.failedActionResidents + metrics.recoveryWaitResidents).toLocaleString(),
-      ...(metrics.failedActionResidents + metrics.recoveryWaitResidents > 0 && loop ? { detail: loop.detail } : {}),
-      ...(metrics.failedActionResidents + metrics.recoveryWaitResidents > 0 && loop ? { tone: loop.tone } : {}),
+      value: actionRiskResidents.toLocaleString(),
+      ...(actionRiskResidents > 0 && loop ? { detail: loop.detail } : {}),
+      ...(actionRiskResidents > 0 && loop ? { tone: loop.tone } : {}),
     },
     {
       label: 'Normal-life',
