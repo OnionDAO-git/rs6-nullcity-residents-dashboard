@@ -1,13 +1,13 @@
 import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { residentCoinEvidenceAmount, residentLoopSignal, residentNeedsAp } from './resident-loop';
+import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp } from './resident-loop';
 
 export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
 export type ReleaseReadinessTone = 'ok' | 'warn' | 'fail';
 
 export interface ReleaseReadinessCheck {
-  id: 'residents' | 'plans' | 'ap' | 'gp' | 'capabilities' | 'storyteller' | 'ncri-print';
+  id: 'residents' | 'plans' | 'loop' | 'ap' | 'gp' | 'capabilities' | 'storyteller' | 'ncri-print';
   label: string;
   tone: ReleaseReadinessTone;
   value: string;
@@ -19,6 +19,7 @@ export interface ReleaseReadinessMetrics {
   onlineResidents: number;
   activePlans: number;
   lowApResidents: number;
+  failedActionResidents: number;
   observedGp: number;
   latestStorytellerAgeMinutes?: number;
   capabilityProofs: number;
@@ -75,6 +76,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const residents = input.residents;
   const onlineResidents = residents.filter(row => row.online).length;
   const lowApResidents = residents.filter(row => residentNeedsAp(row)).length;
+  const failedActionResidents = residents.filter(row => row.online && residentActionOutcomeFailed(row)).length;
   const activePlans = residents.filter(row => {
     const signal = residentLoopSignal(row);
     return signal.plan !== '-' && signal.plan !== 'No active plan published';
@@ -88,6 +90,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const checks: ReleaseReadinessCheck[] = [
     residentCheck(residents.length, onlineResidents),
     planCheck(activePlans, residents.length),
+    residentLoopCheck(failedActionResidents, residents),
     apCheck(lowApResidents),
     gpCheck(observedGp),
     capabilityQaCheck(capabilityQa),
@@ -109,6 +112,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       onlineResidents,
       activePlans,
       lowApResidents,
+      failedActionResidents,
       observedGp,
       ...(latestStorytellerAgeMinutes !== undefined ? { latestStorytellerAgeMinutes } : {}),
       capabilityProofs: capabilityQa.proven,
@@ -248,6 +252,33 @@ function planCheck(activePlans: number, residents: number): ReleaseReadinessChec
     tone: 'ok',
     value: `${activePlans.toLocaleString()} live`,
     detail: 'At least one resident is publishing a plan/goal signal.',
+  };
+}
+
+function residentLoopCheck(failedActionResidents: number, residents: ResidentDashboardRow[]): ReleaseReadinessCheck {
+  if (failedActionResidents > 0) {
+    const names = residents
+      .filter(row => row.online && residentActionOutcomeFailed(row))
+      .map(row => row.name)
+      .slice(0, 3);
+    const detailPrefix = names.length === 1
+      ? `${names[0]} latest action outcome is`
+      : `${names.join(', ')} latest action outcomes are`;
+    return {
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'fail',
+      value: `${failedActionResidents.toLocaleString()} failed action${failedActionResidents === 1 ? '' : 's'}`,
+      detail: `${detailPrefix} failed, timed out, or cancelled.`,
+    };
+  }
+
+  return {
+    id: 'loop',
+    label: 'Resident Loop',
+    tone: 'ok',
+    value: 'actions usable',
+    detail: 'No visible online resident has a failed or timed-out latest action outcome.',
   };
 }
 
@@ -395,10 +426,15 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   const byId = new Map(checks.map(check => [check.id, check]));
   if (byId.get('residents')?.tone === 'fail') actions.push('Start or reconnect the controller before demoing the resident loop.');
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
+  if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
   if (byId.get('capabilities')?.tone !== 'ok') actions.push('Run missing or stale capability benchmarks before relying on unproven resident loops.');
   if (byId.get('storyteller')?.tone === 'warn') actions.push('Run or review Storyteller before using public canon narration.');
   if (byId.get('ncri-print')?.tone === 'warn') actions.push('Assign blocked print queue entries or avoid the print queue during the demo.');
   return actions.length ? actions : ['Keep the controller running and capture fresh screenshots/logs before a public demo.'];
+}
+
+function residentActionOutcomeFailed(row: ResidentDashboardRow): boolean {
+  return residentLoopCheckpoints(row).some(checkpoint => checkpoint.key === 'action' && checkpoint.tone === 'fail');
 }
