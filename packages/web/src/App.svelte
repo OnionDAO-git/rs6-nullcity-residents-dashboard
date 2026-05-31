@@ -43,7 +43,7 @@
     type ResidentGuestTrailPulse,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard, type ResidentStoryEvent } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -181,6 +181,7 @@
   let cityResidentEconomy: ResidentEconomy | undefined;
   let cityLibraryLives: LibrarySoulLife[] = [];
   let cityStoryDigests: StorytellerDigestSummary[] = [];
+  let cityStoryRunList: StorytellerDigestRunList = storytellerDigestRunList([]);
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
   let cityPrintInsights = printQueueInsights([], [], []);
@@ -402,6 +403,7 @@
   $: cityStoryDigest = cityStoryRunId
     ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
     : cityStoryDigests[0];
+  $: cityStoryRunList = storytellerDigestRunList(cityStoryDigests);
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
@@ -3784,8 +3786,9 @@
   <section class="city-dashboard-grid">
     <div class="city-panel">
       <div class="panel-title">Runs</div>
+      <small>{cityStoryRunList.summary}</small>
       <div class="city-card-list compact">
-        {#each cityStoryDigests as digest (digest.runId)}
+        {#each cityStoryRunList.visible as digest (digest.runId)}
           {@const status = storytellerDigestStatus(digest)}
           <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/story/${encodeURIComponent(digest.runId)}`)}>
             <span class={`tag ${status.tone}`}>{digest.queue === 'canon' ? 'canon' : digest.queue === 'review' ? 'review' : status.label}</span>

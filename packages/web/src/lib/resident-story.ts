@@ -27,6 +27,12 @@ export interface StorytellerDigestStatus {
   summary: string;
 }
 
+export interface StorytellerDigestRunList {
+  visible: StorytellerDigestSummary[];
+  collapsedDryRuns: number;
+  summary: string;
+}
+
 export interface StorytellerGroundingAudit {
   tone: 'ok' | 'warn';
   summary: string;
@@ -176,6 +182,33 @@ export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs 
     label: 'ready',
     tone: 'ok',
     summary: 'Dispatch is grounded and ready for public review.',
+  };
+}
+
+export function storytellerDigestRunList(digests: StorytellerDigestSummary[]): StorytellerDigestRunList {
+  const visible: StorytellerDigestSummary[] = [];
+  let dryRunSeen = false;
+  let collapsedDryRuns = 0;
+
+  for (const digest of digests) {
+    if (isDryRunDigest(digest)) {
+      if (dryRunSeen) {
+        collapsedDryRuns += 1;
+        continue;
+      }
+      dryRunSeen = true;
+    }
+    visible.push(digest);
+  }
+
+  return {
+    visible,
+    collapsedDryRuns,
+    summary: collapsedDryRuns > 0
+      ? `Showing canon/review runs plus latest dry-run; ${collapsedDryRuns.toLocaleString()} older dry-run${collapsedDryRuns === 1 ? '' : 's'} collapsed.`
+      : visible.length > 0
+        ? 'Showing all loaded Storyteller runs.'
+        : 'No Storyteller runs loaded yet.',
   };
 }
 
@@ -353,6 +386,10 @@ function hasDispatchWarnings(digest: StorytellerDigestSummary): boolean {
   if (Array.isArray(dispatch.reviewReasons) && dispatch.reviewReasons.length > 0) return true;
   if ((typeof dispatch.eventRefCount === 'number' && dispatch.eventRefCount === 0) && digest.topEventCount > 0) return true;
   return false;
+}
+
+function isDryRunDigest(digest: StorytellerDigestSummary): boolean {
+  return digest.queue === 'dry-run' || !digest.dispatch;
 }
 
 function parseTimestamp(stamp: string | undefined): number {

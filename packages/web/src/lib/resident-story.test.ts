@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -274,6 +274,58 @@ describe('storytellerDigestStatus', () => {
       label: 'stale',
       tone: 'warn',
     });
+  });
+});
+
+describe('storytellerDigestRunList', () => {
+  test('keeps canon and review runs visible while collapsing older dry-runs', () => {
+    const canon = digest({
+      runId: 'canon/run-canon',
+      digestId: 'digest-canon',
+      queue: 'canon',
+      dispatch: {
+        dispatchId: 'dispatch-canon',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        warningCount: 0,
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: [],
+        eventRefCount: 1,
+        eventRefsUsed: ['e1'],
+      },
+    });
+    const review = digest({
+      runId: 'review/run-review',
+      digestId: 'digest-review',
+      queue: 'review',
+      dispatch: {
+        dispatchId: 'dispatch-review',
+        generatedAt: '2026-05-30T04:04:00.000Z',
+        modelProfile: 'default',
+        needsReview: true,
+        warningCount: 1,
+        publicBullets: [],
+        operatorWarnings: ['needs review'],
+        reviewReasons: ['operator_review'],
+        eventRefCount: 1,
+        eventRefsUsed: ['e1'],
+      },
+    });
+    const latestDryRun = digest({ runId: 'dry-run-latest', digestId: 'digest-dry-latest', builtAt: '2026-05-30T04:03:00.000Z' });
+    const olderDryRun = digest({ runId: 'dry-run-older', digestId: 'digest-dry-older', builtAt: '2026-05-30T03:55:00.000Z' });
+    const oldestDryRun = digest({ runId: 'dry-run-oldest', digestId: 'digest-dry-oldest', builtAt: '2026-05-30T03:50:00.000Z' });
+
+    const list = storytellerDigestRunList([canon, review, latestDryRun, olderDryRun, oldestDryRun]);
+
+    expect(list.visible.map(item => item.runId)).toEqual([
+      'canon/run-canon',
+      'review/run-review',
+      'dry-run-latest',
+    ]);
+    expect(list.collapsedDryRuns).toBe(2);
+    expect(list.summary).toBe('Showing canon/review runs plus latest dry-run; 2 older dry-runs collapsed.');
   });
 });
 
