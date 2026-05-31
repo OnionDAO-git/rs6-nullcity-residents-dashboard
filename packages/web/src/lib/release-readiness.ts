@@ -21,6 +21,7 @@ export interface ReleaseReadinessMetrics {
   lowApResidents: number;
   failedActionResidents: number;
   observedGp: number;
+  storytellerReviewBacklog: number;
   latestStorytellerAgeMinutes?: number;
   capabilityProofs: number;
   capabilityMissing: number;
@@ -96,6 +97,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const observedGp = residents.reduce((sum, row) => sum + residentCoinEvidenceAmount(row), 0);
   const latestDigest = latestStorytellerDigest(input.storyDigests);
   const latestStorytellerAgeMinutes = latestDigest ? digestAgeMinutes(latestDigest, nowMs) : undefined;
+  const storytellerReviewBacklog = storytellerDigestsNeedingReview(input.storyDigests).length;
 
   const capabilityQa = summarizeCapabilityQa(input.benchmarkRuns || [], nowMs);
 
@@ -106,7 +108,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     apCheck(lowApResidents),
     gpCheck(observedGp),
     capabilityQaCheck(capabilityQa),
-    storytellerCheck(latestDigest, latestStorytellerAgeMinutes),
+    storytellerCheck(latestDigest, latestStorytellerAgeMinutes, storytellerReviewBacklog),
     ncriPrintCheck(input.printInsights),
   ];
 
@@ -126,6 +128,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       lowApResidents,
       failedActionResidents,
       observedGp,
+      storytellerReviewBacklog,
       ...(latestStorytellerAgeMinutes !== undefined ? { latestStorytellerAgeMinutes } : {}),
       capabilityProofs: capabilityQa.proven,
       capabilityMissing: capabilityQa.missing.length + capabilityQa.stale.length + capabilityQa.failed.length,
@@ -159,6 +162,11 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
       label: 'Capability QA',
       value: `${metrics.capabilityProofs.toLocaleString()}/${(metrics.capabilityProofs + metrics.capabilityMissing).toLocaleString()}`,
       ...(metrics.capabilityMissing > 0 ? { tone: 'warn' as const } : {}),
+    },
+    {
+      label: 'Story Review',
+      value: metrics.storytellerReviewBacklog.toLocaleString(),
+      ...(metrics.storytellerReviewBacklog > 0 ? { tone: 'warn' as const } : {}),
     },
     { label: 'Story Age', value: metrics.latestStorytellerAgeMinutes === undefined ? '-' : `${metrics.latestStorytellerAgeMinutes.toLocaleString()}m` },
   ];
@@ -395,6 +403,7 @@ function gpCheck(observedGp: number): ReleaseReadinessCheck {
 function storytellerCheck(
   digest: StorytellerDigestSummary | undefined,
   ageMinutes: number | undefined,
+  reviewBacklogCount: number,
 ): ReleaseReadinessCheck {
   if (!digest) {
     return {
@@ -403,6 +412,16 @@ function storytellerCheck(
       tone: 'warn',
       value: 'no digest',
       detail: 'No Storyteller digest is available for operator or public narrative context.',
+    };
+  }
+
+  if (reviewBacklogCount > 0) {
+    return {
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: `${reviewBacklogCount.toLocaleString()} pending review`,
+      detail: `${reviewBacklogCount.toLocaleString()} Storyteller digest dispatch${reviewBacklogCount === 1 ? '' : 'es'} still need operator review.`,
     };
   }
 
@@ -466,6 +485,10 @@ function latestStorytellerDigest(digests: StorytellerDigestSummary[]): Storytell
     .sort((a, b) => digestTimestamp(b) - digestTimestamp(a))[0];
 }
 
+function storytellerDigestsNeedingReview(digests: StorytellerDigestSummary[]): StorytellerDigestSummary[] {
+  return digests.filter(digest => Boolean(digest.dispatch?.needsReview || (digest.dispatch?.warningCount ?? 0) > 0));
+}
+
 function digestAgeMinutes(digest: StorytellerDigestSummary, nowMs: number): number {
   const ts = digestTimestamp(digest);
   if (ts <= 0) return 0;
@@ -502,7 +525,13 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
   if (byId.get('capabilities')?.tone !== 'ok') actions.push('Run missing or stale capability benchmarks before relying on unproven resident loops.');
-  if (byId.get('storyteller')?.tone === 'warn') actions.push('Run or review Storyteller before using public canon narration.');
+  if (byId.get('storyteller')?.tone === 'warn') {
+    if (byId.get('storyteller')?.value.includes('pending review')) {
+      actions.push('Review and clear pending Storyteller dispatches before using public canon narration.');
+    } else {
+      actions.push('Run or review Storyteller before using public canon narration.');
+    }
+  }
   if (byId.get('ncri-print')?.tone === 'warn') actions.push('Assign blocked print queue entries or avoid the print queue during the demo.');
   return actions.length ? actions : ['Keep the controller running and capture fresh screenshots/logs before a public demo.'];
 }

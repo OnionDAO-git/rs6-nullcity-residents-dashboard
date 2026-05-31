@@ -288,12 +288,90 @@ describe('buildReleaseReadiness', () => {
       'Low AP',
       'Observed GP',
       'Capability QA',
+      'Story Review',
       'Story Age',
     ]);
     expect(tiles.find(tile => tile.label === 'Action Risks')).toEqual({
       label: 'Action Risks',
       value: '1',
       tone: 'fail',
+    });
+  });
+
+  test('warns when Storyteller review backlog exists even if latest digest looks fresh', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [
+        digest({
+          runId: 'review-1',
+          digestId: 'review-1',
+          dispatch: {
+            dispatchId: 'dispatch-review-1',
+            generatedAt: '2026-05-30T09:05:00.000Z',
+            modelProfile: 'default',
+            needsReview: true,
+            warningCount: 0,
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 1,
+            eventRefsUsed: ['e1'],
+          },
+        }),
+        digest({
+          runId: 'review-2',
+          digestId: 'review-2',
+          dispatch: {
+            dispatchId: 'dispatch-review-2',
+            generatedAt: '2026-05-30T09:06:00.000Z',
+            modelProfile: 'default',
+            needsReview: false,
+            warningCount: 1,
+            publicBullets: [],
+            operatorWarnings: ['private handle'],
+            reviewReasons: ['redaction'],
+            eventRefCount: 1,
+            eventRefsUsed: ['e2'],
+          },
+        }),
+        digest({
+          runId: 'ready-1',
+          digestId: 'ready-1',
+          dispatch: {
+            dispatchId: 'dispatch-ready-1',
+            generatedAt: '2026-05-30T09:07:00.000Z',
+            modelProfile: 'default',
+            needsReview: false,
+            warningCount: 0,
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 2,
+            eventRefsUsed: ['e3', 'e4'],
+          },
+        }),
+      ],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'storyteller')).toEqual({
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: '2 pending review',
+      detail: '2 Storyteller digest dispatches still need operator review.',
+    });
+    expect(summary.nextActions).toContain('Review and clear pending Storyteller dispatches before using public canon narration.');
+    expect(summary.metrics.storytellerReviewBacklog).toBe(2);
+
+    const tiles = releaseReadinessMetricTiles(summary);
+    expect(tiles.find(tile => tile.label === 'Story Review')).toEqual({
+      label: 'Story Review',
+      value: '2',
+      tone: 'warn',
     });
   });
 
