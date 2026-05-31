@@ -652,6 +652,59 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('counts operator warnings and review reasons as Storyteller review backlog even with warningCount zero', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [
+        digest({
+          runId: 'review-operator-warnings',
+          digestId: 'review-operator-warnings',
+          dispatch: {
+            dispatchId: 'dispatch-review-operator-warnings',
+            generatedAt: '2026-05-30T09:06:00.000Z',
+            modelProfile: 'default',
+            needsReview: false,
+            warningCount: 0,
+            publicBullets: [],
+            operatorWarnings: ['private handle still visible'],
+            reviewReasons: [],
+            eventRefCount: 1,
+            eventRefsUsed: ['e1'],
+          },
+        }),
+        digest({
+          runId: 'review-review-reason',
+          digestId: 'review-review-reason',
+          dispatch: {
+            dispatchId: 'dispatch-review-review-reason',
+            generatedAt: '2026-05-30T09:07:00.000Z',
+            modelProfile: 'default',
+            needsReview: false,
+            warningCount: 0,
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: ['grounding audit requested'],
+            eventRefCount: 1,
+            eventRefsUsed: ['e2'],
+          },
+        }),
+      ],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.metrics.storytellerReviewBacklog).toBe(2);
+    expect(summary.checks.find(check => check.id === 'storyteller')).toEqual({
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: '2 pending review',
+      detail: '2 Storyteller digest dispatches still need operator review.',
+    });
+  });
+
   test('points no-digest Storyteller readiness at the deterministic dry-run command', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],

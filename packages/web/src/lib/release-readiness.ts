@@ -793,7 +793,7 @@ function storytellerCheck(
     };
   }
 
-  const needsReview = Boolean(digest.dispatch?.needsReview || (digest.dispatch?.warningCount ?? 0) > 0);
+  const needsReview = digestNeedsReview(digest);
   const stale = ageMinutes !== undefined && ageMinutes * 60 * 1000 > STORYTELLER_STALE_MS;
   if (needsReview || stale) {
     const reasons = [
@@ -864,7 +864,19 @@ function isDryRunDigest(digest: StorytellerDigestSummary): boolean {
 }
 
 function storytellerDigestsNeedingReview(digests: StorytellerDigestSummary[]): StorytellerDigestSummary[] {
-  return digests.filter(digest => Boolean(digest.dispatch?.needsReview || (digest.dispatch?.warningCount ?? 0) > 0));
+  return digests.filter(digest => digestNeedsReview(digest));
+}
+
+function digestNeedsReview(digest: StorytellerDigestSummary): boolean {
+  const dispatch = digest.dispatch;
+  if (!dispatch) return false;
+  const warningCount = dispatch.warningCount ?? 0;
+  return Boolean(
+    dispatch.needsReview
+      || warningCount > 0
+      || dispatch.operatorWarnings.length > 0
+      || dispatch.reviewReasons.length > 0,
+  );
 }
 
 function digestAgeMinutes(digest: StorytellerDigestSummary, nowMs: number): number {
