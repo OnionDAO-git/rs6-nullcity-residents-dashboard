@@ -514,6 +514,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Inspect recovery',
       tone: 'warn',
       detail: 'Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.',
+      target: 'Residents',
+      path: '/residents',
     });
   });
 
@@ -598,6 +600,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Confirm stack',
       tone: 'warn',
       detail: 'Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.',
+      target: 'Residents',
+      path: '/residents',
     });
   });
 
@@ -757,6 +761,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Inspect stuck churn',
       tone: 'warn',
       detail: 'Inspect top stuck-churn residents (qa-trader, agent, qa-social) before the next normal-life recurrence claim.',
+      target: 'Residents',
+      path: '/residents',
     });
   });
 
@@ -801,6 +807,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Prove organic AP/GP',
       tone: 'warn',
       detail: 'Capture organic AP/GP recurrence evidence before claiming ordinary self-initiation.',
+      target: 'Economy',
+      path: '/economy',
     });
   });
 
@@ -878,6 +886,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Run dry-run',
       tone: 'warn',
       detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
+      target: 'Story',
+      path: '/story',
     });
     expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
       label: 'Dry-run',
@@ -965,6 +975,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Ground Story',
       tone: 'warn',
       detail: 'Run Storyteller with grounded event evidence before using public canon narration.',
+      target: 'Story',
+      path: '/story',
     });
   });
 
@@ -1012,6 +1024,8 @@ describe('buildReleaseReadiness', () => {
       label: 'Review grounding',
       tone: 'warn',
       detail: 'Review Storyteller grounding audit before using public canon narration.',
+      target: 'Story',
+      path: '/story',
     });
   });
 
@@ -1189,21 +1203,29 @@ describe('buildReleaseReadiness', () => {
         label: 'Check prints',
         tone: 'warn',
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+        target: 'Prints',
+        path: '/prints',
       },
       {
         label: 'Run audit',
         tone: 'warn',
         detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+        target: 'Operator Readiness',
+        path: '/',
       },
       {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
+        target: 'Residents',
+        path: '/residents',
       },
       {
         label: 'Prove GP',
         tone: 'warn',
         detail: 'Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.',
+        target: 'Economy',
+        path: '/economy',
       },
     ]);
   });
@@ -1232,21 +1254,29 @@ describe('buildReleaseReadiness', () => {
         label: 'Check economy',
         tone: 'warn',
         detail: 'Restore the economy stream or confirm polling fallback before relying on live AP/GP state.',
+        target: 'Economy',
+        path: '/economy',
       },
       {
         label: 'Check prints',
         tone: 'warn',
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+        target: 'Prints',
+        path: '/prints',
       },
       {
         label: 'Run audit',
         tone: 'warn',
         detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+        target: 'Operator Readiness',
+        path: '/',
       },
       {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
+        target: 'Residents',
+        path: '/residents',
       },
     ]);
   });
@@ -1275,21 +1305,29 @@ describe('buildReleaseReadiness', () => {
         label: 'Configure bridge',
         tone: 'warn',
         detail: 'Configure the live economy bridge before claiming AP/GP state is current.',
+        target: 'Economy',
+        path: '/economy',
       },
       {
         label: 'Check prints',
         tone: 'warn',
         detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+        target: 'Prints',
+        path: '/prints',
       },
       {
         label: 'Run audit',
         tone: 'warn',
         detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+        target: 'Operator Readiness',
+        path: '/',
       },
       {
         label: 'Top up AP',
         tone: 'warn',
         detail: 'Top up low-AP residents or avoid presenting them as healthy.',
+        target: 'Residents',
+        path: '/residents',
       },
     ]);
   });

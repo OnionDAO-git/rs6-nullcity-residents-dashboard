@@ -69,6 +69,8 @@ export interface ReleaseReadinessActionQueueItem {
   label: string;
   tone: ReleaseReadinessTone;
   detail: string;
+  target: string;
+  path: string;
 }
 
 export interface ReleaseReadinessDemoProofItem {
@@ -370,6 +372,7 @@ export function releaseReadinessActionQueue(summary: ReleaseReadinessSummary, li
         label: readinessActionLabel(action),
         tone: readinessActionTone(summary, action),
         detail: action,
+        ...readinessActionTarget(action),
       };
       return { item, index, priority: readinessActionPriority(item) };
     })
@@ -409,6 +412,32 @@ function readinessActionTone(summary: ReleaseReadinessSummary, action: string): 
     return 'fail';
   }
   return 'warn';
+}
+
+function readinessActionTarget(action: string): { target: string; path: string } {
+  if (action.startsWith('Start or reconnect')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Confirm model/endpoint')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Restart or observe')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Inspect residents')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Inspect low-health recovery')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Fix failing normal-life audit')) return { target: 'Operator Readiness', path: '/' };
+  if (action.startsWith('Run or sync a CQA10 normal-life audit')) return { target: 'Operator Readiness', path: '/' };
+  if (action.startsWith('Inspect top stuck-churn residents')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Capture organic AP/GP recurrence evidence')) return { target: 'Economy', path: '/economy' };
+  if (action.startsWith('Capture ordinary trade closure evidence')) return { target: 'Economy', path: '/economy' };
+  if (action.startsWith('Use the latest normal-life audit caveat')) return { target: 'Operator Readiness', path: '/' };
+  if (action.startsWith('Top up')) return { target: 'Residents', path: '/residents' };
+  if (action.startsWith('Run an AP/GP')) return { target: 'Economy', path: '/economy' };
+  if (action.startsWith('Configure the live economy')) return { target: 'Economy', path: '/economy' };
+  if (action.startsWith('Restore the economy')) return { target: 'Economy', path: '/economy' };
+  if (action.startsWith('Run missing')) return { target: 'Operator Readiness', path: '/' };
+  if (action.startsWith('Review and clear')) return { target: 'Story', path: '/story' };
+  if (action.startsWith('Review Storyteller grounding')) return { target: 'Story', path: '/story' };
+  if (action.startsWith('Run Storyteller with grounded')) return { target: 'Story', path: '/story' };
+  if (action.startsWith('Run `npm run storyteller:dry-run')) return { target: 'Story', path: '/story' };
+  if (action.startsWith('Run or review Storyteller')) return { target: 'Story', path: '/story' };
+  if (action.startsWith('Assign blocked print')) return { target: 'Prints', path: '/prints' };
+  return { target: 'Overview', path: '/' };
 }
 
 function readinessActionPriority(action: ReleaseReadinessActionQueueItem): number {

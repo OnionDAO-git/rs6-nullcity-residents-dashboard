@@ -1946,6 +1946,36 @@ pre {
   margin-top: 12px;
 }
 
+.city-readiness-action-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.city-readiness-action-copy strong {
+  grid-column: 1;
+}
+
+.city-readiness-action-copy small {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.city-readiness-action-link {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+  color: var(--s-gold);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-color: rgba(228, 184, 64, 0.45);
+}
+
 .city-panel.span-2 {
   grid-column: span 2;
 }
@@ -3350,6 +3380,16 @@ pre {
   .city-record-list small {
     grid-column: auto;
     white-space: normal;
+  }
+
+  .city-readiness-action-copy {
+    grid-template-columns: 1fr;
+  }
+
+  .city-readiness-action-copy small,
+  .city-readiness-action-link {
+    grid-column: auto;
+    justify-self: start;
   }
 
   .city-card-list .tag,

@@ -3491,9 +3491,12 @@
         {#each cityReleaseReadinessActions as action (action.detail)}
           <article>
             <span class={`tag ${action.tone}`}>{action.label}</span>
-            <div>
+            <div class="city-readiness-action-copy">
               <strong>{action.detail}</strong>
-              <small>Readiness queue</small>
+              <small>Readiness queue · {action.target}</small>
+              <button class="city-readiness-action-link" type="button" onclick={() => cityNav(action.path)}>
+                Open {action.target}
+              </button>
             </div>
           </article>
         {/each}
