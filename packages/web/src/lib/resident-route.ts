@@ -1,4 +1,5 @@
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { ResidentReadModel } from './city-api';
 
 export interface ResidentDetailEmptyStateInput {
   loading: boolean;
@@ -79,6 +80,15 @@ export function resolveResidentRouteId(input: string, rows: ResidentDashboardRow
   const requestedSlug = residentRouteSlug(requested);
   const match = rows.find(row => row.name.toLowerCase() === requested.toLowerCase() || residentRouteSlug(row.name) === requestedSlug);
   return match?.name || requested;
+}
+
+export function findResidentReadModel(rows: ResidentReadModel[], input: string): ResidentReadModel | undefined {
+  const requested = input.trim().toLowerCase();
+  const requestedSlug = residentRouteSlug(requested);
+  return rows.find(row => {
+    const ids = [row.id, row.nullcityResidentId, row.displayName].filter(Boolean).map(value => value.toLowerCase());
+    return ids.some(value => value === requested || residentRouteSlug(value) === requestedSlug);
+  });
 }
 
 export function residentDetailEmptyState(input: ResidentDetailEmptyStateInput): ResidentDetailEmptyState {

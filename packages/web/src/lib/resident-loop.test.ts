@@ -86,6 +86,33 @@ describe('resident loop helpers', () => {
     ]);
   });
 
+  test('adds Soul identity and north-star orientation to public state when available', () => {
+    expect(residentPublicStateTiles(row({
+      attention: 42,
+      thinking: { mode: 'executing', activePlan: 'Keep the square lit and visible.' },
+      stack: {
+        soulId: 'res:duke',
+        soulTitle: 'Duke',
+        soulFile: 'res-duke.md',
+        orientationGoal: {
+          id: 'keep-square-lit',
+          description: 'Keep the square lit and turn firemaking into public myth.',
+          tier: 'pursue',
+        },
+        behaviorKind: 'autonomous',
+        configuredModules: [],
+      },
+      body: { controlHeld: true, latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } } },
+    }))).toEqual([
+      { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
+      { label: 'Soul', value: 'Duke', detail: 'res:duke | res-duke.md | behavior autonomous', tone: 'ok' },
+      { label: 'North star', value: 'Keep the square lit and turn firemaking into public myth.', detail: 'soul orientation | keep-square-lit | pursue', tone: 'ok' },
+      { label: 'AP', value: '42 AP', detail: 'Attention Points life-force is stable.', tone: 'ok' },
+      { label: 'Support need', value: 'steady', detail: 'AP and GP evidence are both visible.', tone: 'ok' },
+      { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
+    ]);
+  });
+
   test('builds current plan/action/speech/story loop signals from live row state', () => {
     expect(residentLoopSignal(row({
       thinking: { mode: 'executing', activePlan: 'Earn GP to fund AP' },

@@ -295,10 +295,16 @@ describe('RuntimeRepository resident feeds', () => {
 
     expect(liveGoal.thinking.activePlan).toBe('Master woodcutting and document a reliable GP route.');
     expect(orientationFallback.thinking.activePlan).toBe('Keep the square lit and turn firemaking into public myth.');
+    expect(orientationFallback.stack?.orientationGoal).toEqual({
+      id: 'keep-square-lit',
+      description: 'Keep the square lit and turn firemaking into public myth.',
+      tier: 'pursue',
+    });
     expect(rows.map(row => row.thinking?.activePlan)).toEqual([
       'Master woodcutting and document a reliable GP route.',
       'Keep the square lit and turn firemaking into public myth.',
     ]);
+    expect(rows[1]?.stack?.orientationGoal?.description).toBe('Keep the square lit and turn firemaking into public myth.');
   });
 
   test('merges trajectory action_result evidence so final timeouts beat gateway acknowledgements', async () => {

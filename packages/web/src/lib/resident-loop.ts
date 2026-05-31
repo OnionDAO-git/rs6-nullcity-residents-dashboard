@@ -460,6 +460,7 @@ export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPub
       detail: row.online ? 'live resident' : 'not currently attached',
       tone: row.online ? 'ok' : 'fail',
     },
+    ...residentPublicIdentityTiles(row),
     {
       label: 'AP',
       value: attentionLabel(row),
@@ -481,6 +482,43 @@ export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPub
       tone: gp.tone,
     },
   ];
+}
+
+function residentPublicIdentityTiles(row: ResidentDashboardRow): ResidentPublicStateTile[] {
+  const tiles: ResidentPublicStateTile[] = [];
+  const stack = row.stack;
+  const soulValue = stack?.soulTitle || stack?.soulId;
+
+  if (soulValue) {
+    const detail = [
+      stack?.soulId && stack.soulId !== soulValue ? stack.soulId : '',
+      stack?.soulFile,
+      stack?.behaviorKind ? `behavior ${stack.behaviorKind}` : '',
+    ].filter(Boolean).join(' | ');
+    tiles.push({
+      label: 'Soul',
+      value: soulValue,
+      detail: detail || 'Soul file linked',
+      tone: 'ok',
+    });
+  }
+
+  const orientation = stack?.orientationGoal?.description?.trim();
+  if (orientation) {
+    const detail = [
+      'soul orientation',
+      stack?.orientationGoal?.id,
+      stack?.orientationGoal?.tier,
+    ].filter(Boolean).join(' | ');
+    tiles.push({
+      label: 'North star',
+      value: orientation,
+      detail,
+      tone: 'ok',
+    });
+  }
+
+  return tiles;
 }
 
 export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSignal {

@@ -1420,6 +1420,7 @@ function buildResidentStack(soul: SoulSummary | undefined, spark: SparkRuntimeSu
     ...(soul?.id ? { soulId: soul.id } : {}),
     ...(soul?.title ? { soulTitle: soul.title } : {}),
     ...(soul?.file ? { soulFile: soul.file } : {}),
+    ...(soul?.orientationGoal ? { orientationGoal: soul.orientationGoal } : {}),
     ...(soul?.model ? { model: soul.model } : {}),
     ...(soul?.behavior?.kind ? { behaviorKind: soul.behavior.kind } : {}),
     ...(soul?.behavior?.brain ? { brain: soul.behavior.brain } : {}),

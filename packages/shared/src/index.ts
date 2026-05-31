@@ -142,6 +142,7 @@ export interface ResidentStackSummary {
   soulId?: string;
   soulTitle?: string;
   soulFile?: string;
+  orientationGoal?: SoulSummary['orientationGoal'];
   model?: InferenceProfileSummary;
   behaviorKind?: string;
   brain?: InferenceProfileSummary;

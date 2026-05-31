@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { ResidentReadModel } from './city-api';
 import {
+  findResidentReadModel,
   residentDetailEmptyState,
   residentLoopAvailabilityState,
   residentRosterEmptyState,
@@ -10,6 +12,17 @@ import {
 
 function row(name: string): ResidentDashboardRow {
   return { name, online: true };
+}
+
+function readModel(input: Partial<ResidentReadModel> & Pick<ResidentReadModel, 'id'>): ResidentReadModel {
+  return {
+    nullcityResidentId: input.id,
+    displayName: input.id,
+    status: 'unknown',
+    metadata: {},
+    updatedAt: '2026-05-30T00:00:00.000Z',
+    ...input,
+  };
 }
 
 describe('resident route helpers', () => {
@@ -22,6 +35,17 @@ describe('resident route helpers', () => {
     expect(resolveResidentRouteId('agent', [row('res:agent')])).toBe('res:agent');
     expect(resolveResidentRouteId('RES:AGENT', [row('res:agent')])).toBe('res:agent');
     expect(resolveResidentRouteId('missing', [row('res:agent')])).toBe('missing');
+  });
+
+  test('finds projected resident records from the loaded directory without a detail fetch', () => {
+    const residents = [
+      readModel({ id: 'resident-1', nullcityResidentId: 'res:hans', displayName: 'Hans' }),
+      readModel({ id: 'resident-2', nullcityResidentId: 'res:qa-woodcutter', displayName: 'QA Woodcutter' }),
+    ];
+
+    expect(findResidentReadModel(residents, 'qa-woodcutter')?.displayName).toBe('QA Woodcutter');
+    expect(findResidentReadModel(residents, 'res:qa-woodcutter')?.id).toBe('resident-2');
+    expect(findResidentReadModel(residents, 'missing')).toBeUndefined();
   });
 
   test('keeps resident detail fallback copy honest while live data is loading', () => {
