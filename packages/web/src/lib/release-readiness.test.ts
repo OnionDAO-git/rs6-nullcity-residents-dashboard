@@ -168,6 +168,10 @@ describe('buildReleaseReadiness', () => {
       label: 'Transport',
       value: 'stream',
     });
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'NCRI Prints')).toEqual({
+      label: 'NCRI Prints',
+      value: '1 accepted',
+    });
   });
 
   test('blocks when no residents are visible', () => {
@@ -249,6 +253,27 @@ describe('buildReleaseReadiness', () => {
     expect(summary.nextActions).toContain('Configure the live economy bridge before claiming AP/GP state is current.');
   });
 
+  test('surfaces print loop readiness in compact metric tiles', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [digest()],
+      printInsights: printInsights({ activeRequests: 0, inQueue: 0, ncriTrades: { pending: 0, accepted: 0, failed: 0, recent: [] } }),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'ncri-print')).toMatchObject({
+      tone: 'warn',
+      value: 'no live signal',
+    });
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'NCRI Prints')).toEqual({
+      label: 'NCRI Prints',
+      value: 'no live signal',
+      tone: 'warn',
+    });
+  });
+
   test('blocks when the latest capability proof fails despite other live signals', () => {
     const summary = buildReleaseReadiness({
       residents: [
@@ -301,6 +326,11 @@ describe('buildReleaseReadiness', () => {
     expect(summary.checks.find(check => check.id === 'storyteller')).toMatchObject({ tone: 'warn' });
     expect(summary.checks.find(check => check.id === 'ncri-print')).toMatchObject({ tone: 'warn' });
     expect(summary.nextActions).toContain('Assign blocked print queue entries or avoid the print queue during the demo.');
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'NCRI Prints')).toEqual({
+      label: 'NCRI Prints',
+      value: '1 blocker',
+      tone: 'warn',
+    });
   });
 
   test('blocks when a visible resident has a failed latest action outcome', () => {
@@ -370,6 +400,7 @@ describe('buildReleaseReadiness', () => {
 
     expect(tiles.map(tile => tile.label)).toEqual([
       'Residents',
+      'NCRI Prints',
       'Plans',
       'Action Risks',
       'Low AP',

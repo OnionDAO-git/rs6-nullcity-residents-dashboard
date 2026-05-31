@@ -152,6 +152,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
 export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): ReleaseReadinessMetricTile[] {
   const { metrics } = summary;
   const economyTransport = summary.checks.find(check => check.id === 'economy-transport');
+  const ncriPrint = summary.checks.find(check => check.id === 'ncri-print');
   return [
     { label: 'Residents', value: `${metrics.onlineResidents.toLocaleString()}/${metrics.residents.toLocaleString()}` },
     ...(economyTransport
@@ -159,6 +160,13 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
         label: 'Transport',
         value: economyTransport.value,
         ...(economyTransport.tone !== 'ok' ? { tone: economyTransport.tone } : {}),
+      }]
+      : []),
+    ...(ncriPrint
+      ? [{
+        label: 'NCRI Prints',
+        value: ncriPrint.value,
+        ...(ncriPrint.tone !== 'ok' ? { tone: ncriPrint.tone } : {}),
       }]
       : []),
     { label: 'Plans', value: metrics.activePlans.toLocaleString() },
