@@ -292,6 +292,7 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Review and clear')) return 'Review Storyteller';
   if (action.startsWith('Review Storyteller grounding')) return 'Review grounding';
   if (action.startsWith('Run Storyteller with grounded')) return 'Ground Story';
+  if (action.startsWith('Run `npm run storyteller:dry-run')) return 'Run dry-run';
   if (action.startsWith('Run or review Storyteller')) return 'Review Storyteller';
   if (action.startsWith('Assign blocked print')) return 'Check prints';
   return 'Next action';
@@ -312,7 +313,7 @@ function readinessActionPriority(action: ReleaseReadinessActionQueueItem): numbe
   if (action.label === 'Top up AP') return 30;
   if (action.label === 'Prove GP') return 40;
   if (action.label === 'Run capability QA') return 50;
-  if (action.label === 'Review Storyteller' || action.label === 'Review grounding' || action.label === 'Ground Story') return 60;
+  if (action.label === 'Review Storyteller' || action.label === 'Review grounding' || action.label === 'Ground Story' || action.label === 'Run dry-run') return 60;
   return 100;
 }
 
@@ -732,6 +733,8 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
       actions.push('Review Storyteller grounding audit before using public canon narration.');
     } else if (byId.get('storyteller')?.value.includes('no top events')) {
       actions.push('Run Storyteller with grounded event evidence before using public canon narration.');
+    } else if (byId.get('storyteller')?.value.includes('no digest')) {
+      actions.push('Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.');
     } else {
       actions.push('Run or review Storyteller before using public canon narration.');
     }

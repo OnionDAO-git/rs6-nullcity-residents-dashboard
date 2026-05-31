@@ -555,6 +555,30 @@ describe('buildReleaseReadiness', () => {
     });
   });
 
+  test('points no-digest Storyteller readiness at the deterministic dry-run command', () => {
+    const summary = buildReleaseReadiness({
+      residents: [resident()],
+      storyDigests: [],
+      printInsights: printInsights(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.checks.find(check => check.id === 'storyteller')).toEqual({
+      id: 'storyteller',
+      label: 'Storyteller',
+      tone: 'warn',
+      value: 'no digest',
+      detail: 'No Storyteller digest is available for operator or public narrative context.',
+    });
+    expect(summary.nextActions).toContain('Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.');
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Run dry-run',
+      tone: 'warn',
+      detail: 'Run `npm run storyteller:dry-run -- --fixture` and open the Storyteller feed before using public canon narration.',
+    });
+  });
+
   test('prioritizes latest zero-top-event grounding warning over older review backlog', () => {
     const summary = buildReleaseReadiness({
       residents: [resident()],
