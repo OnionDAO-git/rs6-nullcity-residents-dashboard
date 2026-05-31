@@ -5511,7 +5511,7 @@
           {#if !cityNullcityBridgeAvailable}
             <div class="city-empty-state">
               <strong>Null City control bridge unavailable</strong>
-              <span>Set `NULLCITY_CITY_API_URL` and `NULLCITY_CITY_API_TOKEN` on the dashboard server to approve, reject, or birth controller-backed proposals.</span>
+              <span>Connect the Null City control bridge on the dashboard server to approve, reject, or birth controller-backed proposals.</span>
               {#if cityNullcityBridgeError}<small>{cityNullcityBridgeError}</small>{/if}
             </div>
           {:else}
@@ -5535,7 +5535,7 @@
                   </div>
                 </article>
               {:else}
-                <div class="city-empty-state"><strong>No controller proposals</strong><span>Controller-backed proposals from `/api/nullcity/proposals` appear here.</span></div>
+                <div class="city-empty-state"><strong>No controller proposals</strong><span>Controller-backed proposals appear here once the bridge returns a proposal queue.</span></div>
               {/each}
             </div>
           {/if}
