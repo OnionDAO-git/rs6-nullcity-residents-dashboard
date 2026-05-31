@@ -82,4 +82,11 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain('public event endpoints are running');
     expect(appSource).toContain('This profile will appear after the attendee handle has public AP, resident, or letter history.');
   });
+
+  test('keeps public profile inbox links in attendee routes instead of debug APIs', () => {
+    expect(appSource).not.toContain('Public profile from `/v1/patron/*` and `/v1/inbox`');
+    expect(appSource).not.toContain('/debug/inbox/?human=');
+    expect(appSource).toContain('Public AP, Embassy standing, resident relationships, and inbox readiness.');
+    expect(appSource).toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
+  });
 });

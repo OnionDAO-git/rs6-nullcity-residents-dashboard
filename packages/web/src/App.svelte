@@ -4189,7 +4189,7 @@
           <div>
             <strong>{cityPublicPatronProfile.displayName}</strong>
             <span>{publicPatronStandingLabel(cityPublicPatronProfile)}</span>
-            <small>Public profile from `/v1/patron/*` and `/v1/inbox`</small>
+            <small>Public AP, Embassy standing, resident relationships, and inbox readiness.</small>
           </div>
         </div>
         <div class="city-panel">
@@ -4224,7 +4224,7 @@
               <span>AP grants, resident replies, and epitaphs will make this profile feel alive.</span>
             </div>
           {/if}
-          <a class="city-link-button" href={`/debug/inbox/?human=${encodeURIComponent(cityPublicPatronProfile.human)}`}>Open Inbox</a>
+          <button class="city-link-button" onclick={() => cityNav('/inbox')}>Open Your Inbox</button>
         </div>
         <div class="city-panel span-2">
           <div class="panel-title">Residents Touched</div>
