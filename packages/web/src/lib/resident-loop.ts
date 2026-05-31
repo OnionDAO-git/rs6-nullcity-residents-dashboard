@@ -61,6 +61,13 @@ export interface ResidentAttentionRunway {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+export interface ResidentMemoryFreshness {
+  label: 'fresh' | 'stale' | 'thin';
+  summary: string;
+  detail: string;
+  tone: 'ok' | 'warn';
+}
+
 export interface ResidentProofRollupAction {
   label: string;
   tone: 'warn' | 'fail';
@@ -226,7 +233,14 @@ export function residentLoopSummaryLine(row: ResidentDashboardRow): string {
   const model = modelParts(row).value;
   const module = activeModule(row)?.id || 'no SPARK';
   const action = row.body?.lastAction?.kind || row.lastEvent?.kind || 'no action';
-  const ap = residentNeedsAp(row) ? 'needs AP' : row.attention === undefined ? 'AP unknown' : `${row.attention} AP`;
+  const runway = residentAttentionRunway(row);
+  const ap = runway.label === 'unknown'
+    ? 'AP unknown'
+    : runway.label === 'empty' || runway.label === 'floor'
+      ? 'needs AP'
+      : runway.label === 'short'
+        ? 'AP runway short'
+        : runway.value;
   const gp = residentGoldEvidenceLabel(row).value === 'not observed' ? 'GP unobserved' : residentGoldEvidenceLabel(row).value;
   return `${model} · ${module} · ${action} · ${ap} · ${gp}`;
 }
@@ -244,12 +258,16 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
   const action = row.body?.lastAction?.kind || row.lastEvent?.kind;
   const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
   const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
-  const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
   const gp = residentGoldEvidenceLabel(row);
   const apRunway = residentAttentionRunway(row);
+  const memory = residentMemoryFreshness(row);
   const needsAp = residentNeedsAp(row);
   const needsGpEvidence = gp.value === 'not observed';
-  const storyValue = row.storyArc?.summary || row.storyArc?.latestEventKind || signals.storyteller?.summary || '-';
+  const storyValue = memory.label === 'thin' ? signals.storyteller?.summary || '-' : memory.summary;
+  const storyDetailParts = [
+    memory.label === 'thin' ? '' : memory.detail,
+    signals.storyteller?.summary,
+  ].filter(Boolean);
 
   return [
     {
@@ -281,8 +299,8 @@ export function residentIntentFacts(row: ResidentDashboardRow, signals: Resident
     {
       label: 'Remembers',
       value: storyValue,
-      detail: signals.storyteller?.summary || (row.storyArc ? ['Library evidence', storyFreshness].filter(Boolean).join(' | ') : 'no Library or Storyteller evidence yet'),
-      tone: signals.storyteller?.tone || (row.storyArc ? 'ok' : 'warn'),
+      detail: storyDetailParts.join(' | ') || signals.storyteller?.detail || 'no Library or Storyteller evidence yet',
+      tone: memory.tone === 'ok' || signals.storyteller?.tone === 'ok' ? 'ok' : 'warn',
     },
   ];
 }
@@ -380,6 +398,26 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
     title: 'Waiting for a live moment',
     detail: 'No speech, action, story, or plan signal yet.',
     tone: 'warn',
+  };
+}
+
+export function residentMemoryFreshness(row: ResidentDashboardRow): ResidentMemoryFreshness {
+  const storyTitle = row.storyArc?.summary || row.storyArc?.latestEventKind;
+  if (!storyTitle) {
+    return {
+      label: 'thin',
+      summary: 'No Library memory yet',
+      detail: 'No current Library story signal.',
+      tone: 'warn',
+    };
+  }
+
+  const freshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
+  return {
+    label: isTickStale(freshness) ? 'stale' : 'fresh',
+    summary: truncateAgencyText(storyTitle, 96),
+    detail: ['Library memory', storyDetail(row), freshness].filter(Boolean).join(' | '),
+    tone: isTickStale(freshness) ? 'warn' : 'ok',
   };
 }
 
@@ -497,6 +535,11 @@ export function residentNeedsAp(row: ResidentDashboardRow): boolean {
   return typeof row.attention === 'number' && row.attention <= LOW_AP_THRESHOLD;
 }
 
+export function residentNeedsApSupportSoon(row: ResidentDashboardRow): boolean {
+  const runway = residentAttentionRunway(row);
+  return runway.label === 'empty' || runway.label === 'floor' || runway.label === 'short';
+}
+
 export function residentAttentionRunway(row: ResidentDashboardRow): ResidentAttentionRunway {
   if (row.attention === undefined) {
     return {
@@ -563,12 +606,14 @@ export function residentCoinEvidenceAmount(row: ResidentDashboardRow): number {
 export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPublicStateTile[] {
   const gp = residentGoldEvidenceLabel(row);
   const apRunway = residentAttentionRunway(row);
-  const needsAp = residentNeedsAp(row);
+  const needsAp = residentNeedsApSupportSoon(row);
   const needsGpEvidence = gp.tone === 'warn';
   const supportNeed = needsAp
     ? {
-        value: 'AP support',
-        detail: 'Resident is at or below the AP safety floor.',
+        value: apRunway.label === 'short' ? 'AP watch' : 'AP support',
+        detail: apRunway.label === 'short'
+          ? 'Resident is above the AP floor but runway is short; top up soon.'
+          : 'Resident is at or below the AP safety floor.',
         tone: 'warn' as const,
       }
     : needsGpEvidence
@@ -912,7 +957,7 @@ export function residentTriageSummary(
   }
 
   const offlineRows = rows.filter(row => !row.online);
-  const lowApRows = rows.filter(row => row.online && residentNeedsAp(row));
+  const lowApRows = rows.filter(row => row.online && residentNeedsApSupportSoon(row));
   const quietRows = rows.filter(row => {
     if (!row.online) return false;
     const checkpoints = residentLoopCheckpoints(row);
@@ -941,7 +986,7 @@ export function residentTriageSummary(
 
   const buckets: ResidentTriageBucket[] = [
     makeTriageBucket('offline', 'Offline', 'fail', offlineRows, 'Login or AP top-up may be required before new action proof appears.'),
-    makeTriageBucket('attention', 'Low AP', 'warn', lowApRows, 'Residents at or below the AP safety floor need support soon.'),
+    makeTriageBucket('attention', 'Low AP', 'warn', lowApRows, 'Residents at or near the AP safety floor need support soon.'),
     makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
     makeTriageBucket('action', 'Action outcome', 'fail', actionOutcomeRows, 'Latest action result timed out or failed; inspect before trusting liveness.'),
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
@@ -1169,7 +1214,7 @@ function recentSpeechSignal(row: ResidentDashboardRow): { text: string; source: 
 function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPulseSignals): ResidentProofCheck[] {
   const actionOutcome = residentActionOutcome(row);
   return [
-    { label: 'AP', ok: !residentNeedsAp(row) },
+    { label: 'AP', ok: !residentNeedsApSupportSoon(row) },
     { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
     { label: actionOutcome.failed ? 'Action outcome' : 'Action', ok: actionOutcome.ok },
     { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },

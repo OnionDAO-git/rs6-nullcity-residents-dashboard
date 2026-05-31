@@ -24,7 +24,8 @@
     residentLoopCheckpoints,
     residentLoopSignal,
     residentLoopSummaryLine,
-    residentNeedsAp,
+    residentMemoryFreshness,
+    residentNeedsApSupportSoon,
     residentOperatorWarnings,
     residentProofPulse,
     residentProofRollup,
@@ -5244,6 +5245,7 @@
       {@const agencyCue = residentAgencyCue(row, { benchmark, economyGp, storyteller: storySignal })}
       {@const liveMoment = residentLiveMoment(row)}
       {@const apRunway = residentAttentionRunway(row)}
+      {@const memoryFreshness = residentMemoryFreshness(row)}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
@@ -5258,10 +5260,11 @@
         <small class={`city-resident-loop-line tone-${actionCheckpoint?.tone || 'warn'}`}>Action: {residentLoopLine(signal.action, 60)}</small>
         <small class={`city-resident-loop-line tone-${speechCheckpoint?.tone || 'warn'}`}>Speech: {residentLoopLine(signal.speech, 72)}</small>
         <small class={`city-resident-loop-line tone-${storyCheckpoint?.tone || 'warn'}`}>Story: {residentLoopLine(signal.story, 72)}</small>
+        <small class={`city-resident-loop-line tone-${memoryFreshness.tone}`}>Memory: {residentLoopLine(`${memoryFreshness.label} · ${memoryFreshness.summary} · ${memoryFreshness.detail}`, 80)}</small>
         <small class={`city-resident-loop-line tone-${pulse.tone}`}>Proof: {residentLoopLine(`${pulse.summary} · ${pulse.detail}`, 80)}</small>
         <small class="city-resident-loop-line">Capability: {residentLoopLine(warning.summary, 76)}</small>
         <small class="city-resident-loop-line">Storyteller: {residentLoopLine(storySignal.summary, 76)}</small>
-        <em class:warn={residentNeedsAp(row)}>{row.attention ?? '-'} AP</em>
+        <em class:warn={residentNeedsApSupportSoon(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}
       {@const rosterHeartbeat = cityEconomyHeartbeat.heartbeat}

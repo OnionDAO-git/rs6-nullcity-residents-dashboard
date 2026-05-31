@@ -13,7 +13,9 @@ import {
   residentLoopCheckpoints,
   residentLoopSignal,
   residentLoopSummaryLine,
+  residentMemoryFreshness,
   residentNeedsAp,
+  residentNeedsApSupportSoon,
   residentOperatorWarnings,
   residentProofPulse,
   residentProofRollup,
@@ -76,6 +78,12 @@ describe('resident loop helpers', () => {
     expect(residentLoopSummaryLine(row({ attention: 100 }))).toContain('GP unobserved');
   });
 
+  test('treats short AP runway as support-soon even above the hard floor', () => {
+    expect(residentNeedsApSupportSoon(row({ attention: 18 }))).toBe(true);
+    expect(residentNeedsAp(row({ attention: 18 }))).toBe(false);
+    expect(residentLoopSummaryLine(row({ attention: 18 }))).toContain('AP runway short');
+  });
+
   test('describes AP as a runway above or below the support floor', () => {
     expect(residentAttentionRunway(row())).toEqual({
       label: 'unknown',
@@ -117,6 +125,18 @@ describe('resident loop helpers', () => {
       { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
       { label: 'AP', value: '2 AP', detail: 'At/below 10 AP support floor.', tone: 'warn' },
       { label: 'Support need', value: 'AP support', detail: 'Resident is at or below the AP safety floor.', tone: 'warn' },
+      { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
+    ]);
+  });
+
+  test('marks short AP runway as AP watch in public state tiles', () => {
+    expect(residentPublicStateTiles(row({
+      attention: 18,
+      body: { controlHeld: true, latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } } },
+    }))).toEqual([
+      { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
+      { label: 'AP', value: '18 AP', detail: '8 AP above support floor.', tone: 'warn' },
+      { label: 'Support need', value: 'AP watch', detail: 'Resident is above the AP floor but runway is short; top up soon.', tone: 'warn' },
       { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
     ]);
   });
@@ -208,7 +228,7 @@ describe('resident loop helpers', () => {
       { label: 'Needs', value: 'AP support', detail: 'At/below 10 AP support floor. · GP not observed', tone: 'warn' },
       { label: 'Did', value: 'pickup_item', detail: 'success | thinking | goal:ap-gp | tick 2048 (current)', tone: 'ok' },
       { label: 'Said', value: 'I need AP, but coin 995 is nearby.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
-      { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'City dispatch cited this resident.', tone: 'ok' },
+      { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'Library memory | city_attention_credit @ 2048 | tick 2048 (current) | City dispatch cited this resident.', tone: 'ok' },
     ]);
   });
 
@@ -301,6 +321,64 @@ describe('resident loop helpers', () => {
       title: 'Waiting for reconnect',
       detail: 'Resident is offline in the live controller snapshot.',
       tone: 'fail',
+    });
+  });
+
+  test('describes Library memory freshness as fresh, stale, or thin', () => {
+    expect(residentMemoryFreshness(row({
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 1000,
+          nearby: { players: 0, npcs: 0, objects: 1, worldItems: 0 },
+          events: 1,
+          availableActions: 3,
+        },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'The resident made progress.',
+        latestEventKind: 'city_attention_credit',
+        latestEventTick: 90,
+      },
+    }))).toEqual({
+      label: 'fresh',
+      summary: 'The resident made progress.',
+      detail: 'Library memory | city_attention_credit @ 90 | tick 90 (10 behind)',
+      tone: 'ok',
+    });
+
+    expect(residentMemoryFreshness(row({
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          tick: 2000,
+          ageMs: 1000,
+          nearby: { players: 0, npcs: 0, objects: 1, worldItems: 0 },
+          events: 1,
+          availableActions: 3,
+        },
+      },
+      storyArc: {
+        phase: 'progress',
+        latestEventKind: 'city_attention_credit',
+        latestEventTick: 100,
+      },
+    }))).toEqual({
+      label: 'stale',
+      summary: 'city_attention_credit',
+      detail: 'Library memory | city_attention_credit @ 100 | tick 100 (1900 behind, stale)',
+      tone: 'warn',
+    });
+
+    expect(residentMemoryFreshness(row())).toEqual({
+      label: 'thin',
+      summary: 'No Library memory yet',
+      detail: 'No current Library story signal.',
+      tone: 'warn',
     });
   });
 
@@ -778,7 +856,7 @@ describe('resident loop helpers', () => {
           tone: 'warn',
           count: 1,
           residents: ['res:low'],
-          detail: 'Residents at or below the AP safety floor need support soon.',
+          detail: 'Residents at or near the AP safety floor need support soon.',
         },
         {
           key: 'quiet',
