@@ -677,9 +677,29 @@ describe('resident loop helpers', () => {
       label: 'Demo pick',
       residentName: 'res:woodcutter',
       target: 'Grant Attention',
-      path: '/residents/woodcutter',
+      path: '/residents?triage=offline',
       action: 'Reconnect resident',
       detail: 'woodcutter needs attention first: Resident is offline in the live controller snapshot.',
+    });
+  });
+
+  test('routes fallback demo picks to the matching resident triage bucket', () => {
+    expect(residentDemoPickCue([row({
+      name: 'res:offline',
+      online: false,
+    })])).toMatchObject({
+      residentName: 'res:offline',
+      action: 'Reconnect resident',
+      path: '/residents?triage=offline',
+    });
+
+    expect(residentDemoPickCue([row({
+      name: 'res:low-ap',
+      attention: 1,
+    })])).toMatchObject({
+      residentName: 'res:low-ap',
+      action: 'Top up AP',
+      path: '/residents?triage=attention',
     });
   });
 

@@ -1123,7 +1123,7 @@ export function residentDemoPickCue(
       label: 'Demo pick',
       residentName: fallback.row.name,
       target: fallback.nextStep.target,
-      path: residentDemoPickResidentPath(fallback.row.name),
+      path: residentDemoPickFallbackPath(fallback.nextStep.action, fallback.row.name),
       action: fallback.nextStep.action,
       detail: `${residentShortName(fallback.row.name)} needs attention first: ${fallback.warning.summary}`,
     };
@@ -1141,6 +1141,23 @@ export function residentDemoPickCue(
 
 function residentDemoPickResidentPath(name: string): string {
   return `/residents/${encodeURIComponent(residentRouteSlug(name))}`;
+}
+
+function residentDemoPickFallbackPath(action: string, name: string): string {
+  const triageKey = residentDemoPickTriageKey(action);
+  return triageKey ? `/residents?triage=${triageKey}` : residentDemoPickResidentPath(name);
+}
+
+function residentDemoPickTriageKey(action: string): string | undefined {
+  if (action === 'Reconnect resident') return 'offline';
+  if (action === 'Top up AP') return 'attention';
+  if (action === 'Inspect recovery loop') return 'recovery';
+  if (action === 'Repair latest action') return 'action';
+  if (action === 'Publish active plan') return 'plan';
+  if (action === 'Capture GP proof') return 'gp';
+  if (action === 'Ground story evidence') return 'story';
+  if (action === 'Run capability proof') return 'benchmark';
+  return undefined;
 }
 
 function demoPickToneRank(tone: ResidentDemoPickCue['tone']): number {
