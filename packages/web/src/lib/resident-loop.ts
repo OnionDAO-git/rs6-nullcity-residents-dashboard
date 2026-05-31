@@ -215,7 +215,7 @@ export interface ResidentProofPulseSignals {
   benchmark?: ResidentBenchmarkSignal;
   goalContract?: { tone: 'ok' | 'warn'; summary: string };
   economyGp?: { tone: 'ok' | 'warn'; summary: string; detail: string } | undefined;
-  storyteller?: { tone: 'ok' | 'warn'; summary: string };
+  storyteller?: { tone: 'ok' | 'warn'; summary: string; detail?: string };
 }
 
 interface ResidentProofCheck {
@@ -849,6 +849,95 @@ export function residentGuestTrailGuideCopy(pulse: ResidentGuestTrailPulse): Res
       memoryEvidence > 0 ? 'Memory is backed by qmd facts/*.md snippets.' : '',
     ].filter(Boolean).join(' '),
   };
+}
+
+export function residentLoopCoverageFacts(
+  rows: ResidentDashboardRow[],
+  resolveSignals: (row: ResidentDashboardRow) => ResidentProofPulseSignals = () => ({}),
+): ResidentLoopFact[] {
+  const onlineRows = rows.filter(row => row.online);
+  const online = onlineRows.length;
+
+  if (online === 0) {
+    return [
+      coverageFact('Stack', 'syncing', 'waiting for online residents before reading model, endpoint, or SPARK', 'warn'),
+      coverageFact('Goal/action', 'syncing', 'waiting for online residents before linking goals to actions', 'warn'),
+      coverageFact('Speech', 'syncing', 'waiting for online residents before reading live speech', 'warn'),
+      coverageFact('Story digest', 'syncing', 'waiting for online residents before matching Storyteller evidence', 'warn'),
+      coverageFact('AP/GP', 'syncing', 'waiting for online residents before reading AP or coin-995 proof', 'warn'),
+      coverageFact('Capability warnings', 'syncing', 'waiting for proof pulse signals', 'warn'),
+    ];
+  }
+
+  let stackReady = 0;
+  let goalLinked = 0;
+  let speechLive = 0;
+  let storyCited = 0;
+  let apStable = 0;
+  let gpVisible = 0;
+  let proofClear = 0;
+  let proofWarn = 0;
+  let proofFail = 0;
+
+  for (const row of onlineRows) {
+    const signals = resolveSignals(row);
+    const model = modelIdentityParts(row);
+    const endpoint = endpointParts(row);
+    if (model.value !== '-' && endpoint.value !== '-' && activeModule(row)) stackReady += 1;
+    if (residentGoalActionLink(row).tone === 'ok') goalLinked += 1;
+    if (residentLoopCheckpoints(row).find(checkpoint => checkpoint.key === 'speech')?.tone === 'ok') speechLive += 1;
+    if (signals.storyteller?.tone === 'ok') storyCited += 1;
+    if (!residentNeedsApSupportSoon(row)) apStable += 1;
+    if (residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok') gpVisible += 1;
+
+    const pulse = residentProofPulse(row, signals);
+    if (pulse.tone === 'ok') proofClear += 1;
+    else if (pulse.tone === 'fail') proofFail += 1;
+    else proofWarn += 1;
+  }
+
+  return [
+    coverageCountFact('Stack', stackReady, online, 'complete', 'model, endpoint, and SPARK visible'),
+    coverageCountFact('Goal/action', goalLinked, online, 'linked', 'active goal tied to latest action cause'),
+    coverageCountFact('Speech', speechLive, online, 'live', 'recent say/feed line visible'),
+    coverageCountFact('Story digest', storyCited, online, 'cited', 'resident-specific Storyteller evidence'),
+    coverageFact(
+      'AP/GP',
+      `${apStable.toLocaleString()}/${online.toLocaleString()} AP · ${gpVisible.toLocaleString()}/${online.toLocaleString()} GP`,
+      'AP runway stable and coin-995/economy GP proof visible',
+      apStable === online && gpVisible === online ? 'ok' : 'warn',
+    ),
+    coverageFact(
+      'Capability warnings',
+      `${proofClear.toLocaleString()}/${online.toLocaleString()} clear`,
+      `${proofFail.toLocaleString()} fail · ${proofWarn.toLocaleString()} warn from proof pulse`,
+      proofFail > 0 ? 'fail' : proofWarn > 0 ? 'warn' : 'ok',
+    ),
+  ];
+}
+
+function coverageCountFact(
+  label: string,
+  count: number,
+  total: number,
+  noun: string,
+  detail: string,
+): ResidentLoopFact {
+  return coverageFact(
+    label,
+    `${count.toLocaleString()}/${total.toLocaleString()} ${noun}`,
+    detail,
+    count === total ? 'ok' : 'warn',
+  );
+}
+
+function coverageFact(
+  label: string,
+  value: string,
+  detail: string,
+  tone: NonNullable<ResidentLoopFact['tone']>,
+): ResidentLoopFact {
+  return { label, value, detail, tone };
 }
 
 export function residentNormalLifeAuditSignal(runs: BenchmarkArtifactSummary[]): ResidentNormalLifeAuditSignal {
@@ -1823,6 +1912,63 @@ export function residentLivenessDetail(
       { label: 'Memory', value: memory.label, detail: `${memory.summary}; ${memory.detail}`, tone: memory.tone },
     ],
   };
+}
+
+export function residentLoopCoverageStrip(
+  row: ResidentDashboardRow,
+  signals: ResidentProofPulseSignals = {},
+): ResidentLoopFact[] {
+  const ap = residentAttentionRunway(row);
+  const gp = residentPublicGpEvidenceLabel(row, signals.economyGp);
+  const checkpoints = residentLoopCheckpoints(row);
+  const plan = checkpoints.find(checkpoint => checkpoint.key === 'plan');
+  const speech = checkpoints.find(checkpoint => checkpoint.key === 'speech');
+  const story = checkpoints.find(checkpoint => checkpoint.key === 'story');
+  const action = row.body?.lastAction?.kind || row.lastEvent?.kind || '-';
+  const actionOutcome = residentActionOutcome(row);
+  const warnings = residentOperatorWarnings(row, signals.benchmark, { economyGp: signals.economyGp });
+  const warningDensity = residentWarningDensityLine(warnings);
+  const capabilityTone = signals.benchmark?.tone || warningDensity.tone;
+
+  return [
+    residentStackFact(row),
+    {
+      label: 'Goal/Action',
+      value: plan?.value || '-',
+      detail: [action, actionDetailWithoutCause(row)].filter(Boolean).join(' | '),
+      tone: worstTone(plan?.tone || 'warn', actionOutcome.failed ? 'fail' : actionOutcome.ok ? 'ok' : 'warn'),
+    },
+    {
+      label: 'Speech',
+      value: speech?.value || '-',
+      detail: speech?.detail || 'no recent speech in feed',
+      tone: speech?.tone || 'warn',
+    },
+    {
+      label: 'Story Digest',
+      value: signals.storyteller?.summary || story?.value || '-',
+      detail: signals.storyteller?.detail || story?.detail || 'no Storyteller digest signal loaded',
+      tone: signals.storyteller?.tone || story?.tone || 'warn',
+    },
+    {
+      label: 'AP/GP',
+      value: `${ap.value} / ${gp.value}`,
+      detail: `${ap.detail} | ${gp.detail}`,
+      tone: worstTone(ap.tone, gp.tone),
+    },
+    {
+      label: 'Capability',
+      value: signals.benchmark?.summary || (warningDensity.tone === 'ok' ? 'No active warnings' : warningDensity.text),
+      detail: signals.benchmark?.detail || warningDensity.text,
+      tone: capabilityTone,
+    },
+  ];
+}
+
+function worstTone(...tones: Array<'ok' | 'warn' | 'fail' | undefined>): 'ok' | 'warn' | 'fail' {
+  if (tones.includes('fail')) return 'fail';
+  if (tones.includes('warn')) return 'warn';
+  return 'ok';
 }
 
 function livenessToneRank(tone: ResidentLivenessLedgerEntry['tone']): number {

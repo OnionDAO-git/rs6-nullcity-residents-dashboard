@@ -29,6 +29,8 @@
     residentLivenessLedger,
     residentLiveMoment,
     residentLoopCheckpoints,
+    residentLoopCoverageFacts,
+    residentLoopCoverageStrip,
     residentLoopSignal,
     residentLoopSummaryLine,
     residentMemoryEvidenceFacts,
@@ -245,6 +247,7 @@
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentApSupport = residentApSupportRecommendation(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
+  let cityResidentLoopCoverage: ResidentLoopFact[] = [];
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
   let cityResidentTriageFocus: ResidentTriageBucketKey | '' = '';
   let cityResidentDemoPick = residentDemoPickCue([]);
@@ -484,6 +487,7 @@
   $: cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
   $: cityNormalLifeAudit = residentNormalLifeAuditSignal(cityBenchmarkRuns);
   $: cityResidentProofRollup = residentProofRollup(cityResidents, cityResidentRosterSignals);
+  $: cityResidentLoopCoverage = residentLoopCoverageFacts(cityResidents, cityResidentRosterSignals);
   $: cityResidentTriage = residentTriageSummary(cityResidents, cityResidentRosterSignals);
   $: cityResidentTriageFocus = !isDebugRoute && route === '/residents' ? residentTriageFocusFromSearch(browserSearch) : '';
   $: cityResidentLivenessLedger = residentLivenessLedger(cityResidents, cityResidentRosterSignals, 8);
@@ -3695,6 +3699,7 @@
         <button onclick={() => cityNav('/residents')}>Directory</button>
       </div>
       <div class="city-loop-pulse-grid">
+        {@render ResidentLoopFactGrid({ facts: residentLoopCoverageFacts(cityResidents, cityResidentRosterSignals) })}
         {@render ResidentLoopFactGrid({ facts: residentGuestTrailFacts(cityLoopPulse) })}
       </div>
       <div class="city-empty-state subtle">
@@ -4515,6 +4520,10 @@
   </section>
   {@render ResidentTriageStrip({ limit: 8 })}
   <section class="city-dashboard-grid">
+    <div class="city-panel span-2">
+      <div class="panel-title">Resident Loop Coverage</div>
+      {@render ResidentLoopFactGrid({ facts: cityResidentLoopCoverage })}
+    </div>
     <div class="city-panel span-2 resident-liveness-ledger">
       <div class="row">
         <div>
@@ -4715,6 +4724,12 @@
             <p>{livenessDetail.nextDetail}</p>
             <small>Act from: {livenessDetail.nextTarget}</small>
           </div>
+          {@render ResidentLoopFactGrid({ facts: residentLoopCoverageStrip(cityResident, {
+            benchmark: cityResidentBenchmarkStatus,
+            economyGp: cityResidentEconomyGpEvidence,
+            goalContract: cityResidentGoalContract,
+            storyteller: cityResidentStorySignal,
+          }) })}
           {@render ResidentLoopFactGrid({ facts: livenessDetail.facts })}
         </div>
         <div class="city-panel span-2">

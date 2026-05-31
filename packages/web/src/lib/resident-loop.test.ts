@@ -16,7 +16,9 @@ import {
   residentLivenessDetail,
   residentLivenessLedger,
   residentLiveMoment,
+  residentLoopCoverageStrip,
   residentLoopCheckpoints,
+  residentLoopCoverageFacts,
   residentLoopSignal,
   residentLoopSummaryLine,
   residentMemoryEvidenceFacts,
@@ -522,6 +524,62 @@ describe('resident loop helpers', () => {
       limit: 27,
     });
     expect(lines.some(line => line.label === 'Storyteller')).toBe(false);
+  });
+
+  test('builds a compact loop coverage strip for operator scan', () => {
+    const ready = row({
+      name: 'res:ready',
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Trade GP for AP' },
+      stack: {
+        model: { endpoint: 'spacetower', model: 'qwopus3.5-27b-v3@q4_k_s' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.4.0', source: 'soul', activeFacets: ['economy'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 200 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 120 }] } },
+        feed: {
+          attached: true,
+          tick: 200,
+          ageMs: 5000,
+          latestEventKind: 'say',
+          latestEventText: 'I can turn GP into attention.',
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 1 },
+          events: 2,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Collected coin proof.', latestEventKind: 'gp_observed', latestEventTick: 200 },
+      memory: { files: ['facts/economy.md'], facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }] },
+    });
+    const thin = row({
+      name: 'res:thin',
+      attention: 4,
+      thinking: { mode: 'idle' },
+      body: { controlHeld: true },
+    });
+
+    expect(residentLoopCoverageFacts([ready, thin], resident => (
+      resident.name === 'res:ready'
+        ? {
+          benchmark: { tone: 'ok', summary: 'Latest benchmark passed.', detail: 'score 1' },
+          goalContract: { tone: 'ok', summary: 'binary goal live' },
+          storyteller: { tone: 'ok', summary: 'Storyteller cited ready.' },
+        }
+        : {
+          benchmark: { tone: 'warn', summary: 'No recent benchmark.', detail: 'run proof' },
+          storyteller: { tone: 'warn', summary: 'No grounded Storyteller events.' },
+        }
+    ))).toEqual([
+      { label: 'Stack', value: '1/2 complete', detail: 'model, endpoint, and SPARK visible', tone: 'warn' },
+      { label: 'Goal/action', value: '1/2 linked', detail: 'active goal tied to latest action cause', tone: 'warn' },
+      { label: 'Speech', value: '1/2 live', detail: 'recent say/feed line visible', tone: 'warn' },
+      { label: 'Story digest', value: '1/2 cited', detail: 'resident-specific Storyteller evidence', tone: 'warn' },
+      { label: 'AP/GP', value: '1/2 AP · 1/2 GP', detail: 'AP runway stable and coin-995/economy GP proof visible', tone: 'warn' },
+      { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn' },
+    ]);
   });
 
   test('chooses a demo-ready resident before recovery cues', () => {
@@ -2567,6 +2625,64 @@ describe('resident loop helpers', () => {
       value: 'openrouter/haiku | onion.runescape.standard@0.3.0',
       detail: 'model/endpoint and SPARK module identity',
       tone: 'ok',
+    });
+  });
+
+  test('builds a compact resident coverage strip from stack, loop, AP/GP, story, and capability signals', () => {
+    const coverage = residentLoopCoverageStrip(row({
+      name: 'res:coverage',
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+      stack: {
+        model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: [] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'exchange_gp_for_ap', result: 'success', source: 'thinking', tick: 100 },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I can fund AP from coin 995.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof is live.', latestEventKind: 'gp_observed', latestEventTick: 100 },
+    }), {
+      benchmark: { tone: 'warn', summary: 'Capability proof stale', detail: 'run is older than target window' },
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'ap_gp_exchange: exchanged 10 GP for 20 AP' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited this resident', detail: 'digest run story-20260531' },
+    });
+
+    expect(coverage.map(fact => fact.label)).toEqual(['Stack', 'Goal/Action', 'Speech', 'Story Digest', 'AP/GP', 'Capability']);
+    expect(coverage.find(fact => fact.label === 'Stack')).toMatchObject({
+      value: 'openrouter/haiku | onion.runescape.standard@0.3.0',
+      tone: 'ok',
+    });
+    expect(coverage.find(fact => fact.label === 'Goal/Action')).toMatchObject({
+      value: 'Earn GP for AP',
+      detail: 'exchange_gp_for_ap | success | thinking',
+      tone: 'ok',
+    });
+    expect(coverage.find(fact => fact.label === 'Story Digest')).toMatchObject({
+      value: 'Storyteller cited this resident',
+      detail: 'digest run story-20260531',
+      tone: 'ok',
+    });
+    expect(coverage.find(fact => fact.label === 'AP/GP')).toMatchObject({
+      value: '75 AP / recent GP proof',
+      detail: '65 AP above support floor. | ap_gp_exchange: exchanged 10 GP for 20 AP',
+      tone: 'ok',
+    });
+    expect(coverage.find(fact => fact.label === 'Capability')).toMatchObject({
+      value: 'Capability proof stale',
+      detail: 'run is older than target window',
+      tone: 'warn',
     });
   });
 
