@@ -27,6 +27,14 @@ export interface EconomyListingsSummary {
   detail: string;
 }
 
+export type EconomyTransportStatus = 'polling' | 'connecting' | 'live' | 'fallback';
+
+export interface EconomyTransportSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  label: string;
+  detail: string;
+}
+
 export interface EconomyEventDisplay {
   kindLabel: string;
   title: string;
@@ -119,6 +127,54 @@ export function summarizeEconomyListings(response: NullCityEconomyListingsBridge
       ? `Latest: ${latest.displayName} from ${latest.sourceResidentName || latest.owner}`
       : 'No approved, available NCRIs are listed for AP/GP trades yet.',
   };
+}
+
+export function summarizeEconomyTransport(
+  status: EconomyTransportStatus,
+  live: NullCityLiveEconomyBridgeResponse | undefined,
+  heartbeat: NullCityEconomyHeartbeatBridgeResponse | undefined,
+): EconomyTransportSummary {
+  if (status === 'live') {
+    return {
+      tone: 'ok',
+      label: 'stream',
+      detail: 'SSE snapshots are updating heartbeat and AP/GP totals.',
+    };
+  }
+
+  if (status === 'connecting') {
+    return {
+      tone: 'warn',
+      label: 'opening stream',
+      detail: 'Trying the economy stream; polling snapshot remains visible.',
+    };
+  }
+
+  if (status === 'fallback') {
+    return {
+      tone: 'warn',
+      label: 'polling',
+      detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
+    };
+  }
+
+  if (!live?.available && !heartbeat?.available) {
+    return {
+      tone: 'warn',
+      label: 'bridge',
+      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+    };
+  }
+
+  return {
+    tone: 'ok',
+    label: 'polling',
+    detail: 'Polling live and heartbeat routes for AP/GP updates.',
+  };
+}
+
+export function economyStreamStatusAfterTimeout(status: EconomyTransportStatus): EconomyTransportStatus {
+  return status === 'connecting' ? 'fallback' : status;
 }
 
 export function economyEventDisplay(event: NullCityLiveEconomyEvent): EconomyEventDisplay {

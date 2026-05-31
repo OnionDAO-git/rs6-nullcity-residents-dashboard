@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy } from './live-economy';
+import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy } from './live-economy';
 import type { NullCityEconomyHeartbeatBridgeResponse, NullCityEconomyListingsBridgeResponse, NullCityLiveEconomyBridgeResponse } from './city-api';
 
 describe('summarizeLiveEconomy', () => {
@@ -125,6 +125,66 @@ describe('summarizeEconomyListings', () => {
       headline: '1 NCRI listed',
       detail: 'Latest: Abyssal Whip of the City from res:hans',
     });
+  });
+});
+
+describe('summarizeEconomyTransport', () => {
+  const liveResponse: NullCityLiveEconomyBridgeResponse = {
+    available: true,
+    snapshot: {
+      asOf: '2026-05-30T18:52:00.000Z',
+      window: { since: '2026-05-30T18:37:00.000Z', windowMs: 900000 },
+      city: { residentCount: 25, activeResidentCount: 23, attentionTotal: 291775, attentionDelta: 100, gpNetDelta: -12 },
+      countsByKind: { ap_topup: 1 },
+      topResidentsByAttention: [],
+      residents: [],
+      recentEvents: [],
+      pendingProposals: [],
+    },
+  };
+
+  test('announces when economy snapshots are arriving over the stream', () => {
+    expect(summarizeEconomyTransport('live', liveResponse, { available: true, heartbeat: {
+      asOf: '2026-05-30T18:52:00.000Z',
+      controllerUptimeSec: 60,
+      residentCount: 25,
+      activeResidentCount: 23,
+      economyEventCount: 48,
+      degradedFlags: [],
+    } })).toEqual({
+      tone: 'ok',
+      label: 'stream',
+      detail: 'SSE snapshots are updating heartbeat and AP/GP totals.',
+    });
+  });
+
+  test('uses polling fallback copy when the stream cannot stay open', () => {
+    expect(summarizeEconomyTransport('fallback', liveResponse, { available: true, heartbeat: {
+      asOf: '2026-05-30T18:52:00.000Z',
+      controllerUptimeSec: 60,
+      residentCount: 25,
+      activeResidentCount: 23,
+      economyEventCount: 48,
+      degradedFlags: [],
+    } })).toEqual({
+      tone: 'warn',
+      label: 'polling',
+      detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
+    });
+  });
+
+  test('keeps bridge-missing copy distinct from a healthy polling fallback', () => {
+    expect(summarizeEconomyTransport('polling', { available: false, error: 'not_configured' }, { available: false, error: 'not_configured' })).toEqual({
+      tone: 'warn',
+      label: 'bridge',
+      detail: 'Set NULLCITY_CITY_API_URL and NULLCITY_CITY_API_TOKEN before stream or polling transport can load.',
+    });
+  });
+
+  test('falls back from a stuck opening stream without downgrading an active stream', () => {
+    expect(economyStreamStatusAfterTimeout('connecting')).toBe('fallback');
+    expect(economyStreamStatusAfterTimeout('live')).toBe('live');
+    expect(economyStreamStatusAfterTimeout('fallback')).toBe('fallback');
   });
 });
 

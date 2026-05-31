@@ -9,7 +9,7 @@
   import { CityApiError, cityApi, optionalCityRead, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
-  import { economyEventDisplay, economyResidentDisplay, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type LiveEconomySummary } from './lib/live-economy';
+  import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
@@ -201,10 +201,12 @@
   let cityEconomyListings: NullCityEconomyListingsBridgeResponse = { available: false, listings: [], error: 'not_loaded' };
   let cityEconomyStream: EventSource | undefined;
   let cityEconomyStreamKey = '';
-  let cityEconomyStreamStatus: 'polling' | 'connecting' | 'live' | 'fallback' = 'polling';
+  let cityEconomyStreamTimeout: ReturnType<typeof setTimeout> | undefined;
+  let cityEconomyStreamStatus: EconomyTransportStatus = 'polling';
   let cityLiveEconomySummary: LiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   let cityEconomyHeartbeatSummary: EconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   let cityEconomyListingsSummary: EconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
+  let cityEconomyTransportSummary: EconomyTransportSummary = summarizeEconomyTransport(cityEconomyStreamStatus, cityLiveEconomy, cityEconomyHeartbeat);
   let cityWorldReadiness: WorldReadinessSummary = buildWorldReadiness({
     authenticated: false,
     onlineResidents: [],
@@ -423,6 +425,7 @@
   $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
   $: cityEconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   $: cityEconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
+  $: cityEconomyTransportSummary = summarizeEconomyTransport(cityEconomyStreamStatus, cityLiveEconomy, cityEconomyHeartbeat);
   $: cityWorldReadiness = buildWorldReadiness({
     authenticated: citySession.authenticated,
     gateway: gatewayStatus,
@@ -1573,16 +1576,22 @@
     cityEconomyStreamKey = streamOptions.key;
     const stream = cityApi.nullcityEconomyStream(streamOptions.query);
     cityEconomyStream = stream;
+    cityEconomyStreamTimeout = setTimeout(() => {
+      if (cityEconomyStream !== stream) return;
+      cityEconomyStreamStatus = economyStreamStatusAfterTimeout(cityEconomyStreamStatus);
+    }, 2500);
     stream.addEventListener('economy_snapshot', event => {
       if (cityEconomyStream !== stream) return;
       const snapshot = parseCityEconomyStreamSnapshot((event as MessageEvent).data);
       if (!snapshot) return;
+      clearCityEconomyStreamTimeout();
       cityLiveEconomy = { available: true, snapshot: snapshot.live };
       cityEconomyHeartbeat = { available: true, heartbeat: snapshot.heartbeat };
       cityEconomyStreamStatus = 'live';
     });
     stream.onerror = () => {
       if (cityEconomyStream !== stream) return;
+      clearCityEconomyStreamTimeout();
       closeCityEconomyStream('fallback');
     };
   }
@@ -1598,11 +1607,18 @@
     return undefined;
   }
 
-  function closeCityEconomyStream(nextStatus: 'polling' | 'connecting' | 'fallback' = 'polling') {
+  function closeCityEconomyStream(nextStatus: Extract<EconomyTransportStatus, 'polling' | 'connecting' | 'fallback'> = 'polling') {
+    clearCityEconomyStreamTimeout();
     cityEconomyStream?.close();
     cityEconomyStream = undefined;
     cityEconomyStreamKey = '';
     cityEconomyStreamStatus = nextStatus;
+  }
+
+  function clearCityEconomyStreamTimeout() {
+    if (!cityEconomyStreamTimeout) return;
+    clearTimeout(cityEconomyStreamTimeout);
+    cityEconomyStreamTimeout = undefined;
   }
 
   function parseCityEconomyStreamSnapshot(data: string): NullCityLiveEconomyStreamSnapshot | undefined {
@@ -1618,13 +1634,6 @@
       // Polling remains active if a malformed SSE frame slips through.
     }
     return undefined;
-  }
-
-  function cityEconomyStreamLabel(): string {
-    if (cityEconomyStreamStatus === 'live') return 'stream';
-    if (cityEconomyStreamStatus === 'connecting') return 'stream...';
-    if (cityEconomyStreamStatus === 'fallback') return 'polling';
-    return cityLiveEconomy.available ? 'live' : 'bridge';
   }
 
   function clampSpectatorZoom(value: number): number {
@@ -3448,8 +3457,9 @@
         <div class="panel-title">Live AP/GP Economy</div>
         <strong>{cityLiveEconomySummary.headline}</strong>
         <small>{cityLiveEconomySummary.detail}</small>
+        <small>{cityEconomyTransportSummary.detail}</small>
       </div>
-      <span class={`tag ${cityEconomyStreamStatus === 'fallback' ? 'warn' : cityEconomyHeartbeatSummary.tone}`}>{cityEconomyStreamLabel()}</span>
+      <span class={`tag ${cityEconomyTransportSummary.tone}`}>{cityEconomyTransportSummary.label}</span>
     </div>
     <div class="city-resident-profile-grid">
       <span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>
@@ -3579,8 +3589,9 @@
           <div class="panel-title">City Totals</div>
           <strong>{cityLiveEconomySummary.headline}</strong>
           <small>{cityLiveEconomySummary.detail}</small>
+          <small>{cityEconomyTransportSummary.detail}</small>
         </div>
-        <span class={`tag ${cityEconomyStreamStatus === 'fallback' ? 'warn' : cityLiveEconomySummary.tone}`}>{cityEconomyStreamLabel()}</span>
+        <span class={`tag ${cityEconomyTransportSummary.tone}`}>{cityEconomyTransportSummary.label}</span>
       </div>
       <div class="city-resident-profile-grid">
         <span><small>Residents</small><strong>{cityLiveEconomy.snapshot?.city.residentCount?.toLocaleString() || cityResidents.length.toLocaleString()}</strong></span>
