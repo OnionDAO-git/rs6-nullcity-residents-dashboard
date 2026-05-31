@@ -39,4 +39,9 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Open Onion DAO Login');
     expect(appSource).toContain('cityLoginUrlReady');
   });
+
+  test('keeps the Embassy empty state visitor-facing instead of naming API internals', () => {
+    expect(appSource).not.toContain('Embassy API');
+    expect(appSource).toContain('Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.');
+  });
 });

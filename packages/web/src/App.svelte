@@ -4460,7 +4460,7 @@
           {:else}
             <div class="city-empty-state">
               <strong>No proposals reported</strong>
-              <span>Needs AP, ready to birth, born, and mine filters populate from the Embassy API.</span>
+              <span>Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.</span>
             </div>
           {/each}
         </div>
