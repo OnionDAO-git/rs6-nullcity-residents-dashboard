@@ -361,7 +361,7 @@ describe('storytellerGroundingAudit', () => {
       },
     }))).toMatchObject({
       tone: 'warn',
-      summary: '0 dispatch refs match top events; all top events cited; review signals present.',
+      summary: '0 dispatch refs match top events; no top events selected; review signals present.',
       warningCount: 2,
       reviewReasonCount: 1,
     });

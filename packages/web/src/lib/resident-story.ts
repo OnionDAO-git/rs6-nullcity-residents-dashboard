@@ -233,7 +233,9 @@ function storytellerGroundingSummary(input: {
 
   const uncited = input.uncitedTopRefs > 0
     ? `${plural(input.uncitedTopRefs, 'top event')} uncited`
-    : 'all top events cited';
+    : input.citedKnownRefs === 0
+      ? 'no top events selected'
+      : 'all top events cited';
   const review = input.hasReviewSignals ? '; review signals present' : '';
   const matchVerb = input.citedKnownRefs === 1 ? 'matches' : 'match';
   return `${plural(input.citedKnownRefs, 'dispatch ref')} ${matchVerb} top events; ${uncited}${review}.`;
