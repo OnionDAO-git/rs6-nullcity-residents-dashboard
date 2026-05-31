@@ -26,6 +26,7 @@
     residentProofPulse,
     residentProofRollup,
     residentPrimaryWarning,
+    residentPublicStateTiles,
     residentStackSummary,
     residentTriageSummary,
     type ResidentLoopFact,
@@ -4150,8 +4151,14 @@
       <div class="city-panel span-2">
         <div class="panel-title">Public State</div>
         <div class="city-resident-profile-grid">
-          <span><small>Status</small><strong>{cityResidentReadModel?.status || (cityResident?.online ? 'online' : 'offline')}</strong></span>
-          <span><small>Attention</small><strong>{cityResidentReadModel?.currentAttention ?? cityResident?.attention ?? '-'}</strong></span>
+          {#if cityResident}
+            {#each residentPublicStateTiles(cityResident) as tile (tile.label)}
+              <span><small>{tile.label}</small><strong class={tile.tone || ''}>{tile.value}</strong>{#if tile.detail}<small>{tile.detail}</small>{/if}</span>
+            {/each}
+          {:else}
+            <span><small>Status</small><strong>{cityResidentReadModel?.status || 'unknown'}</strong></span>
+            <span><small>AP</small><strong>{cityResidentReadModel?.currentAttention === undefined ? '-' : `${cityResidentReadModel.currentAttention} AP`}</strong><small>Attention Points from the public resident projection.</small></span>
+          {/if}
           <span><small>Vitals</small><strong>{cityResident ? residentVitalsLabel(cityResident) : '-'}</strong></span>
           <span><small>Position</small><strong>{cityResident?.position ? formatPosition(cityResident.position) : '-'}</strong></span>
         </div>

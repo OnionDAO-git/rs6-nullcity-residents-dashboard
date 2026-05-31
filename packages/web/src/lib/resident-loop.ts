@@ -29,6 +29,13 @@ export interface ResidentLoopCheckpoint {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+export interface ResidentPublicStateTile {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: 'ok' | 'warn' | 'fail';
+}
+
 export interface ResidentProofPulse {
   tone: 'ok' | 'warn' | 'fail';
   summary: string;
@@ -379,6 +386,58 @@ export function residentGoldEvidenceLabel(row: ResidentDashboardRow): { value: s
 
 export function residentCoinEvidenceAmount(row: ResidentDashboardRow): number {
   return coin995Amount(row);
+}
+
+export function residentPublicStateTiles(row: ResidentDashboardRow): ResidentPublicStateTile[] {
+  const gp = residentGoldEvidenceLabel(row);
+  const needsAp = residentNeedsAp(row);
+  const needsGpEvidence = gp.tone === 'warn';
+  const supportNeed = needsAp
+    ? {
+        value: 'AP support',
+        detail: 'Resident is at or below the AP safety floor.',
+        tone: 'warn' as const,
+      }
+    : needsGpEvidence
+      ? {
+          value: 'coin-995 evidence',
+          detail: 'GP is not visible in the latest resident inventory snapshot.',
+          tone: 'warn' as const,
+        }
+      : {
+          value: 'steady',
+          detail: 'AP and GP evidence are both visible.',
+          tone: 'ok' as const,
+        };
+
+  return [
+    {
+      label: 'Status',
+      value: row.online ? 'online' : 'offline',
+      detail: row.online ? 'live resident' : 'not currently attached',
+      tone: row.online ? 'ok' : 'fail',
+    },
+    {
+      label: 'AP',
+      value: attentionLabel(row),
+      detail: needsAp
+        ? 'Attention Points are low; this resident needs support soon.'
+        : row.attention === undefined
+          ? 'Attention Points are not reported in this snapshot.'
+          : 'Attention Points life-force is stable.',
+      ...(row.attention === undefined ? {} : { tone: needsAp ? 'warn' as const : 'ok' as const }),
+    },
+    {
+      label: 'Support need',
+      ...supportNeed,
+    },
+    {
+      label: 'GP evidence',
+      value: gp.value,
+      detail: gp.detail,
+      tone: gp.tone,
+    },
+  ];
 }
 
 export function residentLoopSignal(row: ResidentDashboardRow): ResidentLoopSignal {

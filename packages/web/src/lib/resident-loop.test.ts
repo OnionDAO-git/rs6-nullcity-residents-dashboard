@@ -15,6 +15,7 @@ import {
   residentProofPulse,
   residentProofRollup,
   residentPrimaryWarning,
+  residentPublicStateTiles,
   residentStackSummary,
   residentTriageSummary,
 } from './resident-loop';
@@ -69,6 +70,18 @@ describe('resident loop helpers', () => {
     expect(residentCoinEvidenceAmount(low)).toBe(37);
     expect(residentLoopSummaryLine(low)).toContain('needs AP');
     expect(residentLoopSummaryLine(row({ attention: 100 }))).toContain('GP unobserved');
+  });
+
+  test('builds public state tiles that foreground AP, support need, and GP evidence', () => {
+    expect(residentPublicStateTiles(row({
+      attention: 2,
+      body: { controlHeld: true, latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } } },
+    }))).toEqual([
+      { label: 'Status', value: 'online', detail: 'live resident', tone: 'ok' },
+      { label: 'AP', value: '2 AP', detail: 'Attention Points are low; this resident needs support soon.', tone: 'warn' },
+      { label: 'Support need', value: 'AP support', detail: 'Resident is at or below the AP safety floor.', tone: 'warn' },
+      { label: 'GP evidence', value: '37 GP', detail: 'coin-995 inventory evidence', tone: 'ok' },
+    ]);
   });
 
   test('builds current plan/action/speech/story loop signals from live row state', () => {
