@@ -276,6 +276,68 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('fails the proof pulse when the latest action outcome timed out', () => {
+    expect(residentProofPulse(row({
+      attention: 75,
+      thinking: { mode: 'executing', activePlan: 'Reach the cow pen safely' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'attack', result: 'timeout', source: 'body', tick: 400 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+        feed: {
+          attached: true,
+          tick: 400,
+          ageMs: 4000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I am watching the fight.',
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Combat attempt recorded.', latestEventKind: 'combat_started', latestEventTick: 400 },
+    }), {
+      benchmark: { tone: 'ok', summary: 'pass', detail: 'score 1' },
+      storyteller: { tone: 'ok', summary: 'story grounded' },
+      goalContract: { tone: 'ok', summary: 'goal condition present' },
+    })).toEqual({
+      tone: 'fail',
+      summary: '7/8 loop proofs live',
+      detail: 'action outcome: latest action timeout',
+    });
+  });
+
+  test('surfaces latest action failures in operator warnings', () => {
+    expect(residentOperatorWarnings(row({
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Finish a safe combat action' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'attack', result: 'failed', source: 'body', tick: 512 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 11 }] } },
+        feed: {
+          attached: true,
+          tick: 512,
+          ageMs: 5000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Combat route under test.', latestEventKind: 'combat_started', latestEventTick: 512 },
+    }), {
+      tone: 'ok',
+      summary: 'Latest benchmark passed.',
+      detail: 'score 1',
+    })).toEqual([
+      {
+        tone: 'fail',
+        summary: 'Latest action failed.',
+        detail: 'attack returned failed from body.',
+      },
+    ]);
+  });
+
   test('builds stack summary from model/endpoint and SPARK module', () => {
     expect(residentStackSummary(row({
       stack: {
@@ -482,6 +544,14 @@ describe('resident loop helpers', () => {
           detail: 'Action, speech, or feed cadence is stale enough to deserve an operator glance.',
         },
         {
+          key: 'action',
+          label: 'Action outcome',
+          tone: 'ok',
+          count: 0,
+          residents: [],
+          detail: 'No residents in this bucket right now.',
+        },
+        {
           key: 'plan',
           label: 'Missing plan',
           tone: 'warn',
@@ -580,6 +650,48 @@ describe('resident loop helpers', () => {
 
     expect(triage.buckets.find(bucket => bucket.key === 'quiet')).toMatchObject({ count: 0, tone: 'ok' });
     expect(triage.urgentResidents).toBe(0);
+  });
+
+  test('adds failed action outcomes to resident triage', () => {
+    const triage = residentTriageSummary([
+      row({
+        name: 'res:timeout',
+        attention: 75,
+        thinking: { mode: 'executing', activePlan: 'Recover from a stuck combat action' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'attack', result: 'timeout', source: 'body', tick: 300 },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 20 }] } },
+          feed: {
+            attached: true,
+            tick: 300,
+            ageMs: 2000,
+            nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 5,
+            latestEventKind: 'say',
+            latestEventText: 'Still trying.',
+          },
+        },
+        storyArc: { phase: 'progress', summary: 'Combat action was attempted.', latestEventKind: 'combat_started', latestEventTick: 300 },
+      }),
+    ], () => ({
+      economyGp: { tone: 'ok', summary: 'recent GP evidence', detail: 'coin-995 observed recently' },
+      storyteller: { tone: 'ok', summary: 'Storyteller cited combat attempt' },
+      benchmark: { tone: 'ok', summary: 'fresh capability proof', detail: 'passed' },
+    }));
+
+    expect(triage.tone).toBe('warn');
+    expect(triage.headline).toBe('1/1 residents need operator attention');
+    expect(triage.detail).toBe('Action outcome: 1');
+    expect(triage.buckets.find(bucket => bucket.key === 'action')).toEqual({
+      key: 'action',
+      label: 'Action outcome',
+      tone: 'fail',
+      count: 1,
+      residents: ['res:timeout'],
+      detail: 'Latest action result timed out or failed; inspect before trusting liveness.',
+    });
   });
 
   test('returns syncing rollup when no online residents are visible', () => {

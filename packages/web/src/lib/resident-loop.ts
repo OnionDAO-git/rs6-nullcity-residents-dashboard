@@ -26,7 +26,7 @@ export interface ResidentLoopCheckpoint {
   label: 'Plan' | 'Action' | 'Speech' | 'Story';
   value: string;
   detail: string;
-  tone: 'ok' | 'warn';
+  tone: 'ok' | 'warn' | 'fail';
 }
 
 export interface ResidentProofPulse {
@@ -46,7 +46,7 @@ export interface ResidentProofRollup {
 }
 
 export interface ResidentTriageBucket {
-  key: 'offline' | 'attention' | 'quiet' | 'plan' | 'gp' | 'story' | 'benchmark';
+  key: 'offline' | 'attention' | 'quiet' | 'action' | 'plan' | 'gp' | 'story' | 'benchmark';
   label: string;
   tone: 'ok' | 'warn' | 'fail';
   count: number;
@@ -331,6 +331,10 @@ export function residentOperatorWarnings(
   } else if (feed.ageMs !== undefined && feed.ageMs > STALE_FEED_MS) {
     warnings.push({ tone: 'warn', summary: `Feed stale (${Math.round(feed.ageMs / 1000)}s old).`, detail: 'Live action/speech may lag the controller.' });
   }
+  const actionOutcome = residentActionOutcome(row);
+  if (actionOutcome.failed) {
+    warnings.push({ tone: 'fail', summary: actionOutcome.summary, detail: actionOutcome.detail });
+  }
   if (residentGoldEvidenceLabel(row).value === 'not observed' && signals.economyGp?.tone === 'ok') {
     warnings.push({
       tone: 'warn',
@@ -402,6 +406,7 @@ export function residentLoopCheckpoints(row: ResidentDashboardRow): ResidentLoop
   const speechLive = speech.text !== '-';
   const storyLive = signal.story !== '-';
   const actionLive = signal.action !== '-';
+  const actionOutcome = residentActionOutcome(row);
   const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
   const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
   const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
@@ -427,7 +432,7 @@ export function residentLoopCheckpoints(row: ResidentDashboardRow): ResidentLoop
       label: 'Action',
       value: actionLive ? signal.action : '-',
       detail: actionLive ? actionDetailParts.join(' | ') : '-',
-      tone: actionLive && !isTickStale(actionFreshness) ? 'ok' : 'warn',
+      tone: actionOutcome.failed ? 'fail' : actionLive && !isTickStale(actionFreshness) ? 'ok' : 'warn',
     },
     {
       key: 'speech',
@@ -459,13 +464,16 @@ export function residentProofPulse(
   }
 
   const checks = residentProofChecks(row, signals);
+  const actionOutcome = residentActionOutcome(row);
   const requiredChecks = checks.filter(check => !check.optional);
   const okCount = requiredChecks.filter(check => check.ok).length;
   const missing = requiredChecks.filter(check => !check.ok).map(check => check.label);
   const total = requiredChecks.length || 1;
-  const tone: ResidentProofPulse['tone'] = !row.online ? 'fail' : missing.length ? 'warn' : 'ok';
+  const tone: ResidentProofPulse['tone'] = !row.online || actionOutcome.failed ? 'fail' : missing.length ? 'warn' : 'ok';
   const detail = !row.online
     ? `offline · ${missing.slice(0, 3).join(', ') || 'no live proofs'}`
+    : actionOutcome.failed
+      ? `action outcome: ${actionOutcome.outcome}`
     : missing.length
       ? `missing: ${missing.slice(0, 4).join(', ')}`
       : 'all tracked proof signals are live';
@@ -556,6 +564,7 @@ export function residentTriageSummary(
         emptyTriageBucket('offline', 'Offline', 'fail', 'No resident snapshots are available yet.'),
         emptyTriageBucket('attention', 'Low AP', 'warn', 'No AP balances are available yet.'),
         emptyTriageBucket('quiet', 'Quiet loop', 'warn', 'No loop cadence is available yet.'),
+        emptyTriageBucket('action', 'Action outcome', 'fail', 'No action outcome data is available yet.'),
         emptyTriageBucket('plan', 'Missing plan', 'warn', 'No thinking plans are available yet.'),
         emptyTriageBucket('gp', 'Missing GP proof', 'warn', 'No coin-995 proof is available yet.'),
         emptyTriageBucket('story', 'Thin story', 'warn', 'No Library or Storyteller evidence is available yet.'),
@@ -573,6 +582,7 @@ export function residentTriageSummary(
     const speech = checkpoints.find(checkpoint => checkpoint.key === 'speech');
     return feedTone(row) === 'warn' || (action?.tone === 'warn' && speech?.tone === 'warn');
   });
+  const actionOutcomeRows = rows.filter(row => row.online && residentActionOutcome(row).failed);
   const missingPlanRows = rows.filter(row => row.online && !row.thinking?.activePlan?.trim());
   const missingGpRows = rows.filter(row => {
     if (!row.online) return false;
@@ -595,6 +605,7 @@ export function residentTriageSummary(
     makeTriageBucket('offline', 'Offline', 'fail', offlineRows, 'Login or AP top-up may be required before new action proof appears.'),
     makeTriageBucket('attention', 'Low AP', 'warn', lowApRows, 'Residents at or below the AP safety floor need support soon.'),
     makeTriageBucket('quiet', 'Quiet loop', 'warn', quietRows, 'Action, speech, or feed cadence is stale enough to deserve an operator glance.'),
+    makeTriageBucket('action', 'Action outcome', 'fail', actionOutcomeRows, 'Latest action result timed out or failed; inspect before trusting liveness.'),
     makeTriageBucket('plan', 'Missing plan', 'warn', missingPlanRows, 'Thinking has not published a current plan for these residents.'),
     makeTriageBucket('gp', 'Missing GP proof', 'warn', missingGpRows, 'Do not claim GP purchasing power until coin-995 or economy evidence appears.'),
     makeTriageBucket('story', 'Thin story', 'warn', thinStoryRows, 'Library or Storyteller evidence is not fresh enough to explain the resident.'),
@@ -605,6 +616,7 @@ export function residentTriageSummary(
     ...offlineRows,
     ...lowApRows,
     ...quietRows,
+    ...actionOutcomeRows,
     ...missingPlanRows,
     ...missingGpRows,
     ...thinStoryRows,
@@ -668,6 +680,40 @@ function actionDetail(row: ResidentDashboardRow): string {
   const action = row.body?.lastAction;
   if (!action) return row.lastEvent?.text || '-';
   return [action.result, action.source, action.cause || action.ruleId].filter(Boolean).join(' | ') || '-';
+}
+
+function residentActionOutcome(row: ResidentDashboardRow): {
+  ok: boolean;
+  failed: boolean;
+  outcome: string;
+  summary: string;
+  detail: string;
+} {
+  const action = row.body?.lastAction;
+  const result = normalizeActionResult(action?.result);
+  const failed = result === 'timeout' || result === 'failed' || result === 'error' || result === 'cancelled';
+  const kind = action?.kind || 'Latest action';
+  const source = action?.source ? ` from ${action.source}` : '';
+  const resultLabel = result || 'unknown';
+
+  return {
+    ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) && !failed,
+    failed,
+    outcome: failed ? `latest action ${result}` : result ? `latest action ${result}` : 'latest action result pending',
+    summary: failed ? `Latest action ${result === 'failed' ? 'failed' : result}.` : 'Latest action outcome is usable.',
+    detail: failed ? `${kind} returned ${resultLabel}${source}.` : `${kind}${source || ' has no failing result.'}`,
+  };
+}
+
+function normalizeActionResult(result: string | undefined): string {
+  const value = (result || '').trim().toLowerCase().replace(/[_\s-]+/g, ' ');
+  if (!value) return '';
+  if (value.includes('timeout') || value.includes('timed out') || value.includes('time out')) return 'timeout';
+  if (value === 'failed' || value === 'fail' || value.includes('target not found')) return 'failed';
+  if (value === 'error' || value.includes('error')) return 'error';
+  if (value === 'cancelled' || value === 'canceled') return 'cancelled';
+  if (value === 'ok' || value === 'success' || value === 'complete' || value === 'completed') return 'success';
+  return value.replaceAll(' ', '_');
 }
 
 function storyDetail(row: ResidentDashboardRow): string {
@@ -736,10 +782,11 @@ function recentSpeechSignal(row: ResidentDashboardRow): { text: string; source: 
 }
 
 function residentProofChecks(row: ResidentDashboardRow, signals: ResidentProofPulseSignals): ResidentProofCheck[] {
+  const actionOutcome = residentActionOutcome(row);
   return [
     { label: 'AP', ok: !residentNeedsAp(row) },
     { label: 'Plan', ok: Boolean(row.thinking?.activePlan?.trim()) },
-    { label: 'Action', ok: Boolean(row.body?.lastAction?.kind || row.lastEvent?.kind) },
+    { label: actionOutcome.failed ? 'Action outcome' : 'Action', ok: actionOutcome.ok },
     { label: 'Speech', ok: recentSpeechSignal(row).text !== '-' },
     { label: 'GP', ok: residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok' },
     {

@@ -4080,7 +4080,7 @@
     <p class="kicker">Residents</p>
     <h1>Directory</h1>
   </section>
-  {@render ResidentTriageStrip({ limit: 7 })}
+  {@render ResidentTriageStrip({ limit: 8 })}
   <section class="city-dashboard-grid">
     <div class="city-panel span-2">
       <div class="panel-title">Live Residents</div>
