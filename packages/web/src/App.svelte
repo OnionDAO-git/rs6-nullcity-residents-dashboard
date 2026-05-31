@@ -43,7 +43,7 @@
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
-  import { residentDetailEmptyState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
+  import { residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './lib/resident-route';
   import { buildReleaseReadiness, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -211,6 +211,7 @@
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
+  let cityResidentLoopAvailability = residentLoopAvailabilityState({ hasLiveResident: false, hasProjectedResident: false });
   let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
     lowAp: 0,
@@ -441,6 +442,14 @@
     residents: cityResidents,
   });
   $: cityResidentTrades = tradesForResident(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId, cityTrades);
+  $: cityResidentLoopAvailability = residentLoopAvailabilityState({
+    hasLiveResident: Boolean(cityResident),
+    hasProjectedResident: Boolean(cityResidentReadModel),
+    ...((cityResidentReadModel?.latestSeenAt || cityResidentReadModel?.updatedAt)
+      ? { latestSeenAt: cityResidentReadModel.latestSeenAt || cityResidentReadModel.updatedAt }
+      : {}),
+    ...(cityResidentPosts[0]?.createdAt ? { latestPostAt: cityResidentPosts[0].createdAt } : {}),
+  });
   $: embassyPageActive = isDebugRoute && embassyPages.some(page => browserPath === page.path || browserPath === page.path.replace(/\/$/, ''));
   $: rawVisibleResidents = isDebugRoute && route === '/' ? overview?.residents || [] : residents;
   $: visibleResidents = applyResidentHealthControls(rawVisibleResidents, {
@@ -4264,6 +4273,24 @@
             {:else}
               <div class="city-empty-state"><strong>No resident-specific digest refs</strong><span>Run Storyteller digest generation to capture grounded resident events.</span></div>
             {/each}
+          </div>
+        </div>
+      {:else if cityResidentReadModel}
+        <div class="city-panel span-2">
+          <div class="row">
+            <div class="panel-title">Resident Intelligence Loop</div>
+            <span class={`tag ${cityResidentLoopAvailability.tone}`}>{cityResidentLoopAvailability.tone}</span>
+          </div>
+          <div class="city-copy-block">
+            <strong>{cityResidentLoopAvailability.title}</strong>
+            <p>{cityResidentLoopAvailability.detail}</p>
+            <small>Live model/endpoint/SPARK and checkpoint traces are pending from the runtime bridge.</small>
+          </div>
+          <div class="city-resident-profile-grid">
+            <span><small>Goal</small><strong>{cityResidentReadModel.goal || 'No public goal recorded'}</strong></span>
+            <span><small>Attention</small><strong>{cityResidentReadModel.currentAttention ?? '-'}</strong></span>
+            <span><small>Latest seen</small><strong>{cityResidentReadModel.latestSeenAt ? `${timeAgo(cityResidentReadModel.latestSeenAt)} ago` : '-'}</strong></span>
+            <span><small>Latest post</small><strong>{cityResidentPosts[0]?.createdAt ? `${timeAgo(cityResidentPosts[0].createdAt)} ago` : '-'}</strong></span>
           </div>
         </div>
       {/if}

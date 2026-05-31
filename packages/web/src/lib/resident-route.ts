@@ -27,9 +27,51 @@ export interface ResidentRosterEmptyState {
   detail: string;
 }
 
+export interface ResidentLoopAvailabilityInput {
+  hasLiveResident: boolean;
+  hasProjectedResident: boolean;
+  latestSeenAt?: string;
+  latestPostAt?: string;
+}
+
+export interface ResidentLoopAvailabilityState {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+}
+
 export function residentRouteSlug(name: string): string {
   const normalized = name.trim().toLowerCase();
   return normalized.startsWith('res:') ? normalized.slice(4) : normalized;
+}
+
+export function residentLoopAvailabilityState(input: ResidentLoopAvailabilityInput): ResidentLoopAvailabilityState {
+  if (input.hasLiveResident) {
+    return {
+      tone: 'ok',
+      title: 'Live resident loop is grounded',
+      detail: 'Model, endpoint, SPARK module, goal-plan-action, speech, and story are sourced from the live runtime snapshot.',
+    };
+  }
+
+  if (input.hasProjectedResident) {
+    const refs = [
+      input.latestSeenAt ? `latestSeenAt ${input.latestSeenAt}` : '',
+      input.latestPostAt ? `latestPostAt ${input.latestPostAt}` : '',
+    ].filter(Boolean).join(' | ');
+
+    return {
+      tone: 'warn',
+      title: 'Live resident loop is temporarily unavailable',
+      detail: `Using projected city records only${refs ? ` (${refs})` : ''}.`,
+    };
+  }
+
+  return {
+    tone: 'fail',
+    title: 'Resident loop evidence is missing',
+    detail: 'No live runtime snapshot or projected city record is available yet.',
+  };
 }
 
 export function resolveResidentRouteId(input: string, rows: ResidentDashboardRow[]): string {

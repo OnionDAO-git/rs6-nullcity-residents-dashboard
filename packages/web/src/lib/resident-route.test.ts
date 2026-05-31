@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
-import { residentDetailEmptyState, residentRosterEmptyState, residentRouteSlug, resolveResidentRouteId } from './resident-route';
+import {
+  residentDetailEmptyState,
+  residentLoopAvailabilityState,
+  residentRosterEmptyState,
+  residentRouteSlug,
+  resolveResidentRouteId,
+} from './resident-route';
 
 function row(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -68,6 +74,37 @@ describe('resident route helpers', () => {
     expect(residentRosterEmptyState({ loading: false, hasLiveHints: true })).toEqual({
       title: 'Resident roster is syncing',
       detail: 'Live resident evidence is present while the public roster catches up.',
+    });
+  });
+
+  test('describes resident loop availability for live, projected-only, and missing runtime states', () => {
+    expect(residentLoopAvailabilityState({
+      hasLiveResident: true,
+      hasProjectedResident: true,
+    })).toEqual({
+      tone: 'ok',
+      title: 'Live resident loop is grounded',
+      detail: 'Model, endpoint, SPARK module, goal-plan-action, speech, and story are sourced from the live runtime snapshot.',
+    });
+
+    expect(residentLoopAvailabilityState({
+      hasLiveResident: false,
+      hasProjectedResident: true,
+      latestSeenAt: '2026-05-30T19:30:00.000Z',
+      latestPostAt: '2026-05-30T19:20:00.000Z',
+    })).toEqual({
+      tone: 'warn',
+      title: 'Live resident loop is temporarily unavailable',
+      detail: 'Using projected city records only (latestSeenAt 2026-05-30T19:30:00.000Z | latestPostAt 2026-05-30T19:20:00.000Z).',
+    });
+
+    expect(residentLoopAvailabilityState({
+      hasLiveResident: false,
+      hasProjectedResident: false,
+    })).toEqual({
+      tone: 'fail',
+      title: 'Resident loop evidence is missing',
+      detail: 'No live runtime snapshot or projected city record is available yet.',
     });
   });
 });
