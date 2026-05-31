@@ -18,7 +18,11 @@ function resident(overrides: Partial<ResidentDashboardRow> = {}): ResidentDashbo
       events: 3,
       availableActions: 7,
     },
-    body: { controlHeld: true, latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } } },
+    body: {
+      controlHeld: true,
+      latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+      lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+    },
     stack: {
       model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
       configuredModules: [{
@@ -272,7 +276,13 @@ describe('buildReleaseReadiness', () => {
 
   test('uses singular detail copy when exactly one readiness signal needs attention', () => {
     const summary = buildReleaseReadiness({
-      residents: [resident({ body: { controlHeld: true, latestPerception: { resident: { inventory: [] } } } })],
+      residents: [resident({
+        body: {
+          controlHeld: true,
+          latestPerception: { resident: { inventory: [] } },
+          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 100 },
+        },
+      })],
       storyDigests: [digest()],
       printInsights: printInsights(),
       benchmarkRuns: capabilityBenchmarks(),
@@ -567,6 +577,113 @@ describe('buildReleaseReadiness', () => {
       tone: 'fail',
       detail: 'res:hans latest action outcome is failed, timed out, or cancelled.',
     });
+  });
+
+  test('watches release readiness when latest actions are not tied to active goals', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          name: 'res:unlinked',
+          thinking: { mode: 'executing', activePlan: 'Earn GP and keep AP above zero' },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+            lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 500 },
+          },
+          feed: {
+            attached: true,
+            tick: 500,
+            ageMs: 4_000,
+            nearby: { players: 0, npcs: 1, objects: 4, worldItems: 1 },
+            events: 3,
+            availableActions: 7,
+          },
+        }),
+      ],
+      storyDigests: [digest(), dryRunDigest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.checks.find(check => check.id === 'loop')).toEqual({
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'warn',
+      value: '1 goal link gap',
+      detail: 'Latest actions are visible but not explicitly tied to active goals for res:unlinked.',
+    });
+    expect(summary.nextActions).toContain('Review residents whose latest action is not tied to the active goal before presenting them as intentional.');
+    expect(releaseReadinessActionQueue(summary).find(item => item.label === 'Review goal links')).toMatchObject({
+      target: 'Residents',
+      destination: 'Goal link',
+      path: '/residents?triage=goal-link',
+    });
+  });
+
+  test('keeps goal-link triage visible when the readiness queue is crowded', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          attention: 4,
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [] } },
+            lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 500 },
+          },
+        }),
+      ],
+      storyDigests: [],
+      printInsights: printInsights({ activeRequests: 0, inQueue: 0, ncriTrades: { pending: 0, accepted: 0, failed: 0, recent: [] } }),
+      economyTransport: economyTransport({
+        tone: 'warn',
+        label: 'polling',
+        detail: 'Economy stream is unavailable; polling live and heartbeat routes.',
+      }),
+      benchmarkRuns: [],
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(releaseReadinessActionQueue(summary)).toEqual([
+      {
+        label: 'Check economy',
+        tone: 'warn',
+        detail: 'Restore the economy stream or confirm polling fallback before relying on live AP/GP state.',
+        target: 'Economy',
+        destination: 'Economy',
+        destinationLabel: 'Economy',
+        path: '/economy',
+      },
+      {
+        label: 'Check prints',
+        tone: 'warn',
+        detail: 'Assign blocked print queue entries or avoid the print queue during the demo.',
+        target: 'Prints',
+        destination: 'Prints',
+        destinationLabel: 'Prints',
+        path: '/prints',
+      },
+      {
+        label: 'Review goal links',
+        tone: 'warn',
+        detail: 'Review residents whose latest action is not tied to the active goal before presenting them as intentional.',
+        target: 'Residents',
+        destination: 'Goal link',
+        destinationLabel: 'Residents · Goal link',
+        path: '/residents?triage=goal-link',
+      },
+      {
+        label: 'Run audit',
+        tone: 'warn',
+        detail: 'Run or sync a CQA10 normal-life audit before claiming resident recurrence.',
+        target: 'Operator Readiness',
+        destination: 'Operator Readiness',
+        destinationLabel: 'Operator Readiness',
+        path: '/',
+      },
+    ]);
   });
 
   test('warns when online residents are missing model or SPARK identity signals', () => {

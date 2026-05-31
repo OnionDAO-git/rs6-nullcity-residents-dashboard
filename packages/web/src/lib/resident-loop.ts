@@ -691,7 +691,7 @@ export function residentCauseSignal(row: ResidentDashboardRow): ResidentCauseSig
   };
 }
 
-function residentGoalActionLink(row: ResidentDashboardRow): ResidentGoalActionLinkFact {
+export function residentGoalActionLink(row: ResidentDashboardRow): ResidentGoalActionLinkFact {
   const plan = row.thinking?.activePlan?.trim();
   const action = row.body?.lastAction;
   const actionKind = action?.kind || row.lastEvent?.kind;
