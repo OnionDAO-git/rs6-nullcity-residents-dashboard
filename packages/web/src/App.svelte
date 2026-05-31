@@ -9,7 +9,7 @@
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
-  import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary } from './lib/live-economy';
+  import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, selfFundedApResidentRows, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy, type EconomyHeartbeatSummary, type EconomyListingsSummary, type EconomyTransportStatus, type EconomyTransportSummary, type LiveEconomySummary, type SelfFundedApResidentRow } from './lib/live-economy';
   import { latestBenchmarkForResident, residentBenchmarkSignal } from './lib/resident-benchmark';
   import { residentEconomyGpEvidence, residentLiveEconomyGpEvidence, residentLiveEconomyMoment, type ResidentEconomyGpEvidence, type ResidentEconomyMoment } from './lib/resident-economy-evidence';
   import { applyResidentHealthControls, residentHealthSummary, type ResidentHealthFilter, type ResidentSortMode } from './lib/resident-health';
@@ -206,6 +206,7 @@
   let cityEconomyStreamTimeout: ReturnType<typeof setTimeout> | undefined;
   let cityEconomyStreamStatus: EconomyTransportStatus = 'polling';
   let cityLiveEconomySummary: LiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
+  let citySelfFundedApRows: SelfFundedApResidentRow[] = [];
   let cityEconomyHeartbeatSummary: EconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   let cityEconomyListingsSummary: EconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
   let cityEconomyTransportSummary: EconomyTransportSummary = summarizeEconomyTransport(cityEconomyStreamStatus, cityLiveEconomy, cityEconomyHeartbeat);
@@ -427,6 +428,7 @@
   $: cityResidents = overview?.residents || residents;
   $: cityEconomyProofs = buildEconomyProofSummary(cityBenchmarkRuns);
   $: cityLiveEconomySummary = summarizeLiveEconomy(cityLiveEconomy);
+  $: citySelfFundedApRows = selfFundedApResidentRows(cityLiveEconomy);
   $: cityEconomyHeartbeatSummary = summarizeEconomyHeartbeat(cityEconomyHeartbeat);
   $: cityEconomyListingsSummary = summarizeEconomyListings(cityEconomyListings);
   $: cityEconomyTransportSummary = summarizeEconomyTransport(cityEconomyStreamStatus, cityLiveEconomy, cityEconomyHeartbeat);
@@ -3671,6 +3673,29 @@
           <div class="city-empty-state">
             <strong>No AP/GP events in the live window</strong>
             <span>Top-ups, AP decay, coin-995 exchange, GP trades, and NCRI events appear here when the bridge reports them.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">Self-funded AP</div>
+        <span class="tag">{cityLiveEconomySummary.selfFundedLabel}</span>
+      </div>
+      <div class="city-record-list compact">
+        {#each citySelfFundedApRows as row (row.residentName)}
+          <article>
+            <span class="tag ok">{row.exchangeCount}x</span>
+            <div>
+              <strong>{row.residentName}</strong>
+              <small>{row.detail} · latest {timeAgo(row.latestAt)} ago</small>
+            </div>
+          </article>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No self-funded AP exchanges in this window</strong>
+            <span>Resident GP-to-AP conversions appear here once the live economy bridge reports them.</span>
           </div>
         {/each}
       </div>

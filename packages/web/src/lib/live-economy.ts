@@ -49,6 +49,15 @@ export interface EconomyResidentDisplay {
   status: string;
 }
 
+export interface SelfFundedApResidentRow {
+  residentName: string;
+  apTotal: number;
+  gpSpent: number;
+  exchangeCount: number;
+  latestAt: string;
+  detail: string;
+}
+
 export function summarizeLiveEconomy(response: NullCityLiveEconomyBridgeResponse | undefined): LiveEconomySummary {
   if (!response?.available || !response.snapshot) {
     return {
@@ -211,19 +220,63 @@ export function economyResidentDisplay(resident: NullCityLiveEconomyResident): E
   };
 }
 
+export function selfFundedApResidentRows(
+  response: NullCityLiveEconomyBridgeResponse | undefined,
+  limit = 6,
+): SelfFundedApResidentRow[] {
+  const snapshot = response?.snapshot;
+  if (!response?.available || !snapshot) return [];
+
+  const byResident = new Map<string, SelfFundedApResidentRow>();
+  for (const event of selfFundedApEvents(snapshot.recentEvents)) {
+    const residentName = event.residentName || 'resident GP';
+    const existing = byResident.get(residentName);
+    const apDelta = Math.max(0, event.apDelta ?? 0);
+    const gpSpent = Math.abs(Math.min(0, event.gpDelta ?? 0));
+    if (!existing) {
+      byResident.set(residentName, {
+        residentName,
+        apTotal: apDelta,
+        gpSpent,
+        exchangeCount: 1,
+        latestAt: event.ts,
+        detail: '',
+      });
+      continue;
+    }
+
+    existing.apTotal += apDelta;
+    existing.gpSpent += gpSpent;
+    existing.exchangeCount += 1;
+    if (Date.parse(event.ts) > Date.parse(existing.latestAt)) {
+      existing.latestAt = event.ts;
+    }
+  }
+
+  return [...byResident.values()]
+    .map(row => ({
+      ...row,
+      detail: `${row.apTotal.toLocaleString()} AP for ${row.gpSpent.toLocaleString()} GP across ${row.exchangeCount.toLocaleString()} exchange${row.exchangeCount === 1 ? '' : 's'}`,
+    }))
+    .sort((left, right) => Date.parse(right.latestAt) - Date.parse(left.latestAt))
+    .slice(0, Math.max(0, limit));
+}
+
 function signed(value: number): string {
   return value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
 }
 
 function summarizeSelfFundedAp(events: NullCityLiveEconomyEvent[]): string {
-  const exchanges = events
-    .filter(event => event.kind === 'ap_gp_exchange' && (event.apDelta ?? 0) > 0 && (event.gpDelta ?? 0) < 0)
-    .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts));
+  const exchanges = selfFundedApEvents(events).sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts));
   if (!exchanges.length) return 'no self-funded AP';
 
   const apTotal = exchanges.reduce((total, event) => total + Math.max(0, event.apDelta ?? 0), 0);
   const latestResident = exchanges[0]?.residentName || 'resident GP';
   return `${apTotal.toLocaleString()} AP via ${latestResident}`;
+}
+
+function selfFundedApEvents(events: NullCityLiveEconomyEvent[]): NullCityLiveEconomyEvent[] {
+  return events.filter(event => event.kind === 'ap_gp_exchange' && (event.apDelta ?? 0) > 0 && (event.gpDelta ?? 0) < 0);
 }
 
 function formatFreshness(value: string, reference: string): string {

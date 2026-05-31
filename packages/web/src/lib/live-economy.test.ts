@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy } from './live-economy';
+import { economyEventDisplay, economyResidentDisplay, economyStreamStatusAfterTimeout, selfFundedApResidentRows, summarizeEconomyHeartbeat, summarizeEconomyListings, summarizeEconomyTransport, summarizeLiveEconomy } from './live-economy';
 import type { NullCityEconomyHeartbeatBridgeResponse, NullCityEconomyListingsBridgeResponse, NullCityLiveEconomyBridgeResponse } from './city-api';
 
 describe('summarizeLiveEconomy', () => {
@@ -64,6 +64,93 @@ describe('summarizeLiveEconomy', () => {
       proposalLabel: 'no live proposals',
       selfFundedLabel: 'no self-funded AP',
     });
+  });
+});
+
+describe('selfFundedApResidentRows', () => {
+  test('returns no rows when the live economy bridge is unavailable or has no exchange events', () => {
+    expect(selfFundedApResidentRows(undefined)).toEqual([]);
+    expect(selfFundedApResidentRows({ available: false, error: 'not_configured' })).toEqual([]);
+    expect(selfFundedApResidentRows({
+      available: true,
+      snapshot: {
+        asOf: '2026-05-31T06:50:00.000Z',
+        window: { since: '2026-05-31T06:35:00.000Z', windowMs: 900000 },
+        city: { residentCount: 23, activeResidentCount: 8, attentionTotal: 50000, attentionDelta: 75, gpNetDelta: 0 },
+        countsByKind: { ap_topup: 1 },
+        topResidentsByAttention: [],
+        residents: [],
+        recentEvents: [
+          { id: 'grant-1', ts: '2026-05-31T06:48:00.000Z', kind: 'ap_topup', residentName: 'res:trader', apDelta: 75 },
+        ],
+        pendingProposals: [],
+      },
+    })).toEqual([]);
+  });
+
+  test('aggregates GP-to-AP exchanges by resident and sorts newest first', () => {
+    const response: NullCityLiveEconomyBridgeResponse = {
+      available: true,
+      snapshot: {
+        asOf: '2026-05-31T06:50:00.000Z',
+        window: { since: '2026-05-31T06:35:00.000Z', windowMs: 900000 },
+        city: { residentCount: 23, activeResidentCount: 8, attentionTotal: 50000, attentionDelta: 592, gpNetDelta: -296 },
+        countsByKind: { ap_gp_exchange: 3 },
+        topResidentsByAttention: [],
+        residents: [],
+        recentEvents: [
+          { id: 'exchange-1', ts: '2026-05-31T06:44:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:trader', apDelta: 100, gpDelta: -50 },
+          { id: 'exchange-2', ts: '2026-05-31T06:49:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:woodcutter', apDelta: 50, gpDelta: -25 },
+          { id: 'exchange-3', ts: '2026-05-31T06:47:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:trader', apDelta: 442, gpDelta: -221 },
+          { id: 'grant-1', ts: '2026-05-31T06:48:00.000Z', kind: 'ap_topup', residentName: 'res:trader', apDelta: 75 },
+        ],
+        pendingProposals: [],
+      },
+    };
+
+    expect(selfFundedApResidentRows(response)).toEqual([
+      {
+        residentName: 'res:woodcutter',
+        apTotal: 50,
+        gpSpent: 25,
+        exchangeCount: 1,
+        latestAt: '2026-05-31T06:49:00.000Z',
+        detail: '50 AP for 25 GP across 1 exchange',
+      },
+      {
+        residentName: 'res:trader',
+        apTotal: 542,
+        gpSpent: 271,
+        exchangeCount: 2,
+        latestAt: '2026-05-31T06:47:00.000Z',
+        detail: '542 AP for 271 GP across 2 exchanges',
+      },
+    ]);
+  });
+
+  test('respects the requested resident row limit after newest-first sorting', () => {
+    const response: NullCityLiveEconomyBridgeResponse = {
+      available: true,
+      snapshot: {
+        asOf: '2026-05-31T06:50:00.000Z',
+        window: { since: '2026-05-31T06:35:00.000Z', windowMs: 900000 },
+        city: { residentCount: 23, activeResidentCount: 8, attentionTotal: 50000, attentionDelta: 200, gpNetDelta: -100 },
+        countsByKind: { ap_gp_exchange: 3 },
+        topResidentsByAttention: [],
+        residents: [],
+        recentEvents: [
+          { id: 'exchange-1', ts: '2026-05-31T06:44:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:older', apDelta: 50, gpDelta: -25 },
+          { id: 'exchange-2', ts: '2026-05-31T06:48:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:middle', apDelta: 50, gpDelta: -25 },
+          { id: 'exchange-3', ts: '2026-05-31T06:49:00.000Z', kind: 'ap_gp_exchange', residentName: 'res:newest', apDelta: 100, gpDelta: -50 },
+        ],
+        pendingProposals: [],
+      },
+    };
+
+    expect(selfFundedApResidentRows(response, 2).map(row => row.residentName)).toEqual([
+      'res:newest',
+      'res:middle',
+    ]);
   });
 });
 
