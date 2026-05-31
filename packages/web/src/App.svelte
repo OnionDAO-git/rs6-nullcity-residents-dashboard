@@ -3346,8 +3346,8 @@
       <div class="city-nav secondary">
         {#if citySession.admin}
           <button class:active={route.startsWith('/admin')} onclick={() => cityNav('/admin')}>AD Admin</button>
+          <button onclick={() => debugNav('/')}>Debug</button>
         {/if}
-        <button onclick={() => debugNav('/')}>DB Debug</button>
       </div>
     </aside>
 

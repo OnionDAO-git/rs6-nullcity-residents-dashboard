@@ -17,4 +17,11 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Connect the Null City control bridge on the dashboard server to approve, reject, or birth controller-backed proposals.');
     expect(appSource).toContain('Controller-backed proposals appear here once the bridge returns a proposal queue.');
   });
+
+  test('keeps the legacy debug rail behind admin access', () => {
+    expect(appSource).not.toContain("<button onclick={() => debugNav('/')}>DB Debug</button>");
+    expect(appSource).toMatch(
+      /{#if citySession\.admin}\s+<button class:active={route\.startsWith\('\/admin'\)} onclick={\(\) => cityNav\('\/admin'\)}>AD Admin<\/button>\s+<button onclick={\(\) => debugNav\('\/'\)}>Debug<\/button>\s+{\/if}/,
+    );
+  });
 });
