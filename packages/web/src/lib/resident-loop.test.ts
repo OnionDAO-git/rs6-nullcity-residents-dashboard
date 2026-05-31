@@ -6,6 +6,7 @@ import {
   residentCauseSignal,
   residentCoinEvidenceAmount,
   residentGoldEvidenceLabel,
+  residentDemoPickCue,
   residentGuestTrailFacts,
   residentGuestTrailPulse,
   residentIntelligenceFacts,
@@ -372,6 +373,57 @@ describe('resident loop helpers', () => {
     });
     expect(lines.some(line => line.label === 'Stack')).toBe(false);
     expect(lines.some(line => line.label === 'Storyteller')).toBe(false);
+  });
+
+  test('chooses a demo-ready resident before recovery cues', () => {
+    const healthy = row({
+      name: 'res:ready-resident',
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Earn GP safely' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 150 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 150,
+          ageMs: 2000,
+          latestEventKind: 'say',
+          latestEventText: 'Ready to demo.',
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 1 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof collected.', latestEventKind: 'gp_observed', latestEventTick: 150 },
+    });
+    const offline = row({ name: 'res:offline-resident', online: false });
+
+    expect(residentDemoPickCue([offline, healthy], row => (
+      row.name === 'res:ready-resident'
+        ? { benchmark: { tone: 'ok', summary: 'Latest benchmark passed.', detail: 'score 1' } }
+        : {}
+    ))).toEqual({
+      tone: 'ok',
+      label: 'Demo pick',
+      residentName: 'res:ready-resident',
+      action: 'Open demo-ready resident',
+      detail: 'ready-resident has 6/6 loop proofs live; all tracked proof signals are live.',
+    });
+  });
+
+  test('falls back to a recovery cue when no resident is demo-ready', () => {
+    expect(residentDemoPickCue([row({
+      name: 'res:woodcutter',
+      online: false,
+      thinking: { mode: 'offline', activePlan: 'Return to the square' },
+    })])).toEqual({
+      tone: 'fail',
+      label: 'Demo pick',
+      residentName: 'res:woodcutter',
+      action: 'Reconnect resident',
+      detail: 'woodcutter needs attention first: Resident is offline in the live controller snapshot. Act from: Grant Attention.',
+    });
   });
 
   test('turns resident warning state into a concrete detail next step', () => {

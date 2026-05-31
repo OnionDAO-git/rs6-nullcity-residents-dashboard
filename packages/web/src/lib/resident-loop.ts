@@ -24,6 +24,14 @@ export interface ResidentNextStepCue {
   detail: string;
 }
 
+export interface ResidentDemoPickCue {
+  tone: 'ok' | 'warn' | 'fail';
+  label: 'Demo pick';
+  residentName?: string;
+  action: string;
+  detail: string;
+}
+
 export interface ResidentOperatorWarning {
   tone: 'ok' | 'warn' | 'fail';
   summary: string;
@@ -630,6 +638,72 @@ export function residentRosterScanLines(
       priority: 'secondary',
     },
   ];
+}
+
+export function residentDemoPickCue(
+  rows: ResidentDashboardRow[],
+  resolveSignals: (row: ResidentDashboardRow) => ResidentProofPulseSignals = () => ({}),
+): ResidentDemoPickCue {
+  if (rows.length === 0) {
+    return {
+      tone: 'warn',
+      label: 'Demo pick',
+      action: 'Wait for residents',
+      detail: 'No resident roster loaded yet.',
+    };
+  }
+
+  const evaluated = rows.map((row, index) => {
+    const signals = resolveSignals(row);
+    const pulse = residentProofPulse(row, signals);
+    const nextStep = residentNextStepCue(row, signals);
+    const warning = residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
+    return { row, index, pulse, nextStep, warning };
+  });
+  const ready = evaluated.find(candidate => candidate.row.online && candidate.pulse.tone === 'ok');
+
+  if (ready) {
+    return {
+      tone: 'ok',
+      label: 'Demo pick',
+      residentName: ready.row.name,
+      action: 'Open demo-ready resident',
+      detail: `${residentShortName(ready.row.name)} has ${ready.pulse.summary}; ${ready.pulse.detail}.`,
+    };
+  }
+
+  const fallback = [...evaluated].sort((a, b) => {
+    const toneDelta = demoPickToneRank(a.nextStep.tone) - demoPickToneRank(b.nextStep.tone);
+    if (toneDelta !== 0) return toneDelta;
+    return a.index - b.index;
+  })[0];
+
+  if (fallback) {
+    return {
+      tone: fallback.nextStep.tone,
+      label: 'Demo pick',
+      residentName: fallback.row.name,
+      action: fallback.nextStep.action,
+      detail: `${residentShortName(fallback.row.name)} needs attention first: ${fallback.warning.summary} Act from: ${fallback.nextStep.target}.`,
+    };
+  }
+
+  return {
+    tone: 'warn',
+    label: 'Demo pick',
+    action: 'Wait for residents',
+    detail: 'No resident roster loaded yet.',
+  };
+}
+
+function demoPickToneRank(tone: ResidentDemoPickCue['tone']): number {
+  if (tone === 'fail') return 0;
+  if (tone === 'warn') return 1;
+  return 2;
+}
+
+function residentShortName(name: string): string {
+  return name.replace(/^res:/, '') || name;
 }
 
 export function residentPrimaryWarning(

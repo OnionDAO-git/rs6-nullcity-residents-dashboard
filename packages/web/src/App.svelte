@@ -17,6 +17,7 @@
     residentAgencyCue,
     residentAttentionRunway,
     residentCauseSignal,
+    residentDemoPickCue,
     residentGuestTrailFacts,
     residentGuestTrailPulse,
     residentIntelligenceFacts,
@@ -228,6 +229,7 @@
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
+  let cityResidentDemoPick = residentDemoPickCue([]);
   let cityResidentLoopAvailability = residentLoopAvailabilityState({ hasLiveResident: false, hasProjectedResident: false });
   let cityLoopPulse: ResidentGuestTrailPulse = {
     online: 0,
@@ -452,6 +454,11 @@
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
   }));
   $: cityResidentTriage = residentTriageSummary(cityResidents, row => ({
+    benchmark: residentBenchmarkLabel(row),
+    economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
+    storyteller: residentStoryDigestSignal(row, cityStoryDigests),
+  }));
+  $: cityResidentDemoPick = residentDemoPickCue(cityResidents, row => ({
     benchmark: residentBenchmarkLabel(row),
     economyGp: residentLiveEconomyGpEvidence(cityLiveEconomy, row.name),
     storyteller: residentStoryDigestSignal(row, cityStoryDigests),
@@ -4291,6 +4298,22 @@
       <span class={`tag ${cityResidentTriage.tone}`}>{cityResidentTriage.urgentResidents}/{cityResidentTriage.totalResidents}</span>
     </div>
     <div class="resident-triage-grid">
+      <article class={`resident-triage-bucket tone-${cityResidentDemoPick.tone}`}>
+        <div class="resident-triage-bucket-head">
+          <span class={`tag ${cityResidentDemoPick.tone}`}>{cityResidentDemoPick.label}</span>
+          <strong>{cityResidentDemoPick.action}</strong>
+        </div>
+        <small>{cityResidentDemoPick.detail}</small>
+        <div class="story-evidence-list resident-triage-residents" aria-label="Demo pick resident">
+          {#if cityResidentDemoPick.residentName}
+            <button class="resident-triage-link" onclick={() => cityResidentDemoPick.residentName && cityNav(`/residents/${encodeURIComponent(residentSlug(cityResidentDemoPick.residentName))}`)}>
+              {residentDisplayName(cityResidentDemoPick.residentName)}
+            </button>
+          {:else}
+            <span>waiting</span>
+          {/if}
+        </div>
+      </article>
       {#each visibleResidentTriageBuckets(cityResidentTriage, limit) as bucket (bucket.key)}
         <article class={`resident-triage-bucket tone-${bucket.count > 0 ? bucket.tone : 'ok'}`}>
           <div class="resident-triage-bucket-head">
