@@ -531,7 +531,7 @@ describe('resident loop helpers', () => {
       thinking: { mode: 'executing', activePlan: 'Earn GP safely' },
       body: {
         controlHeld: true,
-        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 150 },
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 150 },
         latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
         feed: {
           attached: true,
@@ -624,6 +624,43 @@ describe('resident loop helpers', () => {
       target: 'Resident Detail',
       action: 'Open demo-ready resident',
       detail: 'linked-ready has 6/6 loop proofs live; all tracked proof signals are live.',
+    });
+  });
+
+  test('warns when the best demo-ready resident lacks goal-action proof', () => {
+    const unlinked = row({
+      name: 'res:unlinked-ready',
+      attention: 80,
+      thinking: { mode: 'executing', activePlan: 'Earn GP safely' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 150 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 25 }] } },
+        feed: {
+          attached: true,
+          tick: 150,
+          ageMs: 2000,
+          latestEventKind: 'say',
+          latestEventText: 'Ready to demo.',
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 1 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+      storyArc: { phase: 'progress', summary: 'Coin proof collected.', latestEventKind: 'gp_observed', latestEventTick: 150 },
+      memory: {
+        files: ['facts/economy.md'],
+        facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }],
+      },
+    });
+
+    expect(residentDemoPickCue([unlinked])).toEqual({
+      tone: 'warn',
+      label: 'Demo pick',
+      residentName: 'res:unlinked-ready',
+      target: 'Goal link',
+      action: 'Review goal-action link',
+      detail: 'unlinked-ready is otherwise demo-ready; goal/action link needs review: Latest picked up coin-995 is visible, but no action cause links it to "Earn GP safely".',
     });
   });
 

@@ -1086,6 +1086,16 @@ export function residentDemoPickCue(
   const ready = readyCandidates.find(candidate => candidate.goalActionLink.tone === 'ok') || readyCandidates[0];
 
   if (ready) {
+    if (ready.goalActionLink.tone !== 'ok') {
+      return {
+        tone: 'warn',
+        label: 'Demo pick',
+        residentName: ready.row.name,
+        target: 'Goal link',
+        action: 'Review goal-action link',
+        detail: `${residentShortName(ready.row.name)} is otherwise demo-ready; goal/action link needs review: ${ready.goalActionLink.detail}.`,
+      };
+    }
     return {
       tone: 'ok',
       label: 'Demo pick',
