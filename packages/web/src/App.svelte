@@ -56,7 +56,7 @@
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
@@ -744,6 +744,9 @@
       closeCityEconomyStream();
       return;
     }
+    if (cityRouteNeedsStoryDigests(activeRoute)) {
+      cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
+    }
     if (activeRoute === '/') {
       const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload, heartbeatPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
@@ -781,9 +784,6 @@
     if (activeRoute === '/embassy') {
       cityProposals = (await cityLoad(cityApi.proposals(), { proposals: [] })).proposals;
       citySelectedProposal = undefined;
-    }
-    if (activeRoute === '/') {
-      cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
     }
     if (activeRoute === '/economy') {
       const liveEconomyResidentLimit = Math.max(50, (overview?.residents || residents).length);

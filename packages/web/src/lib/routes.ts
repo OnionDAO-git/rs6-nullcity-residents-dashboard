@@ -99,6 +99,14 @@ export function isStoryRoute(route: string): boolean {
   return normalized === '/story' || normalized.startsWith('/story/');
 }
 
+export function cityRouteNeedsStoryDigests(route: string): boolean {
+  const normalized = normalizePath(route);
+  return normalized === '/' ||
+    normalized === '/residents' ||
+    normalized.startsWith('/residents/') ||
+    isStoryRoute(normalized);
+}
+
 export function cityRouteNeedsSnapshot(route: string): boolean {
   const normalized = normalizePath(route);
   return normalized === '/' ||

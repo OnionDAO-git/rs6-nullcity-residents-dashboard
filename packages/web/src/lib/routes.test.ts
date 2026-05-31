@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   DEBUG_PREFIX,
   cityPath,
+  cityRouteNeedsStoryDigests,
   cityRouteNeedsSnapshot,
   debugPath,
   isDebugInternalRoute,
@@ -84,5 +85,13 @@ describe('dashboard route helpers', () => {
     expect(isKnownCityRoute('/economy')).toBe(true);
     expect(isProtectedCityRoute('/economy')).toBe(false);
     expect(cityRouteNeedsSnapshot('/economy')).toBe(true);
+  });
+
+  test('loads Storyteller digests for resident-facing city routes', () => {
+    expect(cityRouteNeedsStoryDigests('/')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/residents')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/residents/mother-anvil')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/story')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/economy')).toBe(false);
   });
 });
