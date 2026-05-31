@@ -1479,6 +1479,8 @@ describe('resident loop helpers', () => {
       planPublished: 3,
       recentAction: 2,
       recoveryWait: 1,
+      recoveryWaitResidents: ['res:survivor'],
+      recoveryWaitMaxStuckTicks: 37,
       recentSpeech: 1,
       storyEvidence: 2,
       observedGp: 995,
@@ -1487,10 +1489,30 @@ describe('resident loop helpers', () => {
       { label: 'GP evidence', value: '995 GP', detail: 'coin-995 observed', tone: 'ok' },
       { label: 'Plan', value: '3/4 live', detail: 'current goals residents are pursuing', tone: 'ok' },
       { label: 'Action', value: '2/4 recent', detail: 'latest visible action', tone: 'ok' },
-      { label: 'Recovery', value: '1/4 waiting', detail: 'inspect food/cook/eat recovery before trusting combat liveness', tone: 'warn' },
+      { label: 'Recovery', value: '1/4 waiting', detail: 'survivor waiting; worst stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness', tone: 'warn' },
       { label: 'Speech', value: '1/4 recent', detail: 'latest public say/feed line', tone: 'ok' },
       { label: 'Story', value: '2/4 grounded', detail: 'Library or Storyteller evidence', tone: 'ok' },
     ]);
+  });
+
+  test('summarizes multiple recovery-wait residents without overflowing the activity tile', () => {
+    expect(residentGuestTrailFacts({
+      online: 6,
+      lowAp: 0,
+      planPublished: 6,
+      recentAction: 6,
+      recoveryWait: 4,
+      recoveryWaitResidents: ['res:survivor', 'res:guardian', 'res:priest', 'res:scout'],
+      recoveryWaitMaxStuckTicks: 1,
+      recentSpeech: 2,
+      storyEvidence: 4,
+      observedGp: 250,
+    }).find(fact => fact.label === 'Recovery')).toEqual({
+      label: 'Recovery',
+      value: '4/6 waiting',
+      detail: 'survivor, guardian +2 more waiting; worst stuck 1 tick; inspect food/cook/eat recovery before trusting combat liveness',
+      tone: 'warn',
+    });
   });
 
   test('marks guest trail recovery as clear when no online residents are waiting', () => {
@@ -1567,6 +1589,7 @@ describe('resident loop helpers', () => {
           controlHeld: true,
           lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait' },
         },
+        progress: { samples: 3, stuckTicks: 37, latest: { meaningful: false, reasons: [], stuckSince: 100, tick: 137 } },
       }),
       row({
         name: 'res:guardian',
@@ -1575,6 +1598,7 @@ describe('resident loop helpers', () => {
           controlHeld: true,
           lastAction: { kind: 'noop', result: 'success', source: 'thinking', ruleId: 'low_health_hold_position' },
         },
+        progress: { samples: 3, stuckTicks: 12, latest: { meaningful: false, reasons: [], stuckSince: 120, tick: 132 } },
       }),
       row({
         name: 'res:priest',
@@ -1588,11 +1612,14 @@ describe('resident loop helpers', () => {
           controlHeld: true,
           lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait' },
         },
+        progress: { samples: 3, stuckTicks: 99, latest: { meaningful: false, reasons: [], stuckSince: 40, tick: 139 } },
       }),
     ]);
 
     expect(pulse.online).toBe(3);
     expect(pulse.recoveryWait).toBe(3);
+    expect(pulse.recoveryWaitResidents).toEqual(['res:survivor', 'res:guardian', 'res:priest']);
+    expect(pulse.recoveryWaitMaxStuckTicks).toBe(37);
   });
 
   test('marks guest trail facts as syncing while resident data is unavailable', () => {

@@ -141,6 +141,8 @@ export interface ResidentGuestTrailPulse {
   planPublished: number;
   recentAction: number;
   recoveryWait?: number;
+  recoveryWaitResidents?: string[];
+  recoveryWaitMaxStuckTicks?: number;
   recentSpeech: number;
   storyEvidence: number;
   observedGp: number;
@@ -213,7 +215,14 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
     if (residentNeedsAp(row)) pulse.lowAp += 1;
     if (signal.plan !== '-' && signal.plan !== 'No active plan published') pulse.planPublished += 1;
     if (actionCheckpoint?.tone === 'ok') pulse.recentAction += 1;
-    if (residentRecoveryWaitSignal(row)) pulse.recoveryWait = (pulse.recoveryWait ?? 0) + 1;
+    if (residentRecoveryWaitSignal(row)) {
+      pulse.recoveryWait = (pulse.recoveryWait ?? 0) + 1;
+      pulse.recoveryWaitResidents = [...(pulse.recoveryWaitResidents ?? []), row.name];
+      pulse.recoveryWaitMaxStuckTicks = Math.max(
+        pulse.recoveryWaitMaxStuckTicks ?? 0,
+        recoveryWaitStuckTicks(row),
+      );
+    }
     if (signal.speech !== '-') pulse.recentSpeech += 1;
     if (signal.story !== '-') pulse.storyEvidence += 1;
     pulse.observedGp += residentCoinEvidenceAmount(row);
@@ -577,7 +586,7 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
       value: online > 0 ? `${recoveryWait}${denominator} waiting` : 'syncing',
       detail: online > 0
         ? recoveryWait > 0
-          ? LOW_HEALTH_RECOVERY_WAIT_GUIDANCE
+          ? recoveryWaitDetail(pulse, recoveryWait)
           : 'no low-health recovery waits visible'
         : 'waiting for live resident roster',
       tone: recoveryWait > 0 || online === 0 ? 'warn' : 'ok',
@@ -748,6 +757,23 @@ function demoPickToneRank(tone: ResidentDemoPickCue['tone']): number {
 
 function residentShortName(name: string): string {
   return name.replace(/^res:/, '') || name;
+}
+
+function recoveryWaitDetail(pulse: ResidentGuestTrailPulse, recoveryWait: number): string {
+  const names = (pulse.recoveryWaitResidents ?? [])
+    .map(name => residentShortName(name))
+    .filter(Boolean)
+    .slice(0, 2);
+  const overflow = Math.max(0, recoveryWait - names.length);
+  const nameDetail = names.length > 0
+    ? `${names.join(', ')}${overflow > 0 ? ` +${overflow.toLocaleString()} more` : ''} waiting`
+    : `${recoveryWait.toLocaleString()} waiting`;
+  const stuckTicks = Math.max(0, Math.floor(pulse.recoveryWaitMaxStuckTicks ?? 0));
+  const stuckDetail = stuckTicks > 0
+    ? `worst stuck ${stuckTicks.toLocaleString()} ${stuckTicks === 1 ? 'tick' : 'ticks'}`
+    : '';
+
+  return [nameDetail, stuckDetail, LOW_HEALTH_RECOVERY_WAIT_GUIDANCE].filter(Boolean).join('; ');
 }
 
 export function residentPrimaryWarning(
@@ -1548,10 +1574,15 @@ function residentRecoveryWaitTitle(cause: string): string {
 }
 
 function residentRecoveryWaitStuckLabel(row: ResidentDashboardRow): string {
-  const stuckTicks = row.progress?.stuckTicks;
-  if (typeof stuckTicks !== 'number' || stuckTicks <= 0) return '';
-  const ticks = Math.floor(stuckTicks);
+  const ticks = recoveryWaitStuckTicks(row);
+  if (ticks <= 0) return '';
   return `stuck ${ticks.toLocaleString()} ${ticks === 1 ? 'tick' : 'ticks'}`;
+}
+
+function recoveryWaitStuckTicks(row: ResidentDashboardRow): number {
+  const stuckTicks = row.progress?.stuckTicks;
+  if (typeof stuckTicks !== 'number' || stuckTicks <= 0) return 0;
+  return Math.floor(stuckTicks);
 }
 
 function compactMomentCauseDetail(cause: ResidentCauseSignal): string {
