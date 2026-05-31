@@ -1647,6 +1647,7 @@ describe('resident loop helpers', () => {
       recoveryWaitMaxStuckTicks: 37,
       recentSpeech: 1,
       storyEvidence: 2,
+      memoryEvidence: 2,
       observedGp: 995,
     })).toEqual([
       { label: 'AP', value: '3/4 stable', detail: '1 low AP', tone: 'warn' },
@@ -1656,6 +1657,7 @@ describe('resident loop helpers', () => {
       { label: 'Recovery', value: '1/4 waiting', detail: 'survivor waiting; worst stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness', tone: 'warn' },
       { label: 'Speech', value: '1/4 recent', detail: 'latest public say/feed line', tone: 'ok' },
       { label: 'Story', value: '2/4 grounded', detail: 'Library or Storyteller evidence', tone: 'ok' },
+      { label: 'Memory', value: '2/4 qmd', detail: 'formal facts/*.md snippets', tone: 'ok' },
     ]);
   });
 
@@ -1976,6 +1978,10 @@ describe('resident loop helpers', () => {
             latestEventText: 'Found some coin.',
           },
         },
+        memory: {
+          files: ['facts/routes.md'],
+          facts: [{ topic: 'routes', path: 'facts/routes.md', text: 'The bank is west.' }],
+        },
         storyArc: { phase: 'progress', latestEventKind: 'coin_pickup', latestEventTick: 12 },
       }),
       row({
@@ -1998,6 +2004,7 @@ describe('resident loop helpers', () => {
       recoveryWait: 0,
       recentSpeech: 1,
       storyEvidence: 1,
+      memoryEvidence: 1,
       observedGp: 17,
     });
   });
@@ -2052,6 +2059,7 @@ describe('resident loop helpers', () => {
       recentAction: 0,
       recentSpeech: 0,
       storyEvidence: 0,
+      memoryEvidence: 0,
       observedGp: 0,
     })).toEqual([
       { label: 'AP', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
@@ -2061,6 +2069,7 @@ describe('resident loop helpers', () => {
       { label: 'Recovery', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
       { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
       { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
+      { label: 'Memory', value: 'syncing', detail: 'waiting for qmd facts/*.md snippets', tone: 'warn' },
     ]);
   });
 
@@ -2073,6 +2082,7 @@ describe('resident loop helpers', () => {
       recoveryWait: -6,
       recentSpeech: -6,
       storyEvidence: -7,
+      memoryEvidence: -8,
       observedGp: -995,
     })).toEqual([
       { label: 'AP', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
@@ -2082,6 +2092,7 @@ describe('resident loop helpers', () => {
       { label: 'Recovery', value: 'syncing', detail: 'waiting for live resident roster', tone: 'warn' },
       { label: 'Speech', value: '0 recent', detail: 'latest public say/feed line', tone: 'warn' },
       { label: 'Story', value: '0 grounded', detail: 'Library or Storyteller evidence', tone: 'warn' },
+      { label: 'Memory', value: 'syncing', detail: 'waiting for qmd facts/*.md snippets', tone: 'warn' },
     ]);
   });
 

@@ -190,6 +190,7 @@ export interface ResidentGuestTrailPulse {
   recoveryWaitMaxStuckTicks?: number;
   recentSpeech: number;
   storyEvidence: number;
+  memoryEvidence?: number;
   observedGp: number;
 }
 
@@ -262,6 +263,7 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
     recoveryWait: 0,
     recentSpeech: 0,
     storyEvidence: 0,
+    memoryEvidence: 0,
     observedGp: 0,
   };
 
@@ -284,6 +286,7 @@ export function residentGuestTrailPulse(rows: ResidentDashboardRow[]): ResidentG
     }
     if (signal.speech !== '-') pulse.recentSpeech += 1;
     if (signal.story !== '-') pulse.storyEvidence += 1;
+    if ((row.memory?.facts || []).length > 0) pulse.memoryEvidence = (pulse.memoryEvidence ?? 0) + 1;
     pulse.observedGp += residentCoinEvidenceAmount(row);
   }
 
@@ -663,6 +666,7 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
   const denominator = online > 0 ? `/${online}` : '';
   const stableAp = Math.max(0, online - Math.max(0, pulse.lowAp));
   const recoveryWait = Math.max(0, pulse.recoveryWait ?? 0);
+  const memoryEvidence = Math.max(0, pulse.memoryEvidence ?? 0);
 
   return [
     {
@@ -710,6 +714,12 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
       value: `${Math.max(0, pulse.storyEvidence)}${denominator} grounded`,
       detail: 'Library or Storyteller evidence',
       tone: pulse.storyEvidence > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Memory',
+      value: online > 0 ? `${memoryEvidence}${denominator} qmd` : 'syncing',
+      detail: online > 0 ? 'formal facts/*.md snippets' : 'waiting for qmd facts/*.md snippets',
+      tone: memoryEvidence > 0 ? 'ok' : 'warn',
     },
   ];
 }
