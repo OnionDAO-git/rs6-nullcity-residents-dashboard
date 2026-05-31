@@ -450,6 +450,7 @@ export interface BenchmarkArtifactSummary {
   status: BenchmarkRunStatus;
   score: number;
   metrics: Record<string, number>;
+  evidenceSummaries?: string[];
   failureReason?: string;
   generatedAt?: string;
 }

@@ -678,7 +678,8 @@ export function residentNormalLifeAuditSignal(runs: BenchmarkArtifactSummary[]):
   const apGpBreakdown = hasApGpBreakdown
     ? `, organic AP/GP ${organicApGp}, controlled AP/GP ${controlledApGp}`
     : '';
-  const detail = `${duration} audit: ${successfulActions}/${totalActions} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}${apGpBreakdown}, trade closures ${tradeClosures}, stuck recovered ${stuckRecovered}/${stuckDetected}.`;
+  const stuckAttribution = auditStuckAttributionSentence(latest);
+  const detail = `${duration} audit: ${successfulActions}/${totalActions} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}${apGpBreakdown}, trade closures ${tradeClosures}, stuck recovered ${stuckRecovered}/${stuckDetected}.${stuckAttribution ? ` ${stuckAttribution}` : ''}`;
 
   if (failedActions > 0 || latest.status !== 'passed') {
     return {
@@ -908,6 +909,12 @@ function auditDurationLabel(run: BenchmarkArtifactSummary): string {
     return `${Math.max(1, Math.round((endedAt - startedAt) / 60_000))}m`;
   }
   return 'latest';
+}
+
+function auditStuckAttributionSentence(run: BenchmarkArtifactSummary): string {
+  const summary = run.evidenceSummaries?.find(item => /^top stuck churn:/i.test(item.trim()));
+  if (!summary) return '';
+  return `${summary.trim().replace(/^top/, 'Top')}.`;
 }
 
 function recoveryWaitDetail(pulse: ResidentGuestTrailPulse, recoveryWait: number): string {

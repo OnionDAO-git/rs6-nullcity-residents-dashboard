@@ -1171,6 +1171,16 @@ describe('RuntimeRepository benchmarks', () => {
           residentsWithDrop: 13,
           aggregateDrop: 12535,
         },
+        stuckSummary: {
+          stuckDetected: 592,
+          stuckRecovered: 590,
+          unresolved: 2,
+          topResidents: [
+            { resident: 'res:qa-trader', stuckDetected: 61, stuckRecovered: 61, unresolved: 0, churn: 122 },
+            { resident: 'res:agent', stuckDetected: 64, stuckRecovered: 55, unresolved: 9, churn: 119 },
+            { resident: 'res:qa-social', stuckDetected: 62, stuckRecovered: 55, unresolved: 7, churn: 117 },
+          ],
+        },
         notObservedTimelineKinds: ['city_ap_gp_exchange', 'trade_completed'],
       }),
       'utf8',
@@ -1211,9 +1221,14 @@ describe('RuntimeRepository benchmarks', () => {
         economy_organic_self_initiated_ap_gp_exchange_events: 0,
         economy_controlled_ap_gp_exchange_events: 0,
       },
+      evidenceSummaries: [
+        'normal-life audit: 23 active residents, 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, stuck recovered 590/592',
+        'top stuck churn: qa-trader 122 (61 detected/61 recovered), agent 119 (64 detected/55 recovered), qa-social 117 (62 detected/55 recovered)',
+      ],
     });
     expect(detail?.evidence.summaries).toEqual([
       'normal-life audit: 23 active residents, 2677/2677 actions, low-health waits 0, AP/GP exchanges 0, stuck recovered 590/592',
+      'top stuck churn: qa-trader 122 (61 detected/61 recovered), agent 119 (64 detected/55 recovered), qa-social 117 (62 detected/55 recovered)',
     ]);
   });
 

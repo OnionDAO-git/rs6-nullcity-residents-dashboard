@@ -1062,6 +1062,7 @@ function normalizeBenchmarkArtifact(file: string, raw: unknown): BenchmarkArtifa
     score,
     metrics: benchmarkMetrics(record.metrics),
     evidence,
+    evidenceSummaries: evidence.summaries,
     ...(stringField(record, 'failureReason') ? { failureReason: stringField(record, 'failureReason') } : {}),
     ...(stringField(record, 'generatedAt') ? { generatedAt: stringField(record, 'generatedAt') } : {}),
   };
@@ -1113,6 +1114,7 @@ function normalizeNormalLifeAuditArtifact(record: Record<string, unknown>, runId
   const windowStart = stringField(record, 'windowStart');
   const windowEnd = stringField(record, 'windowEnd');
   const durationMs = windowStart && windowEnd ? timestampMs(windowEnd) - timestampMs(windowStart) : undefined;
+  const evidenceSummaries = normalLifeAuditEvidenceSummaries(metrics, record);
 
   return {
     runId,
@@ -1127,7 +1129,8 @@ function normalizeNormalLifeAuditArtifact(record: Record<string, unknown>, runId
     status: failedActionSubmissions > 0 || actionSuccessRate < 95 ? 'failed' : 'passed',
     score: Math.max(0, Math.min(1, actionSuccessRate / 100)),
     metrics,
-    evidence: { summaries: [normalLifeAuditEvidenceSummary(metrics)] },
+    evidence: { summaries: evidenceSummaries },
+    evidenceSummaries,
     ...(stringField(record, 'generatedAt') ? { generatedAt: stringField(record, 'generatedAt') } : {}),
   };
 }
@@ -1164,6 +1167,13 @@ function metricCountKey(prefix: string, value: string): string {
   return normalized ? `${prefix}_${normalized}` : '';
 }
 
+function normalLifeAuditEvidenceSummaries(metrics: Record<string, number>, record: Record<string, unknown>): string[] {
+  return [
+    normalLifeAuditEvidenceSummary(metrics),
+    ...normalLifeTopStuckEvidenceSummaries(record),
+  ];
+}
+
 function normalLifeAuditEvidenceSummary(metrics: Record<string, number>): string {
   const activeResidents = metrics.activeResidents ?? 0;
   const total = metrics.totalActionAttempts ?? 0;
@@ -1173,6 +1183,23 @@ function normalLifeAuditEvidenceSummary(metrics: Record<string, number>): string
   const stuckDetected = metrics.timeline_stuck_detected ?? 0;
   const stuckRecovered = metrics.timeline_stuck_recovered ?? 0;
   return `normal-life audit: ${activeResidents} active residents, ${successful}/${total} actions, low-health waits ${lowHealthWaits}, AP/GP exchanges ${apGpExchanges}, stuck recovered ${stuckRecovered}/${stuckDetected}`;
+}
+
+function normalLifeTopStuckEvidenceSummaries(record: Record<string, unknown>): string[] {
+  const stuckSummary = asRecord(record.stuckSummary);
+  const topResidents = Array.isArray(stuckSummary.topResidents) ? stuckSummary.topResidents : [];
+  const parts = topResidents
+    .slice(0, 3)
+    .map(item => {
+      const resident = stringField(asRecord(item), 'resident')?.replace(/^res:/, '');
+      const churn = numberField(asRecord(item), 'churn');
+      const detected = numberField(asRecord(item), 'stuckDetected') ?? numberField(asRecord(item), 'detected');
+      const recovered = numberField(asRecord(item), 'stuckRecovered') ?? numberField(asRecord(item), 'recovered');
+      if (!resident || churn === undefined || detected === undefined || recovered === undefined) return '';
+      return `${resident} ${Math.floor(churn)} (${Math.floor(detected)} detected/${Math.floor(recovered)} recovered)`;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? [`top stuck churn: ${parts.join(', ')}`] : [];
 }
 
 function benchmarkTaskFromSoak(record: Record<string, unknown>, runId: string): BenchmarkIdentity | undefined {
@@ -1207,6 +1234,7 @@ function toBenchmarkSummary(artifact: BenchmarkArtifact): BenchmarkArtifactSumma
     status: artifact.status,
     score: artifact.score,
     metrics: artifact.metrics,
+    evidenceSummaries: artifact.evidenceSummaries || artifact.evidence.summaries,
     failureReason: artifact.failureReason,
     generatedAt: artifact.generatedAt,
     file: '',
