@@ -211,7 +211,10 @@ function eventVerb(kind: string): string {
     case 'city_attention_credit':
     case 'ap_topup':
     case 'ap_grant':
+    case 'ap_granted':
       return 'received attention';
+    case 'ap_low':
+      return 'ran low on attention';
     case 'request_attention':
       return 'asked for attention';
     case 'goal_completed':
@@ -232,8 +235,18 @@ function eventVerb(kind: string): string {
       return 'redeemed an NCRI';
     case 'gp_earned':
       return 'earned GP';
+    case 'gp_observed':
+      return 'showed GP proof';
     case 'gp_traded':
       return 'traded GP';
+    case 'resident_faded':
+      return 'faded from the live window';
+    case 'stuck_recovered':
+      return 'recovered from being stuck';
+    case 'patron_gift':
+      return 'received patron support';
+    case 'quiet_resident':
+      return 'went quiet';
     default:
       return 'left evidence';
   }

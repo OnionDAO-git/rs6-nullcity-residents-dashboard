@@ -4279,11 +4279,18 @@
               {@const myth = storytellerMythCard(evidence.event)}
               <article>
                 <span class={`tag ${storytellerEventTone(evidence.event)}`}>{evidence.event.importance || 'event'}</span>
-                <div>
+                <div class="story-event-copy">
                   <strong>{myth.title}</strong>
                   <small>{storytellerEventMeta(evidence.event)} · {evidence.digest.runId} · {evidence.event.ts ? timeAgo(evidence.event.ts) : evidence.digest.builtAt ? timeAgo(evidence.digest.builtAt) : '-'}</small>
                   {#if myth.body}
                     <p>{myth.body}</p>
+                  {/if}
+                  {#if myth.evidenceLabels.length}
+                    <div class="story-evidence-list" aria-label="Grounded evidence">
+                      {#each myth.evidenceLabels as label}
+                        <span>{label}</span>
+                      {/each}
+                    </div>
                   {/if}
                 </div>
               </article>

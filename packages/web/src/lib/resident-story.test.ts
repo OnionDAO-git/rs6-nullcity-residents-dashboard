@@ -347,4 +347,22 @@ describe('storytellerMythCard', () => {
       evidenceLabels: [],
     }).evidenceLabels).toEqual(['grounded evidence']);
   });
+
+  test('names live economy and lifecycle digest kinds with concrete public verbs', () => {
+    const titleFor = (kind: string) => storytellerMythCard({
+      ref: `${kind}-1`,
+      kind,
+      residentName: 'res:ada',
+      note: 'digest event',
+      evidenceLabels: ['ref:source'],
+    }).title;
+
+    expect(titleFor('ap_granted')).toBe('Ada received attention');
+    expect(titleFor('ap_low')).toBe('Ada ran low on attention');
+    expect(titleFor('gp_observed')).toBe('Ada showed GP proof');
+    expect(titleFor('resident_faded')).toBe('Ada faded from the live window');
+    expect(titleFor('stuck_recovered')).toBe('Ada recovered from being stuck');
+    expect(titleFor('patron_gift')).toBe('Ada received patron support');
+    expect(titleFor('quiet_resident')).toBe('Ada went quiet');
+  });
 });
