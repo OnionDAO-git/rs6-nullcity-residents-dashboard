@@ -2,7 +2,7 @@ import type { BenchmarkArtifactSummary, ResidentDashboardRow } from '@nullcity-d
 import type { StorytellerDigestSummary } from './api';
 import type { EconomyTransportSummary } from './live-economy';
 import type { PrintQueueInsightSummary } from './print-queue-insights';
-import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp } from './resident-loop';
+import { residentCoinEvidenceAmount, residentLoopCheckpoints, residentLoopSignal, residentNeedsAp, residentOperatorWarnings } from './resident-loop';
 import { storytellerGroundingAudit } from './resident-story';
 
 export type ReleaseReadinessStatus = 'ready' | 'watch' | 'blocked';
@@ -24,6 +24,7 @@ export interface ReleaseReadinessMetrics {
   activePlans: number;
   lowApResidents: number;
   failedActionResidents: number;
+  recoveryWaitResidents: number;
   observedGp: number;
   storytellerReviewBacklog: number;
   latestStorytellerAgeMinutes?: number;
@@ -123,6 +124,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
   const sparkModuleResidents = onlineRows.filter(row => residentHasSparkModuleSignal(row)).length;
   const lowApResidents = residents.filter(row => residentNeedsAp(row)).length;
   const failedActionResidents = residents.filter(row => row.online && residentActionOutcomeFailed(row)).length;
+  const recoveryWaitResidents = residents.filter(row => row.online && residentRecoveryWaitWarning(row)).length;
   const activePlans = residents.filter(row => {
     const signal = residentLoopSignal(row);
     return signal.plan !== '-' && signal.plan !== 'No active plan published';
@@ -141,7 +143,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
     residentCheck(residents.length, onlineResidents),
     identityCheck(onlineResidents, modelEndpointResidents, sparkModuleResidents),
     planCheck(activePlans, residents.length),
-    residentLoopCheck(failedActionResidents, residents),
+    residentLoopCheck(failedActionResidents, recoveryWaitResidents, residents),
     apCheck(lowApResidents),
     gpCheck(observedGp),
     ...(economyTransport ? [economyTransport] : []),
@@ -167,6 +169,7 @@ export function buildReleaseReadiness(input: ReleaseReadinessInput): ReleaseRead
       activePlans,
       lowApResidents,
       failedActionResidents,
+      recoveryWaitResidents,
       observedGp,
       storytellerReviewBacklog,
       ...(latestStorytellerAgeMinutes !== undefined ? { latestStorytellerAgeMinutes } : {}),
@@ -228,9 +231,9 @@ export function releaseReadinessMetricTiles(summary: ReleaseReadinessSummary): R
     { label: 'Plans', value: metrics.activePlans.toLocaleString() },
     {
       label: 'Action Risks',
-      value: metrics.failedActionResidents.toLocaleString(),
-      ...(metrics.failedActionResidents > 0 && loop ? { detail: loop.detail } : {}),
-      ...(metrics.failedActionResidents > 0 ? { tone: 'fail' as const } : {}),
+      value: (metrics.failedActionResidents + metrics.recoveryWaitResidents).toLocaleString(),
+      ...(metrics.failedActionResidents + metrics.recoveryWaitResidents > 0 && loop ? { detail: loop.detail } : {}),
+      ...(metrics.failedActionResidents + metrics.recoveryWaitResidents > 0 && loop ? { tone: loop.tone } : {}),
     },
     {
       label: 'Low AP',
@@ -363,6 +366,7 @@ function readinessActionLabel(action: string): string {
   if (action.startsWith('Confirm model/endpoint')) return 'Confirm stack';
   if (action.startsWith('Restart or observe')) return 'Wake planning';
   if (action.startsWith('Inspect residents')) return 'Inspect actions';
+  if (action.startsWith('Inspect low-health recovery')) return 'Inspect recovery';
   if (action.startsWith('Top up')) return 'Top up AP';
   if (action.startsWith('Run an AP/GP')) return 'Prove GP';
   if (action.startsWith('Configure the live economy')) return 'Configure bridge';
@@ -633,7 +637,11 @@ function planCheck(activePlans: number, residents: number): ReleaseReadinessChec
   };
 }
 
-function residentLoopCheck(failedActionResidents: number, residents: ResidentDashboardRow[]): ReleaseReadinessCheck {
+function residentLoopCheck(
+  failedActionResidents: number,
+  recoveryWaitResidents: number,
+  residents: ResidentDashboardRow[],
+): ReleaseReadinessCheck {
   if (failedActionResidents > 0) {
     const names = residents
       .filter(row => row.online && residentActionOutcomeFailed(row))
@@ -647,6 +655,28 @@ function residentLoopCheck(failedActionResidents: number, residents: ResidentDas
       label: 'Resident Loop',
       tone: 'fail',
       value: `${failedActionResidents.toLocaleString()} failed action${failedActionResidents === 1 ? '' : 's'}`,
+      detail,
+    };
+  }
+
+  if (recoveryWaitResidents > 0) {
+    const details = residents
+      .filter(row => row.online)
+      .map(row => {
+        const warning = residentRecoveryWaitWarning(row);
+        return warning ? `${row.name}: ${warning.detail}` : '';
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    const overflow = recoveryWaitResidents - details.length;
+    const detail = overflow > 0
+      ? `${details.join(' ')} ${overflow.toLocaleString()} more resident${overflow === 1 ? '' : 's'} waiting on low-health recovery.`
+      : details.join(' ');
+    return {
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'warn',
+      value: `${recoveryWaitResidents.toLocaleString()} recovery wait${recoveryWaitResidents === 1 ? '' : 's'}`,
       detail,
     };
   }
@@ -871,6 +901,7 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
   if (byId.get('identity')?.tone === 'warn') actions.push('Confirm model/endpoint and SPARK module identity for every online resident before demoing cognition coverage.');
   if (byId.get('plans')?.tone === 'warn') actions.push('Restart or observe residents until thinking publishes active plans.');
   if (byId.get('loop')?.tone === 'fail') actions.push('Inspect residents with failed or timed-out latest actions before demoing liveness.');
+  if (byId.get('loop')?.tone === 'warn' && byId.get('loop')?.value.includes('recovery wait')) actions.push('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
   if (byId.get('ap')?.tone === 'warn') actions.push('Top up low-AP residents or avoid presenting them as healthy.');
   if (byId.get('gp')?.tone === 'warn') actions.push('Run an AP/GP or coin-995 capability proof before claiming resident purchasing power.');
   const economyTransport = byId.get('economy-transport');
@@ -901,6 +932,10 @@ function nextActionsFor(checks: ReleaseReadinessCheck[]): string[] {
 
 function residentActionOutcomeFailed(row: ResidentDashboardRow): boolean {
   return residentLoopCheckpoints(row).some(checkpoint => checkpoint.key === 'action' && checkpoint.tone === 'fail');
+}
+
+function residentRecoveryWaitWarning(row: ResidentDashboardRow) {
+  return residentOperatorWarnings(row).find(warning => warning.summary.startsWith('Low-health recovery wait'));
 }
 
 function residentHasModelEndpointSignal(row: ResidentDashboardRow): boolean {

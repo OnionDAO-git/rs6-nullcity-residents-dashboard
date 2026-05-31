@@ -430,6 +430,67 @@ describe('buildReleaseReadiness', () => {
     expect(summary.nextActions).toContain('Inspect residents with failed or timed-out latest actions before demoing liveness.');
   });
 
+  test('watches release readiness when a resident is stuck in low-health recovery wait', () => {
+    const summary = buildReleaseReadiness({
+      residents: [
+        resident({
+          thinking: { mode: 'executing', activePlan: 'Recover health before re-engaging.' },
+          body: {
+            controlHeld: true,
+            latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+            lastAction: { kind: 'noop', result: 'success', source: 'thinking', cause: 'low_health_heal_wait', tick: 900 },
+          },
+          feed: {
+            attached: true,
+            tick: 900,
+            ageMs: 4_000,
+            nearby: { players: 0, npcs: 1, objects: 4, worldItems: 1 },
+            events: 3,
+            availableActions: 7,
+          },
+          progress: {
+            samples: 4,
+            stuckTicks: 37,
+            latest: { meaningful: false, reasons: [], stuckSince: 863, tick: 900 },
+          },
+        }),
+      ],
+      storyDigests: [digest(), dryRunDigest()],
+      printInsights: printInsights(),
+      economyTransport: economyTransport(),
+      benchmarkRuns: capabilityBenchmarks(),
+      nowMs: Date.parse('2026-05-30T09:10:00.000Z'),
+    });
+
+    expect(summary.status).toBe('watch');
+    expect(summary.metrics.failedActionResidents).toBe(0);
+    expect(summary.metrics.recoveryWaitResidents).toBe(1);
+    expect(summary.checks.find(check => check.id === 'loop')).toEqual({
+      id: 'loop',
+      label: 'Resident Loop',
+      tone: 'warn',
+      value: '1 recovery wait',
+      detail: 'res:hans: Latest action is noop with cause low_health_heal_wait; stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness.',
+    });
+    expect(summary.nextActions).toContain('Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.');
+    expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Residents')).toEqual({
+      label: 'Residents',
+      tone: 'warn',
+      detail: 'res:hans: Latest action is noop with cause low_health_heal_wait; stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness.',
+    });
+    expect(releaseReadinessMetricTiles(summary).find(tile => tile.label === 'Action Risks')).toEqual({
+      label: 'Action Risks',
+      value: '1',
+      tone: 'warn',
+      detail: 'res:hans: Latest action is noop with cause low_health_heal_wait; stuck 37 ticks; inspect food/cook/eat recovery before trusting combat liveness.',
+    });
+    expect(releaseReadinessActionQueue(summary)).toContainEqual({
+      label: 'Inspect recovery',
+      tone: 'warn',
+      detail: 'Inspect low-health recovery waits in Resident Triage or Ops View before demoing liveness.',
+    });
+  });
+
   test('builds compact metric tiles with action risk counts', () => {
     const summary = buildReleaseReadiness({
       residents: [
