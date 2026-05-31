@@ -84,10 +84,19 @@ export function summarizeEconomyHeartbeat(response: NullCityEconomyHeartbeatBrid
     ? heartbeat.activeResidentCount > 0 ? 'warn' : 'fail'
     : 'ok';
   const lastKind = heartbeat.lastEconomyEventKind ? heartbeat.lastEconomyEventKind.replace(/_/g, ' ') : 'none';
+  const lastEventFreshness = heartbeat.lastEconomyEventTs
+    ? formatFreshness(heartbeat.lastEconomyEventTs, heartbeat.asOf)
+    : 'unknown';
+  const digestFreshness = heartbeat.lastDigestBuiltAt
+    ? formatFreshness(heartbeat.lastDigestBuiltAt, heartbeat.asOf)
+    : 'unknown';
+  const lastEventLabel = lastEventFreshness === 'unknown'
+    ? `last ${lastKind}`
+    : `last ${lastKind} ${lastEventFreshness}`;
   return {
     tone,
     headline: `${heartbeat.activeResidentCount.toLocaleString()} / ${heartbeat.residentCount.toLocaleString()} residents active`,
-    detail: `${heartbeat.economyEventCount.toLocaleString()} economy events · last ${lastKind}`,
+    detail: `${heartbeat.economyEventCount.toLocaleString()} economy events · ${lastEventLabel} · digest ${digestFreshness}`,
     degradedLabel: heartbeat.degradedFlags.length ? heartbeat.degradedFlags.join(', ') : 'healthy',
   };
 }
@@ -144,4 +153,32 @@ export function economyResidentDisplay(resident: NullCityLiveEconomyResident): E
 
 function signed(value: number): string {
   return value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
+}
+
+function formatFreshness(value: string, reference: string): string {
+  const timestamp = Date.parse(value);
+  const referenceTimestamp = Date.parse(reference);
+  if (!Number.isFinite(timestamp) || !Number.isFinite(referenceTimestamp)) {
+    return 'unknown';
+  }
+
+  const elapsedSeconds = Math.max(0, Math.floor((referenceTimestamp - timestamp) / 1000));
+  if (elapsedSeconds < 5) {
+    return 'now';
+  }
+  if (elapsedSeconds < 60) {
+    return `${elapsedSeconds}s ago`;
+  }
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 48) {
+    return `${elapsedHours}h ago`;
+  }
+
+  return `${Math.floor(elapsedHours / 24)}d ago`;
 }

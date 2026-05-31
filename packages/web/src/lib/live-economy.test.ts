@@ -64,8 +64,28 @@ describe('summarizeEconomyHeartbeat', () => {
     expect(summarizeEconomyHeartbeat(response)).toEqual({
       tone: 'ok',
       headline: '23 / 25 residents active',
-      detail: '28 economy events · last ap gp exchange',
+      detail: '28 economy events · last ap gp exchange 50s ago · digest 2m ago',
       degradedLabel: 'healthy',
+    });
+  });
+
+  test('keeps heartbeat freshness explicit when event or digest timestamps are missing', () => {
+    const response: NullCityEconomyHeartbeatBridgeResponse = {
+      available: true,
+      heartbeat: {
+        asOf: '2026-05-30T18:52:00.000Z',
+        controllerUptimeSec: 372,
+        residentCount: 2,
+        activeResidentCount: 0,
+        economyEventCount: 0,
+        degradedFlags: ['no_active_residents'],
+      },
+    };
+
+    expect(summarizeEconomyHeartbeat(response)).toMatchObject({
+      tone: 'fail',
+      detail: '0 economy events · last none · digest unknown',
+      degradedLabel: 'no_active_residents',
     });
   });
 
