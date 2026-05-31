@@ -605,6 +605,34 @@ describe('storytellerMythCard', () => {
     });
   });
 
+  test('turns say events into quoted public resident speech', () => {
+    expect(storytellerMythCard({
+      ref: 'say-1',
+      kind: 'say',
+      residentName: 'res:the-hush',
+      note: 'res:the-hush said: "I am checking the landmark at 2938,3338."',
+      evidenceLabels: ['library:say-1'],
+    })).toEqual({
+      title: 'The Hush spoke in the city',
+      body: '"I am checking the landmark at 2938,3338."',
+      evidenceLabels: ['library:say-1'],
+    });
+  });
+
+  test('turns Library writeback speech into public resident speech', () => {
+    expect(storytellerMythCard({
+      ref: 'library-say-1',
+      kind: 'library_writeback',
+      residentName: 'res:mother-anvil',
+      note: 'res:mother-anvil said: "Still here as Mother Anvil; watching the area."',
+      evidenceLabels: ['library:writeback-1'],
+    })).toEqual({
+      title: 'Mother Anvil spoke in the city',
+      body: '"Still here as Mother Anvil; watching the area."',
+      evidenceLabels: ['library:writeback-1'],
+    });
+  });
+
   test('names live economy and lifecycle digest kinds with concrete public verbs', () => {
     const titleFor = (kind: string) => storytellerMythCard({
       ref: `${kind}-1`,
@@ -619,6 +647,7 @@ describe('storytellerMythCard', () => {
     expect(titleFor('gp_observed')).toBe('Ada showed GP proof');
     expect(titleFor('resident_faded')).toBe('Ada faded from the live window');
     expect(titleFor('stuck_recovered')).toBe('Ada got moving again');
+    expect(titleFor('say')).toBe('Ada spoke in the city');
     expect(titleFor('patron_gift')).toBe('Ada received patron support');
     expect(titleFor('quiet_resident')).toBe('Ada went quiet');
   });

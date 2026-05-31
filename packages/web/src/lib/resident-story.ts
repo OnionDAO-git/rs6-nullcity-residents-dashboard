@@ -147,7 +147,7 @@ export function residentStoryDigestSignal(
 
 export function storytellerMythCard(event: StorytellerDigestEventSummary): StorytellerMythCard {
   const actor = residentDisplayName(event.residentName);
-  const title = `${actor} ${eventVerb(event.kind)}`;
+  const title = eventTitle(event, actor);
   const body = eventBody(event, actor);
   const evidenceLabels = event.evidenceLabels.filter(label => label.trim().length > 0);
   return {
@@ -155,6 +155,11 @@ export function storytellerMythCard(event: StorytellerDigestEventSummary): Story
     ...(body ? { body } : {}),
     evidenceLabels: evidenceLabels.length ? evidenceLabels : ['grounded evidence'],
   };
+}
+
+function eventTitle(event: StorytellerDigestEventSummary, actor: string): string {
+  if (isSpeechEvent(event)) return `${actor} spoke in the city`;
+  return `${actor} ${eventVerb(event.kind)}`;
 }
 
 export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs = Date.now()): StorytellerDigestStatus {
@@ -451,6 +456,8 @@ function eventVerb(kind: string): string {
       return 'faded from the live window';
     case 'stuck_recovered':
       return 'got moving again';
+    case 'say':
+      return 'spoke in the city';
     case 'patron_gift':
       return 'received patron support';
     case 'quiet_resident':
@@ -462,7 +469,19 @@ function eventVerb(kind: string): string {
 
 function eventBody(event: StorytellerDigestEventSummary, actor: string): string | undefined {
   if (event.kind === 'stuck_recovered') return `${actor} recovered and kept moving.`;
+  if (isSpeechEvent(event)) return speechEventBody(event);
   return event.note?.trim() || undefined;
+}
+
+function speechEventBody(event: StorytellerDigestEventSummary): string | undefined {
+  const note = event.note?.trim();
+  if (!note) return undefined;
+  const said = note.match(/^[^:]+:[^\s]+\s+said:\s*(.+)$/i) || note.match(/^.+?\s+said:\s*(.+)$/i);
+  return (said?.[1] || note).trim();
+}
+
+function isSpeechEvent(event: StorytellerDigestEventSummary): boolean {
+  return event.kind === 'say' || /\bsaid:\s*/i.test(event.note || '');
 }
 
 function eventTs(event: StorytellerDigestEventSummary, digest: StorytellerDigestSummary): number {
