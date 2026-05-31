@@ -615,6 +615,11 @@ describe('buildReleaseReadiness', () => {
       value: '1 goal link gap',
       detail: 'Latest actions are visible but not explicitly tied to active goals for res:unlinked.',
     });
+    expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Residents')).toEqual({
+      label: 'Residents',
+      tone: 'warn',
+      detail: 'Goal/action link proof needs review: Latest actions are visible but not explicitly tied to active goals for res:unlinked.',
+    });
     expect(summary.nextActions).toContain('Review residents whose latest action is not tied to the active goal before presenting them as intentional.');
     expect(releaseReadinessActionQueue(summary).find(item => item.label === 'Review goal links')).toMatchObject({
       target: 'Residents',

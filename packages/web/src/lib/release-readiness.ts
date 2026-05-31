@@ -307,7 +307,7 @@ export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary):
     {
       label: 'Residents',
       tone: residents?.tone || 'warn',
-      detail: residents && residents.tone !== 'ok' ? residents.detail : 'Residents, plans, and latest action outcomes are visible.',
+      detail: residentDemoProofDetail(residents),
     },
     {
       label: 'Normal-life',
@@ -332,6 +332,16 @@ export function releaseReadinessDemoProofRail(summary: ReleaseReadinessSummary):
       detail: dryRun.detail,
     },
   ];
+}
+
+function residentDemoProofDetail(check: ReleaseReadinessCheck | undefined): string {
+  if (check && check.tone !== 'ok') {
+    if (check.id === 'loop' && check.value.includes('goal link gap')) {
+      return `Goal/action link proof needs review: ${check.detail}`;
+    }
+    return check.detail;
+  }
+  return 'Residents, plans, and latest action outcomes are visible.';
 }
 
 export function releaseReadinessFirstFiveSteps(summary: ReleaseReadinessSummary): ReleaseReadinessFirstFiveStep[] {
