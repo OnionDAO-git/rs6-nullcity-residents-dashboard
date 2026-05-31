@@ -124,6 +124,39 @@ describe('cityDemoPathSteps', () => {
     });
   });
 
+  test('falls back to watching a resident when attendee login is unavailable', () => {
+    const steps = cityDemoPathSteps({
+      authenticated: false,
+      loginUrlReady: false,
+      residentCount: 23,
+      onlineResidents: 23,
+      activeResidents: 10,
+      pausedResidents: 13,
+      lowApResidents: 2,
+      demoResident: {
+        tone: 'ok',
+        name: 'res:agent',
+        path: '/residents/agent',
+        action: 'Open demo-ready resident',
+        detail: 'agent has current AP, GP, action, and Storyteller evidence.',
+      },
+      story: {
+        tone: 'ok',
+        label: 'ready',
+        summary: 'Dispatch is grounded and ready for public review.',
+      },
+    });
+
+    expect(steps[1]).toMatchObject({
+      id: 'ap-support',
+      tone: 'warn',
+      metric: 'login unavailable',
+      action: 'Watch resident instead',
+      path: '/residents/agent',
+      detail: 'Attendee login is not connected; keep the demo moving by watching a resident while staff provides the attendee QR or login link.',
+    });
+  });
+
   test('routes authenticated AP support to a resident grant recommendation when available', () => {
     const steps = cityDemoPathSteps({
       authenticated: true,

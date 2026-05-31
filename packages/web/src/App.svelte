@@ -512,6 +512,7 @@
   $: cityLatestStoryStatus = cityStoryDigests[0] ? storytellerDigestStatus(cityStoryDigests[0]) : undefined;
   $: cityDemoPath = cityDemoPathSteps({
     authenticated: citySession.authenticated,
+    loginUrlReady: cityLoginUrlReady,
     residentCount: cityResidents.length,
     onlineResidents: cityOnlineResidents.length,
     ...(cityHasCohortSignals ? {

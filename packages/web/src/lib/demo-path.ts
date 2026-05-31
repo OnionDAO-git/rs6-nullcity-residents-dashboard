@@ -27,6 +27,7 @@ export interface CityDemoApSupportSignal {
 
 export interface CityDemoPathInput {
   authenticated: boolean;
+  loginUrlReady?: boolean;
   residentCount: number;
   onlineResidents: number;
   activeResidents?: number;
@@ -55,13 +56,15 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
   const hasCohortCounts = active !== undefined || paused !== undefined;
   const activeCount = active ?? online;
   const supportReady = input.authenticated;
+  const loginUrlReady = input.loginUrlReady ?? true;
+  const supportUnavailable = !supportReady && !loginUrlReady;
   const lowApResidents = Math.max(0, input.lowApResidents);
   const storyMetric = input.story.title?.trim() || input.story.label;
   const support = supportReady ? input.apSupport : undefined;
+  const residentPath = safeDemoPath(input.demoResident.path, '/residents');
   const supportPath = support
     ? safeDemoPath(support.path, '/embassy')
-    : supportReady ? '/embassy' : '/login';
-  const residentPath = safeDemoPath(input.demoResident.path, '/residents');
+    : supportReady ? '/embassy' : supportUnavailable ? residentPath : '/login';
   const residentLabel = residentProofStepLabel(input.demoResident);
 
   return [
@@ -82,11 +85,13 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       id: 'ap-support',
       tone: support?.tone || (supportReady ? lowApResidents > 0 ? 'warn' : 'ok' : 'warn'),
       label: 'Support with AP',
-      metric: support?.metric || (supportReady ? `${lowApResidents.toLocaleString()} AP needs` : 'guest'),
-      action: support?.action || (supportReady ? 'Open Embassy' : 'Login for AP support'),
+      metric: support?.metric || (supportReady ? `${lowApResidents.toLocaleString()} AP needs` : supportUnavailable ? 'login unavailable' : 'guest'),
+      action: support?.action || (supportReady ? 'Open Embassy' : supportUnavailable ? 'Watch resident instead' : 'Login for AP support'),
       path: supportPath,
       detail: support?.detail || (supportReady
         ? 'Embassy funding is ready; profile AP/GP balances are available for support flows.'
+        : supportUnavailable
+          ? 'Attendee login is not connected; keep the demo moving by watching a resident while staff provides the attendee QR or login link.'
         : 'Sign in before demonstrating AP funding, resident grants, or AP/GP balances.'),
     },
     {
