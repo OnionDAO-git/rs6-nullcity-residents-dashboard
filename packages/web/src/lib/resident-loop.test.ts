@@ -2133,4 +2133,27 @@ describe('resident loop helpers', () => {
       tone: 'ok',
     });
   });
+
+  test('uses qmd fact memory when Library story memory is thin', () => {
+    const memory = residentMemoryFreshness(row({
+      memory: {
+        files: ['facts/routes.md'],
+        facts: [
+          {
+            topic: 'routes',
+            path: 'facts/routes.md',
+            timestamp: '2026-05-31T14:45:00.000Z',
+            text: 'Lumbridge cow pen is safer than goblins for weak residents.',
+          },
+        ],
+      },
+    }));
+
+    expect(memory).toEqual({
+      label: 'fresh',
+      summary: 'Lumbridge cow pen is safer than goblins for weak residents.',
+      detail: 'qmd fact | routes | facts/routes.md | 2026-05-31T14:45:00.000Z',
+      tone: 'ok',
+    });
+  });
 });

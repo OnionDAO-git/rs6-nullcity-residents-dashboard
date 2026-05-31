@@ -274,6 +274,13 @@ export interface ResidentSavedState {
   skills?: Record<string, ResidentSavedSkill>;
 }
 
+export interface ResidentMemoryFactSummary {
+  topic: string;
+  path: string;
+  text: string;
+  timestamp?: string;
+}
+
 export interface RuntimeReadModel {
   available: boolean;
   online: boolean;
@@ -318,6 +325,7 @@ export interface RuntimeReadModel {
   memory: {
     indexMarkdown?: string;
     files: string[];
+    facts?: ResidentMemoryFactSummary[];
   };
   logs: {
     actions: ActionLogEntry[];
@@ -346,6 +354,7 @@ export interface ResidentDashboardRow {
   stack?: ResidentStackSummary;
   progress?: ResidentProgressSummary;
   storyArc?: StoryArcDashboardSummary;
+  memory?: RuntimeReadModel['memory'];
   lastEvent?: ResidentEventSummary;
   activeTrade?: unknown;
   errors?: string[];

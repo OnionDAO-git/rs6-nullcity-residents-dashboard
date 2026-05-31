@@ -106,6 +106,8 @@ export interface ResidentMemoryFreshness {
   tone: 'ok' | 'warn';
 }
 
+type ResidentMemoryFact = NonNullable<NonNullable<ResidentDashboardRow['memory']>['facts']>[number];
+
 export interface ResidentCauseSignal {
   value: string;
   detail: string;
@@ -559,8 +561,17 @@ export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMomen
 }
 
 export function residentMemoryFreshness(row: ResidentDashboardRow): ResidentMemoryFreshness {
+  const qmdFact = row.memory?.facts?.[0];
   const storyTitle = row.storyArc?.summary || row.storyArc?.latestEventKind;
   if (!storyTitle) {
+    if (qmdFact) {
+      return {
+        label: 'fresh',
+        summary: truncateAgencyText(qmdFact.text, 96),
+        detail: qmdFactDetail(qmdFact),
+        tone: 'ok',
+      };
+    }
     return {
       label: 'thin',
       summary: 'No Library memory yet',
@@ -573,9 +584,13 @@ export function residentMemoryFreshness(row: ResidentDashboardRow): ResidentMemo
   return {
     label: isTickStale(freshness) ? 'stale' : 'fresh',
     summary: truncateAgencyText(storyTitle, 96),
-    detail: ['Library memory', storyDetail(row), freshness].filter(Boolean).join(' | '),
+    detail: ['Library memory', storyDetail(row), qmdFact ? qmdFactDetail(qmdFact) : '', freshness].filter(Boolean).join(' | '),
     tone: isTickStale(freshness) ? 'warn' : 'ok',
   };
+}
+
+function qmdFactDetail(fact: ResidentMemoryFact): string {
+  return ['qmd fact', fact.topic, fact.path, fact.timestamp].filter(Boolean).join(' | ');
 }
 
 export function residentCauseSignal(row: ResidentDashboardRow): ResidentCauseSignal {

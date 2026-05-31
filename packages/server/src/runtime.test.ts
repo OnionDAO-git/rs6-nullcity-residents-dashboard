@@ -116,6 +116,57 @@ describe('RuntimeRepository resident feeds', () => {
     });
   });
 
+  test('surfaces formal qmd facts as resident memory snippets', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-memory-facts-'));
+    const memoryRoot = path.join(root, 'memory');
+    const factsDir = path.join(memoryRoot, 'res-agent', 'facts');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    await fs.mkdir(factsDir, { recursive: true });
+    await fs.writeFile(path.join(memoryRoot, 'res-agent', 'runtime-state.json'), JSON.stringify({ resident: 'res:agent', tick: 42 }), 'utf8');
+    await fs.writeFile(
+      path.join(factsDir, 'routes.md'),
+      [
+        '- 2026-05-31T14:40:00.000Z Draynor bank is near 3092,3243 after fishing.',
+        '- 2026-05-31T14:45:00.000Z Lumbridge cow pen is safer than goblins for weak residents.',
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(factsDir, 'world-events.md'),
+      '- 2026-05-31T14:41:00.000Z Observed res:duke lit a fire at 3243,3209,0.',
+      'utf8',
+    );
+
+    const model = await repository.residentRuntime('res:agent', { name: 'res:agent', online: true });
+
+    expect(model.memory.facts).toEqual([
+      {
+        topic: 'routes',
+        path: 'facts/routes.md',
+        timestamp: '2026-05-31T14:45:00.000Z',
+        text: 'Lumbridge cow pen is safer than goblins for weak residents.',
+      },
+      {
+        topic: 'world-events',
+        path: 'facts/world-events.md',
+        timestamp: '2026-05-31T14:41:00.000Z',
+        text: 'Observed res:duke lit a fire at 3243,3209,0.',
+      },
+      {
+        topic: 'routes',
+        path: 'facts/routes.md',
+        timestamp: '2026-05-31T14:40:00.000Z',
+        text: 'Draynor bank is near 3092,3243 after fishing.',
+      },
+    ]);
+  });
+
   test('merges live feed perception and action results into the runtime model', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-runtime-'));

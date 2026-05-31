@@ -21,6 +21,7 @@ import type {
   PatronStandingTier,
   RecentLetterSummary,
   RelationshipActivitySummary,
+  ResidentMemoryFactSummary,
   ResidentRelationshipSummary,
   ResidentStackSummary,
   ResidentDashboardRow,
@@ -89,12 +90,13 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, actions, trajectoryActions, inference, saved, progress, storyArc, soul] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, memoryFacts, actions, trajectoryActions, inference, saved, progress, storyArc, soul] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
       readTextFile(path.join(memoryDir, 'nervous-rules.md')),
       listFiles(memoryDir, ['.md', '.json']).catch(() => []),
+      readResidentMemoryFacts(memoryDir),
       this.readResidentActions(resident),
       this.readResidentTrajectoryActions(memoryDir),
       this.readResidentInference(resident),
@@ -167,6 +169,7 @@ export class RuntimeRepository {
       memory: {
         indexMarkdown,
         files: memoryFiles,
+        facts: memoryFacts,
       },
       logs: {
         actions: mergedActions,
@@ -201,6 +204,7 @@ export class RuntimeRepository {
           stack: runtime.stack,
           progress: runtime.progress,
           storyArc: runtime.storyArc,
+          memory: slimMemory(runtime.memory),
           lastEvent: latestEvent(runtime.logs.actions),
           errors: runtime.errors,
         };
@@ -1852,6 +1856,58 @@ function slimBody(body: RuntimeReadModel['body']): RuntimeReadModel['body'] {
     lastAction: body.lastAction,
     lastActionSource: body.lastActionSource,
     gatewayHealthy: body.gatewayHealthy,
+  };
+}
+
+function slimMemory(memory: RuntimeReadModel['memory']): RuntimeReadModel['memory'] {
+  return {
+    files: memory.files,
+    facts: memory.facts,
+  };
+}
+
+async function readResidentMemoryFacts(memoryDir: string, limit = 8): Promise<ResidentMemoryFactSummary[]> {
+  const factsRoot = path.join(memoryDir, 'facts');
+  const files = await listFiles(factsRoot, ['.md']);
+  const grouped = await Promise.all(
+    files.map(async file => {
+      const content = await readTextFile(path.join(factsRoot, file));
+      if (!content) return [];
+      const factPath = path.posix.join('facts', file.split(path.sep).join('/'));
+      const topic = path.basename(file, '.md');
+      return content
+        .split('\n')
+        .map(line => parseMemoryFactLine(line, topic, factPath))
+        .filter((fact): fact is ResidentMemoryFactSummary => Boolean(fact));
+    }),
+  );
+
+  return grouped
+    .flat()
+    .sort((left, right) => (right.timestamp || '').localeCompare(left.timestamp || '') || left.path.localeCompare(right.path) || left.text.localeCompare(right.text))
+    .slice(0, limit);
+}
+
+function parseMemoryFactLine(line: string, topic: string, factPath: string): ResidentMemoryFactSummary | undefined {
+  const cleaned = line.replace(/\s+/g, ' ').trim().replace(/^[-*]\s+/, '');
+  if (!cleaned) return undefined;
+
+  const match = cleaned.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)\s+(.+)$/);
+  if (match) {
+    const [, timestamp, text] = match;
+    if (!timestamp || !text) return undefined;
+    return {
+      topic,
+      path: factPath,
+      timestamp,
+      text: text.trim(),
+    };
+  }
+
+  return {
+    topic,
+    path: factPath,
+    text: cleaned,
   };
 }
 
