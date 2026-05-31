@@ -24,4 +24,12 @@ describe('dashboard copy hygiene', () => {
       /{#if citySession\.admin}\s+<button class:active={route\.startsWith\('\/admin'\)} onclick={\(\) => cityNav\('\/admin'\)}>AD Admin<\/button>\s+<button onclick={\(\) => debugNav\('\/'\)}>Debug<\/button>\s+{\/if}/,
     );
   });
+
+  test('keeps the public Storyteller route dispatch-first instead of operator-audit first', () => {
+    expect(appSource).not.toContain('<h1>Digest Feed</h1>');
+    expect(appSource).not.toContain('<div class="panel-title">Operator Review</div>');
+    expect(appSource).toContain('<h1>Storyteller Dispatches</h1>');
+    expect(appSource).toContain('<div class="panel-title">Public Dispatch Preview</div>');
+    expect(appSource).toContain('<div class="panel-title">Latest Public Dispatch</div>');
+  });
 });
