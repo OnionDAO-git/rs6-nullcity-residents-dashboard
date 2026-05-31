@@ -8,6 +8,7 @@ import {
   residentGuestTrailPulse,
   residentIntelligenceFacts,
   residentIntentFacts,
+  residentLiveMoment,
   residentLoopCheckpoints,
   residentLoopSignal,
   residentLoopSummaryLine,
@@ -175,6 +176,98 @@ describe('resident loop helpers', () => {
       { label: 'Said', value: 'I need AP, but coin 995 is nearby.', detail: 'live speech in feed | tick 2048 (current)', tone: 'ok' },
       { label: 'Remembers', value: 'The resident is turning patron support into visible progress.', detail: 'City dispatch cited this resident.', tone: 'ok' },
     ]);
+  });
+
+  test('selects fresh speech as the resident live moment before action or plan', () => {
+    expect(residentLiveMoment(row({
+      attention: 40,
+      thinking: { mode: 'executing', activePlan: 'Trade GP for AP' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'move_to', result: 'success', source: 'body', tick: 100 },
+        feed: {
+          attached: true,
+          tick: 100,
+          ageMs: 1000,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+          events: 1,
+          availableActions: 4,
+          latestEventKind: 'say',
+          latestEventText: 'I found the path to logs.',
+        },
+      },
+    }))).toEqual({
+      label: 'Said',
+      title: 'I found the path to logs.',
+      detail: 'live speech in feed | tick 100 (current)',
+      tone: 'ok',
+    });
+  });
+
+  test('uses a concrete recent action as the live moment when no speech is available', () => {
+    expect(residentLiveMoment(row({
+      attention: 70,
+      thinking: { mode: 'executing', activePlan: 'Collect coin proof' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', cause: 'goal:ap-gp', tick: 2048 },
+        latestPerception: { resident: { inventory: [{ itemId: 995, amount: 37 }] } },
+        feed: {
+          attached: true,
+          tick: 2048,
+          ageMs: 1500,
+          nearby: { players: 0, npcs: 1, objects: 0, worldItems: 2 },
+          events: 1,
+          availableActions: 6,
+        },
+      },
+    }))).toEqual({
+      label: 'Did',
+      title: 'picked up coin-995',
+      detail: 'success | thinking | goal:ap-gp | tick 2048 (current)',
+      tone: 'ok',
+    });
+  });
+
+  test('falls back to Library memory when speech and action are absent', () => {
+    expect(residentLiveMoment(row({
+      attention: 88,
+      thinking: { mode: 'idle' },
+      body: {
+        controlHeld: true,
+        feed: {
+          attached: true,
+          tick: 400,
+          ageMs: 1000,
+          nearby: { players: 0, npcs: 0, objects: 1, worldItems: 0 },
+          events: 0,
+          availableActions: 3,
+        },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'Remembered a patron gift.',
+        latestEventKind: 'patron_gift',
+        latestEventTick: 400,
+      },
+    }))).toEqual({
+      label: 'Remembered',
+      title: 'Remembered a patron gift.',
+      detail: 'Library evidence | tick 400 (current)',
+      tone: 'ok',
+    });
+  });
+
+  test('uses reconnect as the live moment when the resident is offline', () => {
+    expect(residentLiveMoment(row({
+      online: false,
+      thinking: { mode: 'idle', activePlan: 'Return to the square' },
+    }))).toEqual({
+      label: 'Reconnect',
+      title: 'Waiting for reconnect',
+      detail: 'Resident is offline in the live controller snapshot.',
+      tone: 'fail',
+    });
   });
 
   test('builds a compact agency cue from plan, action, and proof signals', () => {

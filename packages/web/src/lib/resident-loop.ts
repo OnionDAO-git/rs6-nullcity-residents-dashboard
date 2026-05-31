@@ -47,6 +47,13 @@ export interface ResidentAgencyCue {
   summary: string;
 }
 
+export interface ResidentLiveMoment {
+  label: 'Said' | 'Did' | 'Remembered' | 'Working' | 'Reconnect';
+  title: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
 export interface ResidentProofRollupAction {
   label: string;
   tone: 'warn' | 'fail';
@@ -298,6 +305,71 @@ export function residentAgencyCue(row: ResidentDashboardRow, signals: ResidentPr
   return {
     tone: need.tone,
     summary: `${workingOn} · ${just} · ${need.label}`,
+  };
+}
+
+export function residentLiveMoment(row: ResidentDashboardRow): ResidentLiveMoment {
+  if (!row.online) {
+    return {
+      label: 'Reconnect',
+      title: 'Waiting for reconnect',
+      detail: 'Resident is offline in the live controller snapshot.',
+      tone: 'fail',
+    };
+  }
+
+  const speech = recentSpeechSignal(row);
+  const speechFreshness = tickFreshness(row, speech.tick, SPEECH_STALE_TICK_GAP);
+  if (speech.text !== '-') {
+    return {
+      label: 'Said',
+      title: truncateAgencyText(speech.text, 96),
+      detail: [speech.source === 'feed' ? 'live speech in feed' : 'latest say event', speechFreshness].filter(Boolean).join(' | '),
+      tone: isTickStale(speechFreshness) ? 'warn' : 'ok',
+    };
+  }
+
+  const actionKind = row.body?.lastAction?.kind || row.lastEvent?.kind;
+  const actionFreshness = tickFreshness(row, row.body?.lastAction?.tick ?? row.lastEvent?.tick, ACTION_STALE_TICK_GAP);
+  if (actionKind) {
+    const outcome = residentActionOutcome(row);
+    const detail = actionDetail(row);
+    const detailParts = [detail === '-' ? '' : detail, actionFreshness].filter(Boolean);
+    return {
+      label: 'Did',
+      title: friendlyActionLabel(actionKind, row),
+      detail: detailParts.join(' | ') || outcome.detail,
+      tone: outcome.failed ? 'fail' : isTickStale(actionFreshness) ? 'warn' : 'ok',
+    };
+  }
+
+  const storyTitle = row.storyArc?.summary || row.storyArc?.latestEventKind;
+  if (storyTitle) {
+    const storyFreshness = tickFreshness(row, row.storyArc?.latestEventTick, STORY_STALE_TICK_GAP);
+    return {
+      label: 'Remembered',
+      title: truncateAgencyText(storyTitle, 96),
+      detail: ['Library evidence', storyFreshness].filter(Boolean).join(' | '),
+      tone: isTickStale(storyFreshness) ? 'warn' : 'ok',
+    };
+  }
+
+  const plan = residentGoalLabel(row);
+  if (plan !== '-') {
+    const detail = residentGoalDetail(row);
+    return {
+      label: 'Working',
+      title: truncateAgencyText(plan, 96),
+      detail: detail === 'plan' ? 'live plan' : detail,
+      tone: row.thinking?.activePlan ? 'ok' : 'warn',
+    };
+  }
+
+  return {
+    label: 'Working',
+    title: 'Waiting for a live moment',
+    detail: 'No speech, action, story, or plan signal yet.',
+    tone: 'warn',
   };
 }
 

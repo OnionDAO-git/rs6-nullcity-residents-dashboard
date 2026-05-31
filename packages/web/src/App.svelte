@@ -19,6 +19,7 @@
     residentGuestTrailPulse,
     residentIntelligenceFacts,
     residentIntentFacts,
+    residentLiveMoment,
     residentLoopCheckpoints,
     residentLoopSignal,
     residentLoopSummaryLine,
@@ -4349,6 +4350,7 @@
           goalContract: cityResidentGoalContract,
           storyteller: cityResidentStorySignal,
         })}
+        {@const liveMoment = residentLiveMoment(cityResident)}
         <div class="city-panel span-2">
           <div class="row">
             <div class="panel-title">Resident Intelligence Loop</div>
@@ -4363,6 +4365,15 @@
         <div class="city-panel span-2">
           <div class="panel-title">Resident Intent</div>
           {@render ResidentLoopFactGrid({ facts: residentIntentFacts(cityResident, { goalContract: cityResidentGoalContract, storyteller: cityResidentStorySignal }) })}
+          <div class="city-record-list compact">
+            <article>
+              <span class={`tag ${liveMoment.tone}`}>{liveMoment.label}</span>
+              <div>
+                <strong>{liveMoment.title}</strong>
+                <small>{liveMoment.detail}</small>
+              </div>
+            </article>
+          </div>
           <div class="city-empty-state subtle">
             <strong>{agencyCue.summary}</strong>
             <span>Intent, support need, action, speech, and Library memory are read-only dashboard signals.</span>
@@ -5230,12 +5241,14 @@
       {@const warning = residentPrimaryWarning(row, benchmark, { economyGp })}
       {@const pulse = residentProofPulse(row, { benchmark, economyGp, storyteller: storySignal })}
       {@const agencyCue = residentAgencyCue(row, { benchmark, economyGp, storyteller: storySignal })}
+      {@const liveMoment = residentLiveMoment(row)}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
         <small>
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
         </small>
+        <small class={`city-resident-loop-line tone-${liveMoment.tone}`}>Moment: {residentLoopLine(`${liveMoment.label}: ${liveMoment.title} · ${liveMoment.detail}`, 92)}</small>
         <small class={`city-resident-loop-line tone-${agencyCue.tone}`}>{residentLoopLine(agencyCue.summary, 92)}</small>
         <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
         <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(planCheckpoint?.value || '-', 72)}</small>
