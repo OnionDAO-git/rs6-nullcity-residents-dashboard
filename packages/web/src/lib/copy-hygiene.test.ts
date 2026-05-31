@@ -34,6 +34,12 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('<strong>Storyteller feed is unavailable</strong>');
   });
 
+  test('keeps Story Canon events on myth copy instead of raw log notes', () => {
+    expect(appSource).not.toContain('<strong>{event.note || event.ref}</strong>');
+    expect(appSource).toContain('{@const myth = storytellerMythCard(event)}');
+    expect(appSource).toContain('<strong>{myth.title}</strong>');
+  });
+
   test('keeps guest login fallback from linking attendees back to the same unavailable route', () => {
     expect(appSource).not.toContain('<a class="city-link-button" href={citySession.loginUrl}>Open Login</a>');
     expect(appSource).toContain('Ask event staff for the attendee QR or staff login link.');

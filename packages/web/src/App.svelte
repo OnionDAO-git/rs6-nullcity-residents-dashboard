@@ -5252,11 +5252,16 @@
             <button onclick={() => cityNav('/story')}>Story</button>
           </article>
           {#each cityPrintStorySignal.events.slice(0, 3) as event (event.ref)}
+            {@const myth = storytellerMythCard(event)}
             <article>
               <span class={`tag ${storytellerEventTone(event)}`}>{storytellerEventTitle(event)}</span>
-              <div>
-                <strong>{event.note || event.ref}</strong>
-                <small>{storytellerEventMeta(event)} · {event.evidenceLabels.join(' · ') || 'grounded evidence'}</small>
+              <div class="story-event-copy">
+                <strong>{myth.title}</strong>
+                <small>{storytellerEventMeta(event)}</small>
+                {#if myth.body}
+                  <p>{myth.body}</p>
+                {/if}
+                <small>{myth.evidenceLabels.join(' · ')}</small>
               </div>
             </article>
           {/each}
