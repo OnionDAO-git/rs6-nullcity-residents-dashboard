@@ -4990,13 +4990,23 @@
 {#snippet ResidentLoopFactGrid({ facts }: { facts: ResidentLoopFact[] })}
   <div class="resident-loop-grid">
     {#each facts as fact}
-      <span class:ok={fact.tone === 'ok'} class:warn={fact.tone === 'warn'} class:fail={fact.tone === 'fail'}>
-        <small>{fact.label}</small>
-        <strong>{fact.value}</strong>
-        {#if fact.detail}
-          <em>{fact.detail}</em>
-        {/if}
-      </span>
+      {#if fact.path}
+        <button type="button" class:ok={fact.tone === 'ok'} class:warn={fact.tone === 'warn'} class:fail={fact.tone === 'fail'} onclick={() => fact.path && cityNav(fact.path)}>
+          <small>{fact.label}</small>
+          <strong>{fact.value}</strong>
+          {#if fact.detail}
+            <em>{fact.detail}</em>
+          {/if}
+        </button>
+      {:else}
+        <span class:ok={fact.tone === 'ok'} class:warn={fact.tone === 'warn'} class:fail={fact.tone === 'fail'}>
+          <small>{fact.label}</small>
+          <strong>{fact.value}</strong>
+          {#if fact.detail}
+            <em>{fact.detail}</em>
+          {/if}
+        </span>
+      {/if}
     {/each}
   </div>
 {/snippet}

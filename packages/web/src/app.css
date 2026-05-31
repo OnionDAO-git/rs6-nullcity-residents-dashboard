@@ -2810,19 +2810,19 @@ pre {
   margin: 0;
 }
 
-.city-loop-pulse-grid .resident-loop-grid span {
+.city-loop-pulse-grid .resident-loop-grid :is(span, button) {
   padding: 10px;
 }
 
-.city-loop-pulse-grid .resident-loop-grid span.ok {
+.city-loop-pulse-grid .resident-loop-grid :is(span, button).ok {
   border-color: rgba(78, 174, 110, 0.45);
 }
 
-.city-loop-pulse-grid .resident-loop-grid span.warn {
+.city-loop-pulse-grid .resident-loop-grid :is(span, button).warn {
   border-color: rgba(240, 184, 76, 0.48);
 }
 
-.city-loop-pulse-grid .resident-loop-grid span.fail {
+.city-loop-pulse-grid .resident-loop-grid :is(span, button).fail {
   border-color: rgba(212, 112, 122, 0.55);
 }
 
@@ -2833,13 +2833,26 @@ pre {
   margin-top: 12px;
 }
 
-.resident-loop-grid span {
+.resident-loop-grid :is(span, button) {
   display: grid;
   gap: 6px;
   min-width: 0;
   padding: 12px;
   background: var(--ground-2);
   border: 1px solid var(--ground-4);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.resident-loop-grid button {
+  cursor: pointer;
+}
+
+.resident-loop-grid button:hover,
+.resident-loop-grid button:focus-visible {
+  border-color: var(--accent-1);
+  outline: none;
 }
 
 .resident-loop-grid small {
