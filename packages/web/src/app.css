@@ -2166,6 +2166,24 @@ pre {
   line-height: 1.5;
 }
 
+.city-copy-block small {
+  overflow-wrap: anywhere;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.story-latest-preview {
+  border-left: 3px solid var(--s-bone);
+}
+
+.story-latest-preview .row {
+  align-items: start;
+}
+
+.story-latest-preview .panel-title {
+  margin-bottom: 4px;
+}
+
 .city-proposal-meter {
   height: 12px;
   margin: 12px 0;

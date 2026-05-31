@@ -46,7 +46,7 @@
     type ResidentGuestTrailPulse,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -3902,6 +3902,7 @@
       {#if cityStoryDigest}
         {@const selectedStoryStatus = storytellerDigestStatus(cityStoryDigest)}
         {@const selectedStoryAudit = storytellerGroundingAudit(cityStoryDigest)}
+        {@const selectedStoryPreview = storytellerLatestPreview(cityStoryDigest)}
         <div class="city-resident-profile-grid">
           <span><small>Run</small><strong>{cityStoryDigest.runId}</strong></span>
           <span><small>Queue</small><strong>{cityStoryDigest.queue || 'dry-run'}</strong></span>
@@ -3914,6 +3915,29 @@
           <span><small>Status</small><strong>{selectedStoryStatus.label}</strong></span>
         </div>
         <div class={`notice ${selectedStoryStatus.tone === 'warn' ? 'amber' : ''}`}>{selectedStoryStatus.summary}</div>
+        <div class={`city-copy-block story-latest-preview tone-${selectedStoryPreview.tone}`}>
+          <div class="row">
+            <div>
+              <div class="panel-title">Latest Public Preview</div>
+              <strong>{selectedStoryPreview.title}</strong>
+            </div>
+            <span class={`tag ${selectedStoryPreview.tone}`}>{selectedStoryPreview.source}</span>
+          </div>
+          <p>{selectedStoryPreview.body}</p>
+          <small>{selectedStoryPreview.detail}</small>
+        </div>
+        {#if selectedStoryPreview.bullets.length}
+          <div class="city-record-list compact">
+            {#each selectedStoryPreview.bullets as bullet}
+              <article class="story-event-card">
+                <span class="tag ok">dispatch</span>
+                <div class="story-event-copy">
+                  <strong>{bullet}</strong>
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
         <div class="city-review-block">
           <div class="row">
             <div class="panel-title">Grounding Audit</div>
@@ -3938,22 +3962,6 @@
             {/if}
           </div>
         </div>
-        <div class="city-copy-block">
-          <strong>{cityStoryDigest.dispatch?.publicTitle || 'No model dispatch title yet'}</strong>
-          <p>{cityStoryDigest.dispatch?.publicBody || cityStoryDigest.summary || 'No operator summary found for this digest.'}</p>
-        </div>
-        {#if cityStoryDigest.dispatch?.publicBullets.length}
-          <div class="city-record-list compact">
-            {#each cityStoryDigest.dispatch.publicBullets as bullet}
-              <article class="story-event-card">
-                <span class="tag ok">dispatch</span>
-                <div class="story-event-copy">
-                  <strong>{bullet}</strong>
-                </div>
-              </article>
-            {/each}
-          </div>
-        {/if}
         {#if cityStoryDigest.dispatch?.operatorSummary}
           <div class="notice">{cityStoryDigest.dispatch.operatorSummary}</div>
         {/if}

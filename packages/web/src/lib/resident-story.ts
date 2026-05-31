@@ -44,6 +44,16 @@ export interface StorytellerGroundingAudit {
   reviewReasonCount: number;
 }
 
+export interface StorytellerLatestPreview {
+  tone: 'ok' | 'warn';
+  source: 'dispatch' | 'events' | 'summary' | 'empty';
+  label: StorytellerDigestStatus['label'] | 'waiting';
+  title: string;
+  body: string;
+  detail: string;
+  bullets: string[];
+}
+
 export function residentStoryEvents(
   resident: ResidentDashboardRow | undefined,
   digests: StorytellerDigestSummary[],
@@ -186,6 +196,67 @@ export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs 
   };
 }
 
+export function storytellerLatestPreview(
+  digest: StorytellerDigestSummary | undefined,
+  nowMs = Date.now(),
+): StorytellerLatestPreview {
+  if (!digest) {
+    return {
+      tone: 'warn',
+      source: 'empty',
+      label: 'waiting',
+      title: 'No Storyteller run loaded',
+      body: 'Digest and dispatch artifacts will appear once the controller writes grounded Storyteller runs.',
+      detail: 'No latest digest is available from /api/storyteller/digests yet.',
+      bullets: [],
+    };
+  }
+
+  const status = storytellerDigestStatus(digest, nowMs);
+  const dispatchTitle = digest.dispatch?.publicTitle?.trim();
+  const dispatchBody = digest.dispatch?.publicBody?.trim();
+  const bullets = cleanBullets(digest.dispatch?.publicBullets || []);
+  const title = dispatchTitle || digest.summary?.trim() || digest.digestId || digest.runId;
+
+  if (status.label === 'ready' && dispatchBody) {
+    return {
+      tone: status.tone,
+      source: 'dispatch',
+      label: status.label,
+      title,
+      body: dispatchBody,
+      detail: status.summary,
+      bullets,
+    };
+  }
+
+  const eventLines = digest.topEvents
+    .slice(0, 3)
+    .map(storytellerEventPreviewLine)
+    .filter(line => line.length > 0);
+  if (eventLines.length) {
+    return {
+      tone: status.tone,
+      source: 'events',
+      label: status.label,
+      title,
+      body: eventLines.join(' '),
+      detail: `${status.summary} Preview is derived from ${plural(eventLines.length, 'grounded top event')}.`,
+      bullets: status.label === 'ready' ? bullets : [],
+    };
+  }
+
+  return {
+    tone: status.tone,
+    source: 'summary',
+    label: status.label,
+    title,
+    body: digest.summary?.trim() || 'No grounded top events are available for this Storyteller run yet.',
+    detail: `${status.summary} No grounded top events are available for a public preview.`,
+    bullets: status.label === 'ready' ? bullets : [],
+  };
+}
+
 export function storytellerDigestRunList(digests: StorytellerDigestSummary[], selectedRunId = ''): StorytellerDigestRunList {
   const visible: StorytellerDigestSummary[] = [];
   const selectedId = selectedRunId.trim();
@@ -299,6 +370,15 @@ function uniqueRefs(refs: string[]): string[] {
 
 function plural(count: number, singular: string): string {
   return `${count.toLocaleString()} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+function cleanBullets(bullets: string[]): string[] {
+  return bullets.map(bullet => bullet.trim()).filter(bullet => bullet.length > 0);
+}
+
+function storytellerEventPreviewLine(event: StorytellerDigestEventSummary): string {
+  const myth = storytellerMythCard(event);
+  return myth.body ? `${myth.title}: ${myth.body}` : myth.title;
 }
 
 function normalizeResident(name: string): string {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerMythCard } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerMythCard } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -342,6 +342,90 @@ describe('storytellerDigestRunList', () => {
     expect(list.collapsedDryRuns).toBe(1);
     expect(list.selectedCollapsedDryRun).toBe(true);
     expect(list.summary).toBe('Showing canon/review runs, latest dry-run, and selected dry-run; 1 other older dry-run collapsed.');
+  });
+});
+
+describe('storytellerLatestPreview', () => {
+  test('uses a ready dispatch body and bullets when grounded canon is safe to read', () => {
+    const preview = storytellerLatestPreview(digest({
+      dispatch: {
+        dispatchId: 'dispatch-ready',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        publicTitle: 'Null City wakes cleanly',
+        publicBody: 'Residents traded GP for attention and kept their plans visible.',
+        publicBullets: ['Hans traded 25 GP for 50 AP.'],
+        operatorWarnings: [],
+        reviewReasons: [],
+        warningCount: 0,
+        eventRefCount: 2,
+        eventRefsUsed: ['e1', 'e2'],
+        estimatedCostUsd: null,
+      },
+    }), Date.parse('2026-05-30T04:10:00.000Z'));
+
+    expect(preview).toEqual({
+      tone: 'ok',
+      source: 'dispatch',
+      label: 'ready',
+      title: 'Null City wakes cleanly',
+      body: 'Residents traded GP for attention and kept their plans visible.',
+      detail: 'Dispatch is grounded and ready for public review.',
+      bullets: ['Hans traded 25 GP for 50 AP.'],
+    });
+  });
+
+  test('derives a readable preview from top events when the dispatch needs review', () => {
+    const preview = storytellerLatestPreview(digest({
+      dispatch: {
+        dispatchId: 'dispatch-review',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: true,
+        publicTitle: 'Operator draft',
+        publicBody: 'Raw operator QA text should not lead the public preview.',
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: ['missing_ref'],
+        warningCount: 1,
+        eventRefCount: 1,
+        eventRefsUsed: ['missing'],
+        estimatedCostUsd: null,
+      },
+    }), Date.parse('2026-05-30T04:10:00.000Z'));
+
+    expect(preview).toMatchObject({
+      tone: 'warn',
+      source: 'events',
+      label: 'review',
+      title: 'Operator draft',
+      detail: 'Dispatch is grounded but needs operator review before public broadcast. Preview is derived from 2 grounded top events.',
+      bullets: [],
+    });
+    expect(preview.body).toContain('Hans traded GP for attention: burned 25 GP for 50 AP');
+    expect(preview.body).toContain('Pip received attention: received AP grant');
+    expect(preview.body).not.toContain('Raw operator QA text');
+  });
+
+  test('keeps dry-run and empty preview states explicit', () => {
+    expect(storytellerLatestPreview(digest(), Date.parse('2026-05-30T04:10:00.000Z'))).toMatchObject({
+      tone: 'warn',
+      source: 'events',
+      label: 'dry-run',
+      title: 'dig-1',
+      body: 'Hans traded GP for attention: burned 25 GP for 50 AP Pip received attention: received AP grant',
+    });
+
+    expect(storytellerLatestPreview(undefined)).toEqual({
+      tone: 'warn',
+      source: 'empty',
+      label: 'waiting',
+      title: 'No Storyteller run loaded',
+      body: 'Digest and dispatch artifacts will appear once the controller writes grounded Storyteller runs.',
+      detail: 'No latest digest is available from /api/storyteller/digests yet.',
+      bullets: [],
+    });
   });
 });
 
