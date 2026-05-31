@@ -92,7 +92,7 @@ describe('buildEventReadinessSummary', () => {
     });
     expect(summary.checks.find(check => check.id === 'patrons')).toMatchObject({
       level: 'warn',
-      detail: '1 patrons registered, no Shards currently held',
+      detail: '1 patrons registered, no AP currently held',
     });
     expect(JSON.stringify(summary)).not.toContain('@');
   });

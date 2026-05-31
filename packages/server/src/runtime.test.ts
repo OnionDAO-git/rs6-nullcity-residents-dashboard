@@ -652,7 +652,7 @@ describe('RuntimeRepository letters', () => {
 });
 
 describe('RuntimeRepository patrons', () => {
-  test('summarizes patron Shards and standing without exposing raw handles', async () => {
+  test('summarizes patron AP and standing without exposing raw handles', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-patrons-'));
     const memoryRoot = path.join(root, 'memory');

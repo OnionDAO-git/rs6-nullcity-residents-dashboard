@@ -190,8 +190,8 @@ describe('routePublicEventApi', () => {
 
       expect(first?.status).toBe(200);
       expect(second?.status).toBe(200);
-      expect(await first!.json()).toMatchObject({ result: 'checked_in', shards_earned: 1, new_balance: 1 });
-      expect(await second!.json()).toMatchObject({ result: 'already_checked_in', shards_earned: 0, new_balance: 1 });
+      expect(await first!.json()).toMatchObject({ result: 'checked_in', ap_earned: 1, shards_earned: 1, new_balance: 1, currency: 'AP' });
+      expect(await second!.json()).toMatchObject({ result: 'already_checked_in', ap_earned: 0, shards_earned: 0, new_balance: 1, currency: 'AP' });
       const balance = JSON.parse(await fs.readFile(path.join(config.memoryRoot, 'patron-currency.json'), 'utf8')) as {
         balances: Record<string, number>;
       };

@@ -270,7 +270,7 @@ main {
   outline: none;
 }
 
-.shard-line {
+.point-line {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 1px;
@@ -280,14 +280,14 @@ main {
   background: var(--ground-0);
 }
 
-.shard-line span:nth-child(1) { background: var(--s-blue); }
-.shard-line span:nth-child(2) { background: var(--s-green); }
-.shard-line span:nth-child(3) { background: var(--s-gold); }
-.shard-line span:nth-child(4) { background: var(--s-rose); }
-.shard-line span:nth-child(5) { background: var(--s-teal); }
-.shard-line span:nth-child(6) { background: var(--s-amber); }
-.shard-line span:nth-child(7) { background: var(--s-mauve); }
-.shard-line span:nth-child(8) { background: var(--s-bone); }
+.point-line span:nth-child(1) { background: var(--s-blue); }
+.point-line span:nth-child(2) { background: var(--s-green); }
+.point-line span:nth-child(3) { background: var(--s-gold); }
+.point-line span:nth-child(4) { background: var(--s-rose); }
+.point-line span:nth-child(5) { background: var(--s-teal); }
+.point-line span:nth-child(6) { background: var(--s-amber); }
+.point-line span:nth-child(7) { background: var(--s-mauve); }
+.point-line span:nth-child(8) { background: var(--s-bone); }
 
 .page-head,
 .toolbar {
@@ -1669,7 +1669,7 @@ pre {
   color: var(--text-0);
 }
 
-.city-shards {
+.city-points {
   margin-bottom: 28px;
 }
 
@@ -2972,7 +2972,7 @@ pre {
     font-size: clamp(34px, 12vw, 44px);
   }
 
-  .shard-line {
+  .point-line {
     margin-bottom: 28px;
   }
 

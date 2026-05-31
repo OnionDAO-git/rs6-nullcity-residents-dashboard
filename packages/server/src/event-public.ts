@@ -4,7 +4,7 @@ import type { DashboardConfig } from './config';
 import type { RuntimeRepository } from './runtime';
 import { asRecord, jsonResponse, listFiles, pathExists, readJsonFile, readJsonl, residentSlug } from './util';
 
-const CURRENCY_NAME = 'Shards';
+const CURRENCY_NAME = 'AP';
 const DAILY_CHECK_IN_SHARDS = 1;
 const STANDING_TIERS = [
   { name: 'stranger', minPoints: 0 },
@@ -123,6 +123,7 @@ async function routePatronCheckIn(url: URL, memoryRoot: string): Promise<Respons
   if (dates.has(today)) {
     return jsonResponse({
       result: 'already_checked_in',
+      ap_earned: 0,
       shards_earned: 0,
       new_balance: currency.balances[human] ?? 0,
       currency: CURRENCY_NAME,
@@ -142,6 +143,7 @@ async function routePatronCheckIn(url: URL, memoryRoot: string): Promise<Respons
 
   return jsonResponse({
     result: 'checked_in',
+    ap_earned: DAILY_CHECK_IN_SHARDS,
     shards_earned: DAILY_CHECK_IN_SHARDS,
     new_balance: currency.balances[human],
     currency: CURRENCY_NAME,

@@ -137,7 +137,7 @@ function patronsCheck(patrons: PatronActivitySummary | undefined): ReadinessChec
       label: 'Patron ledgers',
       level: 'warn',
       count: patrons.totalPatrons,
-      detail: `${patrons.totalPatrons} patrons registered, no Shards currently held`,
+      detail: `${patrons.totalPatrons} patrons registered, no AP currently held`,
     };
   }
   return {
@@ -145,7 +145,7 @@ function patronsCheck(patrons: PatronActivitySummary | undefined): ReadinessChec
     label: 'Patron ledgers',
     level: 'ok',
     count: patrons.totalPatrons,
-    detail: `${patrons.totalPatrons} patrons, ${patrons.totalShardBalance.toLocaleString()} Shards visible`,
+    detail: `${patrons.totalPatrons} patrons, ${patrons.totalShardBalance.toLocaleString()} AP visible`,
   };
 }
 

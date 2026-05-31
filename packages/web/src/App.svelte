@@ -2879,7 +2879,7 @@
 </nav>
 
 <main>
-  <div class="shard-line" aria-hidden="true">
+  <div class="point-line" aria-hidden="true">
     <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
   </div>
 
@@ -3151,7 +3151,7 @@
     </aside>
 
     <main class="city-main">
-      <div class="shard-line city-shards" aria-hidden="true">
+      <div class="point-line city-points" aria-hidden="true">
         <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
 
@@ -5389,7 +5389,7 @@
     <div class="panel-title">Patron Standing</div>
     <div class="mini-grid">
       <span><strong>Patrons</strong>{summary?.totalPatrons || 0}</span>
-      <span><strong>Shards held</strong>{(summary?.totalShardBalance || 0).toLocaleString()}</span>
+      <span><strong>AP held</strong>{(summary?.totalShardBalance || 0).toLocaleString()}</span>
       <span><strong>Standing pts</strong>{(summary?.totalStandingPoints || 0).toLocaleString()}</span>
       <span><strong>Allies / Officers</strong>{patronTierCount(summary, 'ally')} / {patronTierCount(summary, 'officer')}</span>
     </div>
@@ -5400,7 +5400,7 @@
           <span class="tag">{standing?.tier || 'stranger'}</span>
           <span>
             <strong>{patron.handle}</strong>
-            <small>{patron.balance.toLocaleString()} Shards · {patronStandingLabel(patron)} · {patronLastActivityLabel(patron)}</small>
+            <small>{patron.balance.toLocaleString()} AP · {patronStandingLabel(patron)} · {patronLastActivityLabel(patron)}</small>
           </span>
         </div>
       {:else}
