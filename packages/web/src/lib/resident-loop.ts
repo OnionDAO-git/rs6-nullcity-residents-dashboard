@@ -20,6 +20,7 @@ export interface ResidentNextStepCue {
   tone: 'ok' | 'warn' | 'fail';
   label: 'Next step';
   action: string;
+  target: string;
   detail: string;
 }
 
@@ -654,6 +655,7 @@ export function residentNextStepCue(
     tone: warning.tone,
     label: 'Next step',
     action: nextStepActionLabel(warning),
+    target: nextStepTargetLabel(warning),
     detail: warning.tone === 'ok' ? warning.detail : [warning.summary, warning.detail].filter(Boolean).join(' '),
   };
 }
@@ -1355,6 +1357,18 @@ function nextStepActionLabel(warning: ResidentOperatorWarning): string {
   if (warning.summary.startsWith('Library strategy')) return 'Ground story evidence';
   if (warning.summary.toLowerCase().includes('benchmark')) return 'Run capability proof';
   return 'Review resident signal';
+}
+
+function nextStepTargetLabel(warning: ResidentOperatorWarning): string {
+  if (warning.tone === 'ok') return 'Resident Intent';
+  if (warning.summary.startsWith('Resident is offline') || warning.summary.startsWith('AP low')) return 'Grant Attention';
+  if (warning.summary.startsWith('No live feed') || warning.summary.startsWith('Feed stale')) return 'Open Ops View';
+  if (warning.summary.startsWith('Latest action')) return 'Open Ops View';
+  if (warning.summary.includes('GP')) return 'Resident Economy';
+  if (warning.summary.startsWith('No active plan')) return 'Open Ops View';
+  if (warning.summary.startsWith('Library strategy')) return 'Storyteller Grounded Events';
+  if (warning.summary.toLowerCase().includes('benchmark')) return 'Capability Warnings';
+  return 'Capability Warnings';
 }
 
 function compactMomentCauseDetail(cause: ResidentCauseSignal): string {

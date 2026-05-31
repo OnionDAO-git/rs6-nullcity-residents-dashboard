@@ -393,6 +393,7 @@ describe('resident loop helpers', () => {
       tone: 'fail',
       label: 'Next step',
       action: 'Reconnect resident',
+      target: 'Grant Attention',
       detail: 'Resident is offline in the live controller snapshot. Login or top up AP before expecting new actions.',
     });
 
@@ -419,6 +420,7 @@ describe('resident loop helpers', () => {
       tone: 'ok',
       label: 'Next step',
       action: 'Keep watching',
+      target: 'Resident Intent',
       detail: 'Resident has current AP, GP, plan, feed, story, and benchmark signals.',
     });
   });

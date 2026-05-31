@@ -4381,6 +4381,7 @@
               <div>
                 <strong>{nextStepCue.action}</strong>
                 <small>{nextStepCue.detail}</small>
+                <small>Act from: {nextStepCue.target}</small>
               </div>
             </article>
             <article>
