@@ -32,6 +32,7 @@
     residentProofRollup,
     residentPrimaryWarning,
     residentPublicStateTiles,
+    residentRosterScanLines,
     residentStackSummary,
     residentTriageSummary,
     visibleResidentTriageBuckets,
@@ -5232,41 +5233,19 @@
 {#snippet CityResidentList({ rows }: { rows: ResidentDashboardRow[] })}
   <div class="city-resident-list">
     {#each rows as row (row.name)}
-      {@const signal = residentLoopSignal(row)}
-      {@const checkpoints = residentLoopCheckpoints(row)}
-      {@const planCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'plan')}
-      {@const actionCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'action')}
-      {@const speechCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'speech')}
-      {@const storyCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'story')}
       {@const benchmark = residentBenchmarkLabel(row)}
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
       {@const economyGp = residentLiveEconomyGpEvidence(cityLiveEconomy, row.name)}
-      {@const warning = residentPrimaryWarning(row, benchmark, { economyGp })}
-      {@const pulse = residentProofPulse(row, { benchmark, economyGp, storyteller: storySignal })}
-      {@const agencyCue = residentAgencyCue(row, { benchmark, economyGp, storyteller: storySignal })}
-      {@const liveMoment = residentLiveMoment(row)}
-      {@const apRunway = residentAttentionRunway(row)}
-      {@const memoryFreshness = residentMemoryFreshness(row)}
-      {@const causeSignal = residentCauseSignal(row)}
+      {@const scanLines = residentRosterScanLines(row, { benchmark, economyGp, storyteller: storySignal })}
       <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
         <small>
           {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
         </small>
-        <small class={`city-resident-loop-line tone-${liveMoment.tone}`}>Moment: {residentLoopLine(`${liveMoment.label}: ${liveMoment.title} · ${liveMoment.detail}`, 92)}</small>
-        <small class={`city-resident-loop-line tone-${agencyCue.tone}`}>{residentLoopLine(agencyCue.summary, 92)}</small>
-        <small class={`city-resident-loop-line tone-${causeSignal.tone}`}>Why: {residentLoopLine(causeSignal.detail, 80)}</small>
-        <small class={`city-resident-loop-line tone-${apRunway.tone}`}>Runway: {residentLoopLine(`${apRunway.label} · ${apRunway.detail}`, 76)}</small>
-        <small class="city-resident-loop-line">Stack: {residentLoopLine(residentStackSummary(row), 76)}</small>
-        <small class={`city-resident-loop-line tone-${planCheckpoint?.tone || 'warn'}`}>Plan: {residentLoopLine(planCheckpoint?.value || '-', 72)}</small>
-        <small class={`city-resident-loop-line tone-${actionCheckpoint?.tone || 'warn'}`}>Action: {residentLoopLine(signal.action, 60)}</small>
-        <small class={`city-resident-loop-line tone-${speechCheckpoint?.tone || 'warn'}`}>Speech: {residentLoopLine(signal.speech, 72)}</small>
-        <small class={`city-resident-loop-line tone-${storyCheckpoint?.tone || 'warn'}`}>Story: {residentLoopLine(signal.story, 72)}</small>
-        <small class={`city-resident-loop-line tone-${memoryFreshness.tone}`}>Memory: {residentLoopLine(`${memoryFreshness.label} · ${memoryFreshness.summary} · ${memoryFreshness.detail}`, 80)}</small>
-        <small class={`city-resident-loop-line tone-${pulse.tone}`}>Proof: {residentLoopLine(`${pulse.summary} · ${pulse.detail}`, 80)}</small>
-        <small class="city-resident-loop-line">Capability: {residentLoopLine(warning.summary, 76)}</small>
-        <small class="city-resident-loop-line">Storyteller: {residentLoopLine(storySignal.summary, 76)}</small>
+        {#each scanLines as line}
+          <small class={`city-resident-loop-line tone-${line.tone} priority-${line.priority}`}>{line.label}: {residentLoopLine(line.text, line.limit)}</small>
+        {/each}
         <em class:warn={residentNeedsApSupportSoon(row)}>{row.attention ?? '-'} AP</em>
       </button>
     {:else}

@@ -8,6 +8,14 @@ export interface ResidentLoopFact {
   tone?: 'ok' | 'warn' | 'fail' | undefined;
 }
 
+export interface ResidentRosterScanLine {
+  label: string;
+  text: string;
+  tone?: 'ok' | 'warn' | 'fail';
+  limit: number;
+  priority: 'primary' | 'secondary';
+}
+
 export interface ResidentOperatorWarning {
   tone: 'ok' | 'warn' | 'fail';
   summary: string;
@@ -529,6 +537,89 @@ export function residentGuestTrailFacts(pulse: ResidentGuestTrailPulse): Residen
       value: `${Math.max(0, pulse.storyEvidence)}${denominator} grounded`,
       detail: 'Library or Storyteller evidence',
       tone: pulse.storyEvidence > 0 ? 'ok' : 'warn',
+    },
+  ];
+}
+
+export function residentRosterScanLines(
+  row: ResidentDashboardRow,
+  signals: ResidentProofPulseSignals = {},
+): ResidentRosterScanLine[] {
+  const loopSignal = residentLoopSignal(row);
+  const checkpoints = residentLoopCheckpoints(row);
+  const planCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'plan');
+  const actionCheckpoint = checkpoints.find(checkpoint => checkpoint.key === 'action');
+  const liveMoment = residentLiveMoment(row);
+  const agencyCue = residentAgencyCue(row, signals);
+  const causeSignal = residentCauseSignal(row);
+  const apRunway = residentAttentionRunway(row);
+  const memoryFreshness = residentMemoryFreshness(row);
+  const proofPulse = residentProofPulse(row, signals);
+  const warning = residentPrimaryWarning(row, signals.benchmark, { economyGp: signals.economyGp });
+
+  return [
+    {
+      label: 'Moment',
+      text: `${liveMoment.label}: ${liveMoment.title} · ${liveMoment.detail}`,
+      tone: liveMoment.tone,
+      limit: 104,
+      priority: 'primary',
+    },
+    {
+      label: 'Need',
+      text: agencyCue.summary,
+      tone: agencyCue.tone,
+      limit: 96,
+      priority: 'primary',
+    },
+    {
+      label: 'Why',
+      text: causeSignal.detail,
+      tone: causeSignal.tone,
+      limit: 84,
+      priority: 'primary',
+    },
+    {
+      label: 'Runway',
+      text: `${apRunway.label} · ${apRunway.detail}`,
+      tone: apRunway.tone,
+      limit: 76,
+      priority: 'primary',
+    },
+    {
+      label: 'Plan',
+      text: planCheckpoint?.value || '-',
+      tone: planCheckpoint?.tone || 'warn',
+      limit: 72,
+      priority: 'secondary',
+    },
+    {
+      label: 'Action',
+      text: loopSignal.action,
+      tone: actionCheckpoint?.tone || 'warn',
+      limit: 60,
+      priority: 'secondary',
+    },
+    {
+      label: 'Memory',
+      text: `${memoryFreshness.label} · ${memoryFreshness.summary} · ${memoryFreshness.detail}`,
+      tone: memoryFreshness.tone,
+      limit: 84,
+      priority: 'secondary',
+    },
+    {
+      label: 'Proof',
+      text: `${proofPulse.summary} · ${proofPulse.detail}`,
+      tone: proofPulse.tone,
+      limit: 84,
+      priority: 'secondary',
+    },
+    {
+      label: 'Risk',
+      text: warning.summary,
+      tone: warning.tone,
+      limit: 76,
+      priority: 'secondary',
     },
   ];
 }

@@ -22,6 +22,7 @@ import {
   residentProofRollup,
   residentPrimaryWarning,
   residentPublicStateTiles,
+  residentRosterScanLines,
   residentStackSummary,
   residentTriageSummary,
   visibleResidentTriageBuckets,
@@ -324,6 +325,52 @@ describe('resident loop helpers', () => {
       detail: 'offline live snapshot | because they are working on "Return to the square"',
       tone: 'fail',
     });
+  });
+
+  test('builds bounded roster scan lines for the resident directory', () => {
+    const lines = residentRosterScanLines(row({
+      online: false,
+      attention: 7674,
+      thinking: { mode: 'offline', activePlan: 'Master woodcutting and supply the city with logs.', lastInferenceCause: 'evidence_record_failed' },
+      body: {
+        controlHeld: false,
+        lastAction: { kind: 'action', result: 'success', source: 'thinking', tick: 26 },
+      },
+      storyArc: {
+        phase: 'progress',
+        summary: 'The resident is making visible in-game progress.',
+        latestEventKind: 'stuck_recovered',
+        latestEventTick: 135996,
+      },
+    }), {
+      storyteller: { tone: 'warn', summary: 'No grounded Storyteller events for this resident.' },
+    });
+
+    expect(lines).toHaveLength(9);
+    expect(lines.map(line => line.label)).toEqual([
+      'Moment',
+      'Need',
+      'Why',
+      'Runway',
+      'Plan',
+      'Action',
+      'Memory',
+      'Proof',
+      'Risk',
+    ]);
+    expect(lines[0]).toMatchObject({
+      label: 'Moment',
+      text: 'Reconnect: Waiting for reconnect · offline live snapshot | because evidence record failed',
+      tone: 'fail',
+      limit: 104,
+      priority: 'primary',
+    });
+    expect(lines.find(line => line.label === 'Why')).toMatchObject({
+      text: 'because thinking recorded evidence record failed (evidence_record_failed)',
+      tone: 'ok',
+    });
+    expect(lines.some(line => line.label === 'Stack')).toBe(false);
+    expect(lines.some(line => line.label === 'Storyteller')).toBe(false);
   });
 
   test('describes Library memory freshness as fresh, stale, or thin', () => {
