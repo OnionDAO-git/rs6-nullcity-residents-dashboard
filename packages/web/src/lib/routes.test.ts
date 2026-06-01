@@ -81,6 +81,13 @@ describe('dashboard route helpers', () => {
     expect(cityRouteNeedsSnapshot('/residents/res%3Aagent')).toBe(true);
   });
 
+  test('keeps the projector overview public while loading live city and Storyteller state', () => {
+    expect(isKnownCityRoute('/overview')).toBe(true);
+    expect(isProtectedCityRoute('/overview')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/overview')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/overview')).toBe(true);
+  });
+
   test('keeps the live economy route public while loading city state', () => {
     expect(isKnownCityRoute('/economy')).toBe(true);
     expect(isProtectedCityRoute('/economy')).toBe(false);

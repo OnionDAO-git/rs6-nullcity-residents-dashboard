@@ -102,6 +102,7 @@ export function isStoryRoute(route: string): boolean {
 export function cityRouteNeedsStoryDigests(route: string): boolean {
   const normalized = normalizePath(route);
   return normalized === '/' ||
+    normalized === '/overview' ||
     normalized === '/residents' ||
     normalized.startsWith('/residents/') ||
     normalized === '/library' ||
@@ -111,6 +112,7 @@ export function cityRouteNeedsStoryDigests(route: string): boolean {
 export function cityRouteNeedsSnapshot(route: string): boolean {
   const normalized = normalizePath(route);
   return normalized === '/' ||
+    normalized === '/overview' ||
     normalized === '/economy' ||
     normalized === '/profile' ||
     normalized === '/world' ||
@@ -129,6 +131,7 @@ export function cityRouteNeedsSnapshot(route: string): boolean {
 export function isKnownCityRoute(route: string): boolean {
   const normalized = normalizePath(route);
   if (normalized === '/' || normalized === '/login') return true;
+  if (normalized === '/overview') return true;
   if (normalized === '/economy') return true;
   if (normalized === '/profile' || normalized === '/world' || normalized === '/library') return true;
   if (isStoryRoute(normalized)) return true;

@@ -60,6 +60,7 @@
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestSafetyLine, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { buildStoryOverviewModel, type StoryOverviewListItem, type StoryOverviewModel } from './lib/story-overview';
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
   import { printResidentSignals, type PrintResidentSignal } from './lib/print-resident-signals';
@@ -251,6 +252,7 @@
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentLoopCoverage: ResidentLoopFact[] = [];
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
+  let cityProjectorOverview: StoryOverviewModel = buildStoryOverviewModel({ residents: [], digests: [] });
   let cityResidentTriageFocus: ResidentTriageBucketKey | '' = '';
   let cityResidentDemoPick = residentDemoPickCue([]);
   let cityDemoApSupport: CityDemoApSupportSignal | undefined;
@@ -495,6 +497,13 @@
   $: cityResidentProofRollup = residentProofRollup(cityResidents, cityResidentRosterSignals);
   $: cityResidentLoopCoverage = residentLoopCoverageFacts(cityResidents, cityResidentRosterSignals);
   $: cityResidentTriage = residentTriageSummary(cityResidents, cityResidentRosterSignals);
+  $: cityProjectorOverview = buildStoryOverviewModel({
+    residents: cityResidents,
+    digests: cityStoryDigests,
+    overview,
+    patronAp: overview?.patrons?.totalShardBalance,
+    now: new Date(),
+  });
   $: cityResidentTriageFocus = !isDebugRoute && route === '/residents' ? residentTriageFocusFromSearch(browserSearch) : '';
   $: cityResidentLivenessLedger = residentLivenessLedger(cityResidents, cityResidentRosterSignals, 8);
   $: cityResidentDemoPick = residentDemoPickCue(cityResidents, cityResidentRosterSignals);
@@ -3084,7 +3093,7 @@
 </script>
 
 <svelte:head>
-  <title>{isDebugRoute ? 'Null City Resident Operations' : 'Null City Dashboard'}</title>
+  <title>{isDebugRoute ? 'Null City Resident Operations' : route === '/overview' ? 'Null City Overview' : 'Null City Dashboard'}</title>
 </svelte:head>
 
 {#if isDebugRoute}
@@ -3340,8 +3349,169 @@
   </div>
 {/if}
 {:else}
-  {@render CityShell()}
+  {#if route === '/overview'}
+    {@render CityProjectorOverview()}
+  {:else}
+    {@render CityShell()}
+  {/if}
 {/if}
+
+{#snippet CityProjectorOverview()}
+  <main class="projector-overview" aria-label="Null City public overview">
+    <header class="projector-header">
+      <div>
+        <p class="kicker">Projector Feed</p>
+        <h1>Null City Live</h1>
+      </div>
+      <div class="projector-status-strip" aria-label="Live city counters">
+        {#each cityProjectorOverview.citySignals.slice(0, 3) as signal (signal.label)}
+          <span class={`tone-${signal.tone || 'ok'}`}>
+            <small>{signal.label}</small>
+            <strong>{signal.detail}</strong>
+          </span>
+        {/each}
+      </div>
+    </header>
+
+    {#if cityDataError}
+      <div class="notice city-notice">{cityDataNoticeCopy(cityDataError)}</div>
+    {/if}
+    {#if loading}
+      <div class="notice">Loading city state</div>
+    {/if}
+
+    <section class="projector-broadcast-grid">
+      <article class="projector-dispatch">
+        <div class="row">
+          <div class="panel-title">Live Story</div>
+          <span class={`tag ${cityProjectorOverview.dispatch.statusTone}`}>{cityProjectorOverview.dispatch.statusLabel}</span>
+        </div>
+        <h2>{cityProjectorOverview.dispatch.title}</h2>
+        <p>{cityProjectorOverview.dispatch.body}</p>
+        {#if cityProjectorOverview.dispatch.bullets.length}
+          <div class="projector-story-beats" aria-label="Story beats">
+            {#each cityProjectorOverview.dispatch.bullets as bullet}
+              <span>{bullet}</span>
+            {/each}
+          </div>
+        {/if}
+        <small>{cityProjectorOverview.dispatch.detail}</small>
+      </article>
+
+      <article class="projector-atlas-panel">
+        <div class="row">
+          <div>
+            <div class="panel-title">Live Atlas</div>
+            <strong>{cityProjectorOverview.atlas.viewport.label}</strong>
+          </div>
+          <span class="projector-atlas-bounds">
+            x {cityProjectorOverview.atlas.viewport.minX}..{cityProjectorOverview.atlas.viewport.maxX} / y {cityProjectorOverview.atlas.viewport.minY}..{cityProjectorOverview.atlas.viewport.maxY}
+          </span>
+        </div>
+        {@render ProjectorAtlas({ model: cityProjectorOverview })}
+      </article>
+
+      <aside class="projector-stakes-rail" aria-label="Null City stakes and live action">
+        {@render ProjectorListPanel({ title: 'Stakes', items: cityProjectorOverview.citySignals })}
+        {@render ProjectorListPanel({ title: 'Top Actions', items: cityProjectorOverview.residentActions.slice(0, 5) })}
+        {@render ProjectorListPanel({ title: 'Watch Next', items: cityProjectorOverview.watchItems })}
+      </aside>
+    </section>
+
+    <section class="projector-rail-grid">
+      {@render ProjectorRegionPanel()}
+      {@render ProjectorListPanel({ title: 'Resident Action Feed', items: cityProjectorOverview.residentActions })}
+    </section>
+  </main>
+{/snippet}
+
+{#snippet ProjectorAtlas({ model }: { model: StoryOverviewModel })}
+  <div class="projector-atlas" aria-label={`${model.atlas.viewport.label} resident coordinate atlas`}>
+    <div class="atlas-axis atlas-axis-y max">y {model.atlas.viewport.maxY}</div>
+    <div class="atlas-axis atlas-axis-y min">y {model.atlas.viewport.minY}</div>
+    <div class="atlas-axis atlas-axis-x min">x {model.atlas.viewport.minX}</div>
+    <div class="atlas-axis atlas-axis-x max">x {model.atlas.viewport.maxX}</div>
+
+    <div class="atlas-road atlas-road-west" aria-hidden="true"></div>
+    <div class="atlas-river" aria-hidden="true"></div>
+    <div class="atlas-woods west" aria-hidden="true"></div>
+    <div class="atlas-woods north" aria-hidden="true"></div>
+    <div class="atlas-landmark castle">Lumbridge Castle</div>
+    <div class="atlas-landmark church">Church</div>
+    <div class="atlas-landmark guide">Guide station</div>
+    <div class="atlas-label river">River Lum</div>
+    <div class="atlas-label road">West road</div>
+    <div class="atlas-label woods">West woods</div>
+
+    {#each model.atlas.pins as pin, index (pin.residentName)}
+      <a
+        class={`atlas-pin tone-${pin.tone} ${pin.leftPct > 72 ? 'label-left' : ''} ${pin.topPct > 74 ? 'label-up' : ''} ${index > 4 ? 'compact' : ''}`}
+        href={pin.path}
+        style={`--x:${pin.leftPct}%; --y:${pin.topPct}%; --pin-index:${index % 5};`}
+        aria-label={`${pin.label}: ${pin.detail}`}
+      >
+        <span class="atlas-pin-dot" aria-hidden="true"></span>
+        {#if index <= 4}
+          <span class="atlas-pin-label">
+            <strong>{pin.label}{pin.levelLabel ? ` ${pin.levelLabel}` : ''}</strong>
+            <small>{pin.eventLabel} · {pin.x},{pin.y}</small>
+          </span>
+        {/if}
+      </a>
+    {:else}
+      <div class="atlas-empty">
+        <strong>No live coordinates yet</strong>
+        <span>Residents will appear when the overview feed reports positions.</span>
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet ProjectorListPanel({ title, items }: { title: string; items: StoryOverviewListItem[] })}
+  <article class="projector-list-panel">
+    <div class="panel-title">{title}</div>
+    <div class="projector-list">
+      {#each items as item (item.label + item.detail)}
+        {#if item.path}
+          <a class={`projector-list-item tone-${item.tone || 'ok'}`} href={item.path}>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </a>
+        {:else}
+          <div class={`projector-list-item tone-${item.tone || 'ok'}`}>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </div>
+        {/if}
+      {:else}
+        <div class="projector-list-item">
+          <strong>Waiting for signal</strong>
+          <small>Live city events will appear after the next refresh.</small>
+        </div>
+      {/each}
+    </div>
+  </article>
+{/snippet}
+
+{#snippet ProjectorRegionPanel()}
+  <article class="projector-list-panel">
+    <div class="panel-title">Off-Map Residents</div>
+    <div class="projector-list">
+      {#each cityProjectorOverview.atlas.offMapRegions as region (region.label)}
+        <div class="projector-list-item tone-ok">
+          <strong>{region.label}</strong>
+          <small>{region.detail}</small>
+          <span>{region.residents.join(' · ')}</span>
+        </div>
+      {:else}
+        <div class="projector-list-item">
+          <strong>Everyone mapped here</strong>
+          <small>No positioned residents outside this viewport.</small>
+        </div>
+      {/each}
+    </div>
+  </article>
+{/snippet}
 
 {#snippet CityShell()}
   <div class="city-shell">
@@ -3366,6 +3536,10 @@
         {/if}
       </div>
       <div class="city-nav">
+        <button class:active={route === '/overview'} onclick={() => cityNav('/overview')}>
+          <span aria-hidden="true">LV</span>
+          Live Overview
+        </button>
         {#each cityNavItems as item (item.path)}
           <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
             <span aria-hidden="true">{item.glyph}</span>
