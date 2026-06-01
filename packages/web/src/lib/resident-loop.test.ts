@@ -1682,6 +1682,13 @@ describe('resident loop helpers', () => {
       stack: {
         model: { endpoint: 'openrouter/haiku', model: 'haiku-4' },
         configuredModules: [],
+        soulId: 'res:ready',
+        soulTitle: 'Ready Pathfinder',
+        orientationGoal: {
+          id: 'keep-gp-loop-visible',
+          description: 'Keep the GP to AP loop visible for public visitors.',
+          tier: 'pursue',
+        },
         activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: [] },
       },
       thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
@@ -1709,6 +1716,10 @@ describe('resident loop helpers', () => {
     const low = row({
       name: 'res:low',
       attention: 1,
+      stack: {
+        soulId: 'res:low',
+        configuredModules: [],
+      },
       thinking: { mode: 'idle', activePlan: '' },
       body: { controlHeld: true },
     });
@@ -1738,6 +1749,8 @@ describe('resident loop helpers', () => {
       ap: '1 AP',
       gp: 'not observed',
       stack: 'model/endpoint unavailable | SPARK unavailable',
+      soul: 'res:low',
+      northStar: '-',
       memory: 'no qmd',
       nextAction: 'Top up AP',
       nextTarget: 'Grant Attention',
@@ -1748,6 +1761,8 @@ describe('resident loop helpers', () => {
       proof: '9/9 loop proofs live',
       gp: '42 GP',
       stack: 'openrouter/haiku | onion.runescape.standard@0.3.0',
+      soul: 'Ready Pathfinder',
+      northStar: 'Keep the GP to AP loop visible for public visitors.',
       contract: 'Earn 100 GP/hour',
       memory: 'routes',
       nextAction: 'Keep watching',

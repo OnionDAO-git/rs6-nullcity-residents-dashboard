@@ -146,6 +146,8 @@ export interface ResidentLivenessLedgerEntry {
   ap: string;
   gp: string;
   stack: string;
+  soul: string;
+  northStar: string;
   contract: string;
   plan: string;
   story: string;
@@ -1959,6 +1961,8 @@ export function residentLivenessLedger(
         ap: ap.value,
         gp: gp.value,
         stack: residentStackSummary(row),
+        soul: residentLedgerSoulLabel(row),
+        northStar: residentLedgerNorthStarLabel(row),
         contract,
         plan: plan?.value || '-',
         story: story?.value || '-',
@@ -1981,6 +1985,17 @@ function residentLedgerMemoryLabel(row: ResidentDashboardRow): string {
   const topics = [...new Set(facts.map(fact => fact.topic).filter(Boolean))];
   if (topics.length === 0) return `${facts.length} qmd`;
   return topics.slice(0, 2).join(', ');
+}
+
+function residentLedgerSoulLabel(row: ResidentDashboardRow): string {
+  const title = row.stack?.soulTitle?.trim();
+  if (title) return title;
+  const id = row.stack?.soulId?.trim();
+  return id || '-';
+}
+
+function residentLedgerNorthStarLabel(row: ResidentDashboardRow): string {
+  return row.stack?.orientationGoal?.description?.trim() || '-';
 }
 
 export function residentLivenessDetail(

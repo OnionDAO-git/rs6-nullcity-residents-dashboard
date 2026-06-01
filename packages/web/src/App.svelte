@@ -4571,6 +4571,8 @@
               <em>{entry.detail}</em>
             </span>
             <span class="resident-liveness-facts">
+              <small>Soul <strong>{entry.soul}</strong></small>
+              <small>North star <strong>{entry.northStar}</strong></small>
               <small>AP <strong>{entry.ap}</strong></small>
               <small>GP <strong>{entry.gp}</strong></small>
               <small>Stack <strong>{entry.stack}</strong></small>
