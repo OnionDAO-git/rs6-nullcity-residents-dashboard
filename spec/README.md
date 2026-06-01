@@ -25,6 +25,7 @@ Autonomous dashboard agents should start with `../AGENTS.md`, then claim one `D*
 - [07-residents-social-overseer.md](07-residents-social-overseer.md): resident overview, public pages, inbox, trade, death, Library of Souls, and overseer service.
 - [08-3d-queue-system.md](08-3d-queue-system.md): admin printer management, slicing, printer bridge, and GP-backed print requests.
 - [09-implementation-roadmap.md](09-implementation-roadmap.md): phased delivery order and verification gates.
+- [10-storyteller-projector-backlog.md](10-storyteller-projector-backlog.md): active Storyteller `/overview` projector backlog.
 
 ## Core Decisions
 

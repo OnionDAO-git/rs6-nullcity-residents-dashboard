@@ -67,7 +67,7 @@ describe('story overview projector model', () => {
     ]);
   });
 
-  test('keeps review-queued dispatches out of canon status', () => {
+  test('does not render review-queued dispatch copy on the public projector', () => {
     const model = buildStoryOverviewModel({
       residents: [],
       digests: [{
@@ -92,7 +92,87 @@ describe('story overview projector model', () => {
       }],
     });
 
-    expect(model.dispatch.statusLabel).toBe('review draft');
+    expect(model.dispatch.statusLabel).toBe('live feed');
+    expect(model.dispatch.title).toBe('Null City is coming online');
+    expect(model.dispatch.body).not.toContain('reviewed draft');
+    expect(model.dispatch.body).not.toContain('reviewed queue material');
+  });
+
+  test('prefers older safe canon copy over newer review and dry-run dispatch text', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [
+        {
+          runId: 'review-run',
+          digestId: 'digest-review',
+          queue: 'review',
+          builtAt: '2026-06-01T00:10:00Z',
+          topEventCount: 0,
+          residentCount: 0,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-review',
+            needsReview: false,
+            warningCount: 0,
+            publicTitle: 'DO NOT SHOW review title',
+            publicBody: 'DO NOT SHOW review body.',
+            publicBullets: ['DO NOT SHOW review bullet.'],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 0,
+            eventRefsUsed: [],
+          },
+        },
+        {
+          runId: 'dry-run',
+          digestId: 'digest-dry',
+          queue: 'dry-run',
+          builtAt: '2026-06-01T00:09:00Z',
+          topEventCount: 0,
+          residentCount: 0,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-dry',
+            needsReview: false,
+            warningCount: 0,
+            publicTitle: 'DO NOT SHOW dry title',
+            publicBody: 'DO NOT SHOW dry body.',
+            publicBullets: ['DO NOT SHOW dry bullet.'],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 0,
+            eventRefsUsed: [],
+          },
+        },
+        {
+          runId: 'canon-run',
+          digestId: 'digest-canon',
+          queue: 'canon',
+          builtAt: '2026-06-01T00:08:00Z',
+          topEventCount: 0,
+          residentCount: 0,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-canon',
+            needsReview: false,
+            warningCount: 0,
+            publicTitle: 'Safe canon title',
+            publicBody: 'Safe canon body.',
+            publicBullets: ['Safe canon bullet.'],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 0,
+            eventRefsUsed: [],
+          },
+        },
+      ],
+    });
+
+    expect(model.dispatch.statusLabel).toBe('canon');
+    expect(model.dispatch.title).toBe('Safe canon title');
+    expect(model.dispatch.body).toBe('Safe canon body.');
+    expect(model.dispatch.bullets).toEqual(['Safe canon bullet.']);
+    expect(JSON.stringify(model.dispatch)).not.toContain('DO NOT SHOW');
   });
 
   test('uses Storyteller dispatch body and bullets even without a public title', () => {
@@ -190,7 +270,7 @@ describe('story overview projector model', () => {
     ]);
   });
 
-  test('keeps the v1 atlas on Lumbridge landmarks even when the latest resident is elsewhere', () => {
+  test('moves the atlas viewport to the lead resident when the story is elsewhere', () => {
     const model = buildStoryOverviewModel({
       residents: [
         resident({ name: 'res:wren-calix', position: { x: 3230, y: 3428, level: 0 }, feed: feed({ latestEventKind: 'chat' }) }),
@@ -209,12 +289,13 @@ describe('story overview projector model', () => {
       }],
     });
 
-    expect(model.atlas.viewport.id).toBe('lumbridge');
-    expect(model.atlas.pins).toHaveLength(0);
-    expect(model.atlas.offMapRegions[0]).toMatchObject({
-      label: 'Varrock',
-      residents: ['Wren Calix 3230,3428'],
+    expect(model.atlas.viewport.id).toBe('varrock');
+    expect(model.atlas.pins).toHaveLength(1);
+    expect(model.atlas.pins[0]).toMatchObject({
+      residentName: 'res:wren-calix',
+      eventLabel: 'chat',
     });
+    expect(model.atlas.offMapRegions).toEqual([]);
   });
 
   test('joins Storyteller top events to live resident pins when row events are quiet', () => {
@@ -225,6 +306,7 @@ describe('story overview projector model', () => {
       digests: [{
         runId: 'story-run',
         digestId: 'digest-story',
+        queue: 'canon',
         topEventCount: 1,
         residentCount: 1,
         topEvents: [{
@@ -264,10 +346,13 @@ describe('story overview projector model', () => {
   });
 
   test('reports true off-map tension count when a region has more than five residents', () => {
-    const residents = Array.from({ length: 7 }, (_item, index) => resident({
-      name: `res:varrock-${index}`,
-      position: { x: 3230 + index, y: 3428, level: 0 },
-    }));
+    const residents = [
+      resident({ name: 'res:lumbridge-lead', position: { x: 3224, y: 3218, level: 0 }, feed: feed({ latestEventKind: 'chat' }) }),
+      ...Array.from({ length: 7 }, (_item, index) => resident({
+        name: `res:varrock-${index}`,
+        position: { x: 3230 + index, y: 3428, level: 0 },
+      })),
+    ];
 
     const model = buildStoryOverviewModel({
       residents,
@@ -283,7 +368,7 @@ describe('story overview projector model', () => {
     expect(model.dramaItems.find(item => item.label === 'Off-Map Tension')).toBeUndefined();
   });
 
-  test('labels review-state Storyteller dispatches and keeps resident actions grounded', () => {
+  test('ignores review-state Storyteller copy and keeps resident actions grounded', () => {
     const digest: StorytellerDigestSummary = {
       runId: 'story-run-1',
       digestId: 'digest-1',
@@ -330,10 +415,11 @@ describe('story overview projector model', () => {
       now: new Date('2026-06-01T00:00:00Z'),
     });
 
-    expect(model.dispatch.statusLabel).toBe('review draft');
-    expect(model.dispatch.title).toBe('Agent lit a fire on the west road');
-    expect(model.dispatch.body).toBe('The Steward lit a fire while Hans kept walking.');
-    expect(model.dispatch.bullets).toEqual(['The Steward found the spark.', 'Hans kept the road honest.']);
+    expect(model.dispatch.statusLabel).toBe('live feed');
+    expect(model.dispatch.title).toBe('The Steward is moving the city forward');
+    expect(model.dispatch.body).toBe('The Steward is fire lit near 3162,3228. The map is live; the story follows the evidence.');
+    expect(model.dispatch.bullets).toEqual([]);
+    expect(JSON.stringify(model.dispatch)).not.toContain('Agent lit a fire on the west road');
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
       detail: 'fire lit near 3162,3228',

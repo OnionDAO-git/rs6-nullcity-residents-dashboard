@@ -97,7 +97,7 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
   const digest = input.digests.find(hasProjectorDigestContent);
   const storytellerEventKinds = storytellerEventKindByResident(digest);
   const leadResident = findLeadResident(residents, digest);
-  const viewport = chooseViewport();
+  const viewport = chooseViewport(leadResident, positioned, storytellerEventKinds);
   const pins = positioned
     .filter(entry => pointInViewport(entry.position, viewport))
     .sort((a, b) => residentScore(b.row, leadResident, storytellerEventKinds) - residentScore(a.row, leadResident, storytellerEventKinds))
@@ -134,7 +134,26 @@ function findLeadResident(residents: ResidentDashboardRow[], digest: Storyteller
   return [...residents].sort((a, b) => residentScore(b) - residentScore(a))[0];
 }
 
-function chooseViewport(): StoryOverviewViewport {
+function chooseViewport(
+  leadResident: ResidentDashboardRow | undefined,
+  positioned: { row: ResidentDashboardRow; position: Position }[],
+  storytellerEventKinds: Map<string, string>,
+): StoryOverviewViewport {
+  const leadPosition = leadResident ? residentPosition(leadResident) : undefined;
+  if (leadPosition) {
+    const leadViewport = VIEWPORTS.find(viewport => pointInViewport(leadPosition, viewport));
+    if (leadViewport) return leadViewport;
+  }
+
+  const scored = VIEWPORTS
+    .map(viewport => ({
+      viewport,
+      score: positioned
+        .filter(entry => pointInViewport(entry.position, viewport))
+        .reduce((sum, entry) => sum + residentScore(entry.row, leadResident, storytellerEventKinds), 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+  if ((scored[0]?.score ?? 0) > 0) return scored[0]?.viewport || FALLBACK_VIEWPORT;
   return FALLBACK_VIEWPORT;
 }
 
@@ -189,12 +208,7 @@ function buildOffMapRegions(positioned: { row: ResidentDashboardRow; position: P
 }
 
 function hasProjectorDigestContent(item: StorytellerDigestSummary): boolean {
-  return Boolean(
-    item.dispatch?.publicTitle ||
-    item.dispatch?.publicBody ||
-    item.dispatch?.publicBullets?.length ||
-    item.topEvents.length > 0,
-  );
+  return Boolean(hasPublicProjectorDispatch(item) || (item.queue === 'canon' && item.topEvents.length > 0));
 }
 
 function regionForPosition(position: Position): string {
@@ -210,14 +224,13 @@ function buildDispatch(
   leadResident: ResidentDashboardRow | undefined,
   now: Date | undefined,
 ): StoryOverviewDispatch {
-  const dispatch = digest?.dispatch;
+  const dispatch = digest && hasPublicProjectorDispatch(digest) ? digest.dispatch : undefined;
   const leadPosition = leadResident ? residentPosition(leadResident) : undefined;
   const fallbackTitle = leadResident ? `${displayName(leadResident.name)} is moving the city forward` : 'Null City is coming online';
   const fallbackEvent = leadResident ? eventKindLabel(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || '') : '';
   const fallbackBody = leadResident && leadPosition
     ? `${displayName(leadResident.name)} is ${fallbackEvent === 'quiet' ? 'visible' : fallbackEvent} near ${leadPosition.x},${leadPosition.y}. The map is live; the story follows the evidence.`
     : 'Residents with live positions will appear here as soon as the dashboard feed reports them.';
-  const needsReview = Boolean(dispatch?.needsReview || (digest && digest.queue !== 'canon'));
   const generated = dispatch?.generatedAt || digest?.builtAt;
   const body = prettifyResidentRefs(dispatch?.publicBody || fallbackBody);
   const formattedBody = formatStoryBody(body);
@@ -227,8 +240,8 @@ function buildDispatch(
     bodyLead: formattedBody.bodyLead,
     bodyParagraphs: formattedBody.bodyParagraphs,
     bullets: buildDispatchBullets(digest),
-    statusLabel: !digest ? 'live feed' : needsReview ? 'review draft' : 'canon',
-    statusTone: needsReview ? 'warn' : 'ok',
+    statusLabel: dispatch ? 'canon' : 'live feed',
+    statusTone: 'ok',
     detail: generated ? `updated ${relativeTime(generated, now)}` : 'waiting for first dispatch',
   };
 }
@@ -263,7 +276,7 @@ function storyParagraphChunkSize(sentenceCount: number): number {
 }
 
 function buildDispatchBullets(digest: StorytellerDigestSummary | undefined): string[] {
-  const dispatchBullets = digest?.dispatch?.publicBullets || [];
+  const dispatchBullets = digest && hasPublicProjectorDispatch(digest) ? digest.dispatch?.publicBullets || [] : [];
   const source = dispatchBullets.length
     ? dispatchBullets
     : (digest?.topEvents || []).map(event => event.note || `${displayName(event.residentName || 'city')}: ${eventKindLabel(event.kind)}`);
@@ -407,6 +420,17 @@ function buildWatchItems(
     items.push({ label: 'AP Runway', detail: `${lowAp.length} residents are at or below the support floor`, tone: 'warn', path: '/residents?triage=attention' });
   }
   return items.slice(0, 2);
+}
+
+function hasPublicProjectorDispatch(item: StorytellerDigestSummary): boolean {
+  const dispatch = item.dispatch;
+  return Boolean(
+    item.queue === 'canon' &&
+    dispatch &&
+    !dispatch.needsReview &&
+    dispatch.warningCount === 0 &&
+    (dispatch.publicTitle || dispatch.publicBody || dispatch.publicBullets.length),
+  );
 }
 
 function leaderboardScore(row: ResidentDashboardRow, leadResident?: ResidentDashboardRow, storytellerEventKinds = new Map<string, string>()): number {

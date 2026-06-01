@@ -120,15 +120,17 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
           ? dispatchRecord.needsReview
           : warningCount > 0;
 
+        const allowPublicCopy = isPublicDispatchCopyAllowed(queue, needsReview, warningCount);
+
         return {
           dispatchId: stringField(dispatchRecord, 'dispatchId') || `${runId}:dispatch`,
           generatedAt: stringField(dispatchRecord, 'generatedAt'),
           modelProfile: stringField(dispatchRecord, 'modelProfile'),
           needsReview,
           warningCount,
-          publicTitle: redactOptionalText(stringField(dispatchRecord, 'publicTitle')),
-          publicBody: redactOptionalText(stringField(dispatchRecord, 'publicBody')),
-          publicBullets: stringArrayField(dispatchRecord.publicBullets).map(redactPublicText),
+          publicTitle: allowPublicCopy ? redactOptionalText(stringField(dispatchRecord, 'publicTitle')) : undefined,
+          publicBody: allowPublicCopy ? redactOptionalText(stringField(dispatchRecord, 'publicBody')) : undefined,
+          publicBullets: allowPublicCopy ? stringArrayField(dispatchRecord.publicBullets).map(redactPublicText) : [],
           operatorSummary: redactOptionalText(stringField(dispatchRecord, 'operatorSummary')),
           operatorWarnings,
           reviewReasons,
@@ -156,6 +158,10 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
 
 function isStorytellerQueueDir(name: string): boolean {
   return STORYTELLER_QUEUE_DIRS.includes(name as Exclude<StorytellerQueue, 'dry-run'>);
+}
+
+function isPublicDispatchCopyAllowed(queue: StorytellerQueue, needsReview: boolean, warningCount: number): boolean {
+  return queue === 'canon' && !needsReview && warningCount === 0;
 }
 
 function readTopEvent(value: unknown): StorytellerDigestEventSummary | undefined {

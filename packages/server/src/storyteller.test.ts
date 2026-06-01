@@ -70,9 +70,9 @@ describe('readStorytellerDigestFeed', () => {
     expect(feed.items[0]?.residentCount).toBe(25);
     expect(feed.items[0]?.dispatch?.dispatchId).toBe('dispatch-b');
     expect(feed.items[0]?.dispatch?.warningCount).toBe(3);
-    expect(feed.items[0]?.dispatch?.publicTitle).toBe('Night in Lumbridge');
-    expect(feed.items[0]?.dispatch?.publicBody).toBe('Alice traded GP with [human], [human], and wrote to [human].');
-    expect(feed.items[0]?.dispatch?.publicBullets).toEqual(['Alice traded 200 GP with [human].', 'Bob finished a bounded goal for [human] and [human].']);
+    expect(feed.items[0]?.dispatch?.publicTitle).toBeUndefined();
+    expect(feed.items[0]?.dispatch?.publicBody).toBeUndefined();
+    expect(feed.items[0]?.dispatch?.publicBullets).toEqual([]);
     expect(feed.items[0]?.dispatch?.operatorSummary).toBe('Dispatch needs a human review from [human] and [human].');
     expect(feed.items[0]?.dispatch?.operatorWarnings).toEqual(['Do not broadcast [human] yet.', 'Keep [human] private.']);
     expect(feed.items[0]?.dispatch?.reviewReasons).toEqual(['missing_ref']);
@@ -114,6 +114,95 @@ describe('readStorytellerDigestFeed', () => {
     const feed = await readStorytellerDigestFeed(memoryRoot);
     expect(feed.items[0]?.dispatch?.warningCount).toBe(2);
     expect(feed.items[0]?.dispatch?.needsReview).toBe(true);
+    expect(feed.items[0]?.dispatch?.publicTitle).toBeUndefined();
+    expect(feed.items[0]?.dispatch?.publicBody).toBeUndefined();
+    expect(feed.items[0]?.dispatch?.publicBullets).toEqual([]);
+  });
+
+  test('strips public model copy from dry-run, review, and review-needed canon artifacts', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
+
+    await fs.mkdir(path.join(storytellerRoot, 'run-dry-unsafe'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'run-dry-unsafe', 'digest.json'), JSON.stringify({
+      digestId: 'run-dry-unsafe',
+      builtAt: '2026-05-30T03:00:00.000Z',
+      topEvents: [],
+      residents: [],
+    }));
+    await fs.writeFile(path.join(storytellerRoot, 'run-dry-unsafe', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-dry-unsafe',
+      needsReview: false,
+      publicTitle: 'DO NOT SHOW dry-run title',
+      publicBody: 'DO NOT SHOW dry-run body for patron:james',
+      publicBullets: ['DO NOT SHOW dry-run bullet'],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: [],
+    }));
+
+    await fs.mkdir(path.join(storytellerRoot, 'review', 'digest-review-unsafe'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'review', 'digest-review-unsafe', 'digest.json'), JSON.stringify({
+      digestId: 'digest-review-unsafe',
+      builtAt: '2026-05-30T03:01:00.000Z',
+      topEvents: [],
+      residents: [],
+    }));
+    await fs.writeFile(path.join(storytellerRoot, 'review', 'digest-review-unsafe', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-review-unsafe',
+      needsReview: false,
+      publicTitle: 'DO NOT SHOW review title',
+      publicBody: 'DO NOT SHOW review body',
+      publicBullets: ['DO NOT SHOW review bullet'],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: [],
+    }));
+
+    await fs.mkdir(path.join(storytellerRoot, 'canon', 'digest-canon-review-needed'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon-review-needed', 'digest.json'), JSON.stringify({
+      digestId: 'digest-canon-review-needed',
+      builtAt: '2026-05-30T03:02:00.000Z',
+      topEvents: [],
+      residents: [],
+    }));
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon-review-needed', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-canon-review-needed',
+      needsReview: true,
+      publicTitle: 'DO NOT SHOW canon review title',
+      publicBody: 'DO NOT SHOW canon review body',
+      publicBullets: ['DO NOT SHOW canon review bullet'],
+      operatorWarnings: [],
+      reviewReasons: ['needs review'],
+      eventRefsUsed: [],
+    }));
+
+    await fs.mkdir(path.join(storytellerRoot, 'canon', 'digest-canon-safe'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon-safe', 'digest.json'), JSON.stringify({
+      digestId: 'digest-canon-safe',
+      builtAt: '2026-05-30T02:59:00.000Z',
+      topEvents: [],
+      residents: [],
+    }));
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon-safe', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-canon-safe',
+      needsReview: false,
+      publicTitle: 'Safe canon title',
+      publicBody: 'Safe canon body.',
+      publicBullets: ['Safe canon bullet.'],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: [],
+    }));
+
+    const feed = await readStorytellerDigestFeed(memoryRoot, 10);
+    const unsafeRuns = feed.items.filter(item => item.digestId !== 'digest-canon-safe');
+    expect(unsafeRuns.every(item => item.dispatch?.publicTitle === undefined)).toBe(true);
+    expect(unsafeRuns.every(item => item.dispatch?.publicBody === undefined)).toBe(true);
+    expect(unsafeRuns.every(item => item.dispatch?.publicBullets.length === 0)).toBe(true);
+    expect(feed.items.find(item => item.digestId === 'digest-canon-safe')?.dispatch?.publicTitle).toBe('Safe canon title');
+    expect(JSON.stringify(feed)).not.toContain('DO NOT SHOW');
+    expect(JSON.stringify(feed)).not.toContain('patron:james');
   });
 
   test('summarizes grounded top events with safe evidence labels and redacted public text', async () => {
