@@ -1382,6 +1382,7 @@
   }
 
   function residentDisplayName(name: string): string {
+    if (residentSlug(name) === 'agent') return 'The Steward';
     return residentSlug(name);
   }
 

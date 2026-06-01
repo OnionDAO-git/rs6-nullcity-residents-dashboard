@@ -53,7 +53,7 @@ describe('story overview projector model', () => {
     expect(model.atlas.pins.map(pin => pin.residentName)).toContain('res:hans');
     expect(model.atlas.pins.find(pin => pin.residentName === 'res:duke-horacio')?.levelLabel).toBe('L1');
     expect(model.atlas.pins.find(pin => pin.residentName === 'res:agent')).toMatchObject({
-      label: 'Agent',
+      label: 'The Steward',
       eventLabel: 'fire lit',
       tone: 'event',
     });
@@ -147,7 +147,7 @@ describe('story overview projector model', () => {
       tone: 'event',
     });
     expect(model.residentActions[0]).toMatchObject({
-      label: 'Agent',
+      label: 'The Steward',
       detail: 'ap gp exchange near 3162,3228',
     });
   });
@@ -201,10 +201,10 @@ describe('story overview projector model', () => {
 
     expect(model.dispatch.statusLabel).toBe('review draft');
     expect(model.dispatch.title).toBe('Agent lit a fire on the west road');
-    expect(model.dispatch.body).toBe('Agent lit a fire while Hans kept walking.');
-    expect(model.dispatch.bullets).toEqual(['Agent found the spark.', 'Hans kept the road honest.']);
+    expect(model.dispatch.body).toBe('The Steward lit a fire while Hans kept walking.');
+    expect(model.dispatch.bullets).toEqual(['The Steward found the spark.', 'Hans kept the road honest.']);
     expect(model.residentActions[0]).toMatchObject({
-      label: 'Agent',
+      label: 'The Steward',
       detail: 'fire lit near 3162,3228',
       path: '/residents/agent',
     });

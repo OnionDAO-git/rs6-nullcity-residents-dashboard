@@ -1412,6 +1412,7 @@ function demoPickToneRank(tone: ResidentDemoPickCue['tone']): number {
 }
 
 function residentShortName(name: string): string {
+  if (name.replace(/^res:/, '') === 'agent') return 'The Steward';
   return name.replace(/^res:/, '') || name;
 }
 

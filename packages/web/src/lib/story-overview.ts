@@ -303,6 +303,7 @@ function storytellerEventKindByResident(digest: StorytellerDigestSummary | undef
 }
 
 function displayName(name: string): string {
+  if (residentRouteSlug(name) === 'agent') return 'The Steward';
   return residentRouteSlug(name)
     .split(/[-_]+/)
     .filter(Boolean)

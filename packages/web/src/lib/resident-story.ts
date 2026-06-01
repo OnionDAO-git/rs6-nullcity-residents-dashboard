@@ -606,6 +606,7 @@ function normalizeResident(name: string): string {
 
 function residentDisplayName(name: string | undefined): string {
   const normalized = normalizeResident(name || 'city');
+  if (normalized === 'agent') return 'The Steward';
   return normalized
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase())

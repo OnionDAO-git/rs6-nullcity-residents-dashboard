@@ -127,7 +127,8 @@ function cityAliveStepDetail(input: {
 }
 
 function displayResidentName(name: string | undefined): string {
-  return (name || '').trim().replace(/^res:/i, '');
+  const normalized = (name || '').trim().replace(/^res:/i, '');
+  return normalized === 'agent' ? 'The Steward' : normalized;
 }
 
 function residentProofStepLabel(resident: CityDemoResidentSignal): string {

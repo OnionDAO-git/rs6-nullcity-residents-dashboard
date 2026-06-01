@@ -44,7 +44,7 @@ describe('cityDemoPathSteps', () => {
         id: 'resident-proof',
         tone: 'ok',
         label: 'Watch resident react',
-        metric: 'agent',
+        metric: 'The Steward',
         action: 'Open demo-ready resident',
         path: '/residents/agent',
         detail: 'agent has 6/6 loop proofs live.',
