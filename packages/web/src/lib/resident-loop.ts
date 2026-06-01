@@ -968,6 +968,7 @@ export function residentLoopCoverageFacts(
       coverageFact('Story digest', 'syncing', 'waiting for online residents before matching Storyteller evidence', 'warn'),
       coverageFact('AP runway', 'syncing', 'waiting for online residents before reading AP runway', 'warn'),
       coverageFact('GP proof', 'syncing', 'waiting for online residents before reading coin-995 or economy proof', 'warn'),
+      coverageFact('Memory', 'syncing', 'waiting for online residents before reading qmd facts/*.md snippets', 'warn'),
       coverageFact('Capability warnings', 'syncing', 'waiting for proof pulse signals', 'warn'),
     ];
   }
@@ -979,6 +980,7 @@ export function residentLoopCoverageFacts(
   let storyCited = 0;
   let apStable = 0;
   let gpVisible = 0;
+  let memoryVisible = 0;
   let proofClear = 0;
   let proofWarn = 0;
   let proofFail = 0;
@@ -994,6 +996,7 @@ export function residentLoopCoverageFacts(
     if (signals.storyteller?.tone === 'ok') storyCited += 1;
     if (!residentNeedsApSupportSoon(row)) apStable += 1;
     if (residentCoinEvidenceAmount(row) > 0 || signals.economyGp?.tone === 'ok') gpVisible += 1;
+    if (residentHasQmdMemory(row)) memoryVisible += 1;
 
     const pulse = residentProofPulse(row, signals);
     if (pulse.tone === 'ok') proofClear += 1;
@@ -1009,6 +1012,7 @@ export function residentLoopCoverageFacts(
     coverageCountFact('Story digest', storyCited, online, 'cited', 'resident-specific Storyteller evidence', '/residents?triage=story'),
     coverageCountFact('AP runway', apStable, online, 'stable', 'attention runway above support floor', '/residents?triage=attention'),
     coverageCountFact('GP proof', gpVisible, online, 'visible', 'coin-995/economy GP proof visible', '/residents?triage=gp'),
+    coverageCountFact('Memory', memoryVisible, online, 'qmd', 'formal facts/*.md snippets visible', '/residents?triage=memory'),
     coverageFact(
       'Capability warnings',
       `${proofClear.toLocaleString()}/${online.toLocaleString()} clear`,

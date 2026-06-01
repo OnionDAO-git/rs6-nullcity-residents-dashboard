@@ -683,8 +683,18 @@ describe('resident loop helpers', () => {
       { label: 'Story digest', value: '1/2 cited', detail: 'resident-specific Storyteller evidence', tone: 'warn', path: '/residents?triage=story' },
       { label: 'AP runway', value: '1/2 stable', detail: 'attention runway above support floor', tone: 'warn', path: '/residents?triage=attention' },
       { label: 'GP proof', value: '1/2 visible', detail: 'coin-995/economy GP proof visible', tone: 'warn', path: '/residents?triage=gp' },
+      { label: 'Memory', value: '1/2 qmd', detail: 'formal facts/*.md snippets visible', tone: 'warn', path: '/residents?triage=memory' },
       { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn', path: '/residents?triage=benchmark' },
     ]);
+  });
+
+  test('marks aggregate memory coverage as syncing when no residents are online', () => {
+    expect(residentLoopCoverageFacts([row({ name: 'res:offline', online: false })])).toContainEqual({
+      label: 'Memory',
+      value: 'syncing',
+      detail: 'waiting for online residents before reading qmd facts/*.md snippets',
+      tone: 'warn',
+    });
   });
 
   test('routes failed brain inference to resident coverage and triage even when action proof exists', () => {
