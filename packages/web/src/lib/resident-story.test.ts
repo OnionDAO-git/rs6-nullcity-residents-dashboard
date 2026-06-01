@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
-import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
+import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestSafetyLine, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine } from './resident-story';
 
 function resident(name: string): ResidentDashboardRow {
   return { name, online: true };
@@ -315,6 +315,65 @@ describe('storytellerDigestStatus', () => {
     expect(storytellerDigestStatus(digest({ dispatch: baseDispatch }), Date.parse('2026-05-31T05:10:00.000Z'))).toMatchObject({
       label: 'stale',
       tone: 'warn',
+    });
+  });
+});
+
+describe('storytellerDigestSafetyLine', () => {
+  const baseDispatch = {
+    dispatchId: 'dispatch-1',
+    generatedAt: '2026-05-30T04:05:00.000Z',
+    modelProfile: 'default',
+    needsReview: false,
+    warningCount: 0,
+    publicBullets: [],
+    operatorWarnings: [],
+    reviewReasons: [],
+    eventRefCount: 2,
+    eventRefsUsed: ['e1', 'e2'],
+    estimatedCostUsd: null,
+  };
+
+  test('marks ready dispatches as public-safe without overclaiming intelligence', () => {
+    expect(storytellerDigestSafetyLine(
+      digest({ dispatch: baseDispatch }),
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    )).toEqual({
+      label: 'public-safe',
+      tone: 'ok',
+      text: 'Public-safe dispatch copy: no review flags are present.',
+    });
+  });
+
+  test('separates review-only, dry-run, stale, and empty Storyteller copy states', () => {
+    expect(storytellerDigestSafetyLine(
+      digest({ dispatch: { ...baseDispatch, needsReview: true, reviewReasons: ['missing_ref'] } }),
+      Date.parse('2026-05-30T04:10:00.000Z'),
+    )).toEqual({
+      label: 'review-only',
+      tone: 'warn',
+      text: 'Review-only grounded preview: do not read dispatch copy aloud yet.',
+    });
+
+    expect(storytellerDigestSafetyLine(digest(), Date.parse('2026-05-30T04:10:00.000Z'))).toEqual({
+      label: 'dry-run',
+      tone: 'warn',
+      text: 'Dry-run grounded preview: no public dispatch has been published yet.',
+    });
+
+    expect(storytellerDigestSafetyLine(
+      digest({ dispatch: baseDispatch }),
+      Date.parse('2026-05-31T05:10:00.000Z'),
+    )).toEqual({
+      label: 'stale',
+      tone: 'warn',
+      text: 'Stale dispatch copy: review freshness before reading aloud.',
+    });
+
+    expect(storytellerDigestSafetyLine(undefined)).toEqual({
+      label: 'waiting',
+      tone: 'warn',
+      text: 'Waiting for grounded Storyteller evidence before public read-aloud.',
     });
   });
 });

@@ -57,7 +57,7 @@
     type ResidentTriageBucketKey,
     type ResidentTriageSummary,
   } from './lib/resident-loop';
-  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
+  import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestSafetyLine, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
   import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { printQueueInsights } from './lib/print-queue-insights';
@@ -4006,10 +4006,12 @@
       <div class="city-card-list compact">
         {#each cityStoryRunList.visible as digest (digest.runId)}
           {@const status = storytellerDigestStatus(digest)}
+          {@const safetyLine = storytellerDigestSafetyLine(digest)}
           <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/story/${encodeURIComponent(digest.runId)}`)}>
             <span class={`tag ${status.tone}`}>{digest.queue === 'canon' ? 'canon' : digest.queue === 'review' ? 'review' : status.label}</span>
             <strong>{digest.dispatch?.publicTitle || digest.digestId}</strong>
             <small>{digest.queue || 'dry-run'} · {digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
+            <small class={`city-run-pressure-line tone-${safetyLine.tone}`}>{safetyLine.text}</small>
             <small class="city-run-pressure-line">{storytellerRunListPressureLine(digest)}</small>
           </button>
         {:else}
@@ -4034,6 +4036,7 @@
       </div>
       {#if cityStoryDigest}
         {@const selectedStoryStatus = storytellerDigestStatus(cityStoryDigest)}
+        {@const selectedStorySafetyLine = storytellerDigestSafetyLine(cityStoryDigest)}
         {@const selectedStoryAudit = storytellerGroundingAudit(cityStoryDigest)}
         {@const selectedStoryDensity = storytellerReviewDensity(cityStoryDigest)}
         {@const selectedStoryPreview = storytellerLatestPreview(cityStoryDigest)}
@@ -4048,7 +4051,7 @@
           <span><small>Refs Used</small><strong>{cityStoryDigest.dispatch?.eventRefCount ?? 0}</strong></span>
           <span><small>Status</small><strong>{selectedStoryStatus.label}</strong></span>
         </div>
-        <div class={`notice ${selectedStoryStatus.tone === 'warn' ? 'amber' : ''}`}>{selectedStoryStatus.summary}</div>
+        <div class={`notice ${selectedStorySafetyLine.tone === 'warn' ? 'amber' : ''}`}>{selectedStorySafetyLine.text}</div>
         <div class={`city-copy-block story-latest-preview tone-${selectedStoryPreview.tone}`}>
           <div class="row">
             <div>

@@ -27,6 +27,12 @@ export interface StorytellerDigestStatus {
   summary: string;
 }
 
+export interface StorytellerDigestSafetyLine {
+  label: 'public-safe' | 'review-only' | 'dry-run' | 'stale' | 'waiting';
+  tone: 'ok' | 'warn';
+  text: string;
+}
+
 export interface StorytellerDigestRunList {
   visible: StorytellerDigestSummary[];
   collapsedDryRuns: number;
@@ -240,6 +246,47 @@ export function storytellerDigestStatus(digest: StorytellerDigestSummary, nowMs 
     label: 'ready',
     tone: 'ok',
     summary: 'Dispatch is grounded and ready for public review.',
+  };
+}
+
+export function storytellerDigestSafetyLine(
+  digest: StorytellerDigestSummary | undefined,
+  nowMs = Date.now(),
+): StorytellerDigestSafetyLine {
+  if (!digest) {
+    return {
+      label: 'waiting',
+      tone: 'warn',
+      text: 'Waiting for grounded Storyteller evidence before public read-aloud.',
+    };
+  }
+
+  const status = storytellerDigestStatus(digest, nowMs);
+  if (status.label === 'ready') {
+    return {
+      label: 'public-safe',
+      tone: 'ok',
+      text: 'Public-safe dispatch copy: no review flags are present.',
+    };
+  }
+  if (status.label === 'dry-run') {
+    return {
+      label: 'dry-run',
+      tone: 'warn',
+      text: 'Dry-run grounded preview: no public dispatch has been published yet.',
+    };
+  }
+  if (status.label === 'stale') {
+    return {
+      label: 'stale',
+      tone: 'warn',
+      text: 'Stale dispatch copy: review freshness before reading aloud.',
+    };
+  }
+  return {
+    label: 'review-only',
+    tone: 'warn',
+    text: 'Review-only grounded preview: do not read dispatch copy aloud yet.',
   };
 }
 
