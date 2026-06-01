@@ -399,7 +399,7 @@ describe('economy row display helpers', () => {
       tone: 'ok',
       title: 'res:hans',
       detail: '4,200 AP · GP Δ +25 · 3 recent events',
-      status: 'online + active',
+      status: 'online + AP/GP active',
     });
 
     expect(economyResidentDisplay({
@@ -413,6 +413,36 @@ describe('economy row display helpers', () => {
     })).toMatchObject({
       tone: 'warn',
       status: 'offline',
+    });
+  });
+
+  test('separates online liveness from quiet or recent AP/GP ledger activity', () => {
+    expect(economyResidentDisplay({
+      residentName: 'res:online-quiet',
+      attentionBalance: 1800,
+      gpNetDelta: 0,
+      eventCount: 4,
+      windowEventCount: 0,
+      activeInWindow: false,
+      online: true,
+    })).toMatchObject({
+      tone: 'warn',
+      status: 'online, no AP/GP events',
+      detail: '1,800 AP · GP Δ 0 · 0 recent events',
+    });
+
+    expect(economyResidentDisplay({
+      residentName: 'res:ledger-recent',
+      attentionBalance: 3200,
+      gpNetDelta: -25,
+      eventCount: 12,
+      windowEventCount: 1,
+      activeInWindow: true,
+      online: false,
+    })).toMatchObject({
+      tone: 'warn',
+      status: 'recent AP/GP activity',
+      detail: '3,200 AP · GP Δ -25 · 1 recent event',
     });
   });
 });

@@ -209,8 +209,8 @@ export function economyResidentDisplay(resident: NullCityLiveEconomyResident): E
       ? 'warn'
       : 'warn';
   const status = resident.online
-    ? resident.activeInWindow ? 'online + active' : 'online'
-    : resident.activeInWindow ? 'active recently' : 'offline';
+    ? resident.activeInWindow ? 'online + AP/GP active' : 'online, no AP/GP events'
+    : resident.activeInWindow ? 'recent AP/GP activity' : 'offline';
   const recentEvents = resident.windowEventCount === 1 ? '1 recent event' : `${resident.windowEventCount.toLocaleString()} recent events`;
   return {
     tone,
