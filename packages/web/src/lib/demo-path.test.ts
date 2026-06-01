@@ -27,9 +27,9 @@ describe('cityDemoPathSteps', () => {
         tone: 'ok',
         label: 'City alive',
         metric: '21 / 23 online',
-        action: 'Open resident directory',
-        path: '/residents',
-        detail: 'Live residents are visible; use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+        action: 'Open city overview',
+        path: '/overview',
+        detail: 'Room-safe overview shows the live city, Storyteller status, and resident roster; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.',
       },
       {
         id: 'ap-support',
@@ -87,7 +87,9 @@ describe('cityDemoPathSteps', () => {
       id: 'city-alive',
       tone: 'ok',
       metric: '10 / 23 active',
-      detail: '10 controller-held residents are active; 13 online rows are paused/cohort-excluded. Use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+      action: 'Open city overview',
+      path: '/overview',
+      detail: '10 controller-held residents are active; 13 online rows are paused/cohort-excluded. Room-safe overview shows the live city first; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.',
     });
   });
 
@@ -109,7 +111,7 @@ describe('cityDemoPathSteps', () => {
       },
     });
 
-    expect(steps.map(step => step.path)).toEqual(['/residents', '/login', '/residents', '/story']);
+    expect(steps.map(step => step.path)).toEqual(['/overview', '/login', '/residents', '/story']);
     expect(steps[0]).toMatchObject({ tone: 'warn', metric: '0 / 0 online' });
     expect(steps[1]).toMatchObject({
       tone: 'warn',
@@ -252,6 +254,6 @@ describe('cityDemoPathSteps', () => {
       },
     });
 
-    expect(steps.map(step => step.path)).toEqual(['/residents', '/embassy', '/residents', '/story']);
+    expect(steps.map(step => step.path)).toEqual(['/overview', '/embassy', '/residents', '/story']);
   });
 });

@@ -75,11 +75,9 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       metric: hasCohortCounts
         ? `${activeCount.toLocaleString()} / ${residentCount.toLocaleString()} active`
         : `${online.toLocaleString()} / ${residentCount.toLocaleString()} online`,
-      action: 'Open resident directory',
-      path: '/residents',
-      detail: hasCohortCounts
-        ? `${activeCount.toLocaleString()} controller-held residents are active; ${(paused ?? Math.max(0, online - activeCount)).toLocaleString()} online rows are paused/cohort-excluded. Use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.`
-        : 'Live residents are visible; use the directory to confirm names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+      action: 'Open city overview',
+      path: '/overview',
+      detail: cityAliveStepDetail({ activeCount, online, paused, hasCohortCounts }),
     },
     {
       id: 'ap-support',
@@ -113,6 +111,19 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       detail: input.story.summary,
     },
   ];
+}
+
+function cityAliveStepDetail(input: {
+  activeCount: number;
+  online: number;
+  paused: number | undefined;
+  hasCohortCounts: boolean;
+}): string {
+  const proofDetail = 'Room-safe overview shows the live city, Storyteller status, and resident roster; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.';
+  if (!input.hasCohortCounts) return proofDetail;
+
+  const pausedCount = input.paused ?? Math.max(0, input.online - input.activeCount);
+  return `${input.activeCount.toLocaleString()} controller-held residents are active; ${pausedCount.toLocaleString()} online rows are paused/cohort-excluded. Room-safe overview shows the live city first; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.`;
 }
 
 function displayResidentName(name: string | undefined): string {
