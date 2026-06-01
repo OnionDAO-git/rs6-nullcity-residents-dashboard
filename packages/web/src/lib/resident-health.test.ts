@@ -19,6 +19,19 @@ describe('resident health controls', () => {
     expect(residentHealthSummary(row({ name: 'res:offline', online: false })).label).toBe('offline');
   });
 
+  test('clarifies that the body is still live while the brain is deciding', () => {
+    expect(residentHealthSummary(row({
+      name: 'res:split',
+      online: true,
+      feed: { attached: true, ageMs: 12_000, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 3, availableActions: 2 },
+      thinking: { mode: 'deciding' },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'walk', result: 'success', source: 'body', tick: 44 },
+      },
+    })).detail).toBe('brain deciding; body last walk; feed live 12s ago');
+  });
+
   test('filters attention-needed residents and sorts by health severity', () => {
     const rows = [
       row({ name: 'res:healthy', online: true, feed: { attached: true, ageMs: 500, nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 }, events: 0, availableActions: 2 } }),

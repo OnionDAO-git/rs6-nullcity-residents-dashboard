@@ -116,7 +116,12 @@ function pausedDetail(row: ResidentDashboardRow): string {
 }
 
 function inferenceDetail(row: ResidentDashboardRow): string {
-  return row.thinking?.inFlightRequest ? `request ${row.thinking.inFlightRequest}` : row.thinking?.lastInferenceCause || 'deciding';
+  const brain = row.thinking?.inFlightRequest
+    ? `brain request ${row.thinking.inFlightRequest}`
+    : `brain ${row.thinking?.lastInferenceCause || 'deciding'}`;
+  const body = row.body?.lastAction?.kind ? `body last ${row.body.lastAction.kind}` : '';
+  const feed = row.feed?.ageMs === undefined ? '' : `feed live ${Math.round(row.feed.ageMs / 1000)}s ago`;
+  return [brain, body, feed].filter(Boolean).join('; ');
 }
 
 function onlineDetail(row: ResidentDashboardRow): string {
