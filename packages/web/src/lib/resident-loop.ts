@@ -436,12 +436,23 @@ function residentStackDetail(row: ResidentDashboardRow, split: boolean): string 
   if (!split) return 'model/endpoint and SPARK module identity';
 
   const missing: string[] = [];
-  if (!inferenceProfileReady(row.stack?.brain)) missing.push('Brain');
-  if (!inferenceProfileReady(row.stack?.body)) missing.push('Body');
+  if (!inferenceProfileVisible(row.stack?.brain)) missing.push('Brain');
+  if (!inferenceProfileVisible(row.stack?.body)) missing.push('Body');
 
-  return missing.length
-    ? `${missing.join(' and ')} inference profile${missing.length === 1 ? '' : 's'} missing; split Brain/Body stack is incomplete`
-    : 'Brain and Body inference profiles plus SPARK module identity';
+  if (missing.length) {
+    return `${missing.join(' and ')} inference profile${missing.length === 1 ? '' : 's'} missing; split Brain/Body stack is incomplete`;
+  }
+
+  const unresolvedModels = [
+    row.stack?.brain && !row.stack.brain.model?.trim() ? 'Brain' : '',
+    row.stack?.body && !row.stack.body.model?.trim() ? 'Body' : '',
+  ].filter(Boolean);
+
+  if (unresolvedModels.length) {
+    return `${unresolvedModels.join(' and ')} inference endpoint${unresolvedModels.length === 1 ? '' : 's'} visible; model metadata is server-configured or not yet reported`;
+  }
+
+  return 'Brain and Body inference profiles plus SPARK module identity';
 }
 
 function residentStackReady(row: ResidentDashboardRow): boolean {
@@ -449,7 +460,7 @@ function residentStackReady(row: ResidentDashboardRow): boolean {
 
   const splitConfigured = Boolean(row.stack?.brain || row.stack?.body);
   if (splitConfigured) {
-    return inferenceProfileReady(row.stack?.brain) && inferenceProfileReady(row.stack?.body);
+    return inferenceProfileVisible(row.stack?.brain) && inferenceProfileVisible(row.stack?.body);
   }
 
   const model = modelIdentityParts(row);
@@ -457,8 +468,8 @@ function residentStackReady(row: ResidentDashboardRow): boolean {
   return model.value !== '-' && endpoint.value !== '-';
 }
 
-function inferenceProfileReady(profile: { endpoint?: string; model?: string } | undefined): boolean {
-  return Boolean(profile?.endpoint?.trim() && profile?.model?.trim());
+function inferenceProfileVisible(profile: { endpoint?: string; model?: string } | undefined): boolean {
+  return Boolean(profile?.endpoint?.trim() || profile?.model?.trim());
 }
 
 export function residentIntelligenceDigestFacts(

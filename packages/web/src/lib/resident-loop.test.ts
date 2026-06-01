@@ -155,6 +155,35 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('treats endpoint-only Brain and Body profiles as visible without claiming model resolution', () => {
+    const resident = row({
+      attention: 75,
+      thinking: { mode: 'deciding', activePlan: 'Keep planning on q4 while body acts' },
+      stack: {
+        brain: { endpoint: 'body_q4', thinking: true },
+        body: { endpoint: 'body_q4', thinking: false },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.4.0', source: 'soul', activeFacets: ['thinking', 'body'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'walk', result: 'success', source: 'body', cause: 'body_step', tick: 120 },
+      },
+    });
+
+    expect(residentIntelligenceDigestFacts(resident).find(fact => fact.label === 'Stack')).toMatchObject({
+      value: 'Brain body_q4 (thinking on); Body body_q4 (thinking off) | onion.runescape.standard@0.4.0',
+      detail: 'Brain and Body inference endpoints visible; model metadata is server-configured or not yet reported',
+      tone: 'ok',
+    });
+    expect(residentLoopCoverageFacts([resident]).find(fact => fact.label === 'Stack')).toEqual({
+      label: 'Stack',
+      value: '1/1 complete',
+      detail: 'model/endpoint or Brain+Body split profiles plus SPARK visible',
+      tone: 'ok',
+    });
+  });
+
   test('summarizes model, SPARK, action, AP, and story from existing overview data', () => {
     const facts = residentIntelligenceFacts(row({
       attention: 42,
