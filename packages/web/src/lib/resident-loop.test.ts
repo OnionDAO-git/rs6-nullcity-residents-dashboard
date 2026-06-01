@@ -133,6 +133,28 @@ describe('resident loop helpers', () => {
     });
   });
 
+  test('warns when a split inference stack is missing either Brain or Body profile', () => {
+    const digest = residentIntelligenceDigestFacts(row({
+      attention: 75,
+      thinking: { mode: 'deciding', activePlan: 'Plan slowly while the body keeps acting' },
+      stack: {
+        brain: { endpoint: 'brain_q8', model: 'qwopus3.5-27b-v3@q8_0', thinking: true },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.3.0', source: 'soul', activeFacets: ['thinking'] },
+      },
+      body: {
+        controlHeld: true,
+        lastAction: { kind: 'walk', result: 'success', source: 'body', cause: 'body_step', tick: 120 },
+      },
+    }));
+
+    expect(digest.find(fact => fact.label === 'Stack')).toMatchObject({
+      value: 'Brain qwopus3.5-27b-v3@q8_0 via brain_q8 (thinking on) | onion.runescape.standard@0.3.0',
+      detail: 'Body inference profile missing; split Brain/Body stack is incomplete',
+      tone: 'warn',
+    });
+  });
+
   test('summarizes model, SPARK, action, AP, and story from existing overview data', () => {
     const facts = residentIntelligenceFacts(row({
       attention: 42,
@@ -676,7 +698,7 @@ describe('resident loop helpers', () => {
           storyteller: { tone: 'warn', summary: 'No grounded Storyteller events.' },
         }
     ))).toEqual([
-      { label: 'Stack', value: '1/2 complete', detail: 'model, endpoint, and SPARK visible', tone: 'warn' },
+      { label: 'Stack', value: '1/2 complete', detail: 'model/endpoint or Brain+Body split profiles plus SPARK visible', tone: 'warn' },
       { label: 'Inference', value: '1/2 healthy', detail: 'latest brain inference status is usable', tone: 'warn', path: '/residents?triage=inference' },
       { label: 'Goal/action', value: '1/2 linked', detail: 'active goal tied to latest action cause', tone: 'warn', path: '/residents?triage=goal-link' },
       { label: 'Speech', value: '1/2 live', detail: 'recent say/feed line visible', tone: 'warn', path: '/residents?triage=quiet' },
@@ -686,6 +708,33 @@ describe('resident loop helpers', () => {
       { label: 'Memory', value: '1/2 qmd', detail: 'formal facts/*.md snippets visible', tone: 'warn', path: '/residents?triage=memory' },
       { label: 'Capability warnings', value: '1/2 clear', detail: '0 fail · 1 warn from proof pulse', tone: 'warn', path: '/residents?triage=benchmark' },
     ]);
+  });
+
+  test('does not count split stack coverage complete until both Brain and Body profiles are visible', () => {
+    const brainOnly = row({
+      name: 'res:brain-only',
+      stack: {
+        brain: { endpoint: 'brain_q8', model: 'qwopus3.5-27b-v3@q8_0', thinking: true },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.4.0', source: 'soul', activeFacets: ['thinking'] },
+      },
+    });
+    const completeSplit = row({
+      name: 'res:split',
+      stack: {
+        brain: { endpoint: 'brain_q8', model: 'qwopus3.5-27b-v3@q8_0', thinking: true },
+        body: { endpoint: 'body_q4', model: 'qwopus3.5-27b-v3@q4_k_s', thinking: false },
+        configuredModules: [],
+        activeModule: { id: 'onion.runescape.standard', version: '0.4.0', source: 'soul', activeFacets: ['thinking', 'body'] },
+      },
+    });
+
+    expect(residentLoopCoverageFacts([brainOnly, completeSplit]).find(fact => fact.label === 'Stack')).toEqual({
+      label: 'Stack',
+      value: '1/2 complete',
+      detail: 'model/endpoint or Brain+Body split profiles plus SPARK visible',
+      tone: 'warn',
+    });
   });
 
   test('marks aggregate memory coverage as syncing when no residents are online', () => {

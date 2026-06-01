@@ -404,14 +404,12 @@ export function residentStackSummary(row: ResidentDashboardRow): string {
 }
 
 function residentStackFact(row: ResidentDashboardRow): ResidentLoopFact {
-  const model = modelParts(row);
-  const module = activeModule(row);
   const split = splitInferenceStackSummary(row);
   return {
     label: 'Stack',
     value: residentStackSummary(row),
-    detail: split ? 'Brain and Body inference profiles plus SPARK module identity' : 'model/endpoint and SPARK module identity',
-    tone: (split || model.value !== '-') && module ? 'ok' : 'warn',
+    detail: residentStackDetail(row, Boolean(split)),
+    tone: residentStackReady(row) ? 'ok' : 'warn',
   };
 }
 
@@ -431,6 +429,35 @@ function inferenceProfileLabel(role: 'Brain' | 'Body', profile: { endpoint?: str
   const endpoint = profile.endpoint && profile.endpoint !== identity ? ` via ${profile.endpoint}` : '';
   const thinking = profile.thinking === undefined ? '' : ` (thinking ${profile.thinking ? 'on' : 'off'})`;
   return `${role} ${identity}${endpoint}${thinking}`;
+}
+
+function residentStackDetail(row: ResidentDashboardRow, split: boolean): string {
+  if (!split) return 'model/endpoint and SPARK module identity';
+
+  const missing: string[] = [];
+  if (!inferenceProfileReady(row.stack?.brain)) missing.push('Brain');
+  if (!inferenceProfileReady(row.stack?.body)) missing.push('Body');
+
+  return missing.length
+    ? `${missing.join(' and ')} inference profile${missing.length === 1 ? '' : 's'} missing; split Brain/Body stack is incomplete`
+    : 'Brain and Body inference profiles plus SPARK module identity';
+}
+
+function residentStackReady(row: ResidentDashboardRow): boolean {
+  if (!activeModule(row)) return false;
+
+  const splitConfigured = Boolean(row.stack?.brain || row.stack?.body);
+  if (splitConfigured) {
+    return inferenceProfileReady(row.stack?.brain) && inferenceProfileReady(row.stack?.body);
+  }
+
+  const model = modelIdentityParts(row);
+  const endpoint = endpointParts(row);
+  return model.value !== '-' && endpoint.value !== '-';
+}
+
+function inferenceProfileReady(profile: { endpoint?: string; model?: string } | undefined): boolean {
+  return Boolean(profile?.endpoint?.trim() && profile?.model?.trim());
 }
 
 export function residentIntelligenceDigestFacts(
@@ -470,8 +497,8 @@ export function residentIntelligenceDigestFacts(
     {
       label: 'Stack',
       value: splitStack ? `${splitStack} | ${moduleLabel}` : `${model.value !== '-' ? model.value : 'model unavailable'} | ${moduleLabel}`,
-      detail: splitStack ? 'Brain and Body inference profiles plus SPARK module identity' : `${endpoint.value !== '-' ? endpoint.value : 'endpoint unavailable'} | ${module?.source || 'module source unavailable'}`,
-      tone: (splitStack || (model.value !== '-' && endpoint.value !== '-')) && module ? 'ok' : 'warn',
+      detail: splitStack ? residentStackDetail(row, true) : `${endpoint.value !== '-' ? endpoint.value : 'endpoint unavailable'} | ${module?.source || 'module source unavailable'}`,
+      tone: residentStackReady(row) ? 'ok' : 'warn',
     },
     {
       label: 'AP/GP',
@@ -987,9 +1014,7 @@ export function residentLoopCoverageFacts(
 
   for (const row of onlineRows) {
     const signals = resolveSignals(row);
-    const model = modelIdentityParts(row);
-    const endpoint = endpointParts(row);
-    if (model.value !== '-' && endpoint.value !== '-' && activeModule(row)) stackReady += 1;
+    if (residentStackReady(row)) stackReady += 1;
     if (residentInferenceHealthFact(row).tone === 'ok') inferenceHealthy += 1;
     if (residentGoalActionLink(row).tone === 'ok') goalLinked += 1;
     if (residentLoopCheckpoints(row).find(checkpoint => checkpoint.key === 'speech')?.tone === 'ok') speechLive += 1;
@@ -1005,7 +1030,7 @@ export function residentLoopCoverageFacts(
   }
 
   return [
-    coverageCountFact('Stack', stackReady, online, 'complete', 'model, endpoint, and SPARK visible'),
+    coverageCountFact('Stack', stackReady, online, 'complete', 'model/endpoint or Brain+Body split profiles plus SPARK visible'),
     coverageCountFact('Inference', inferenceHealthy, online, 'healthy', 'latest brain inference status is usable', '/residents?triage=inference'),
     coverageCountFact('Goal/action', goalLinked, online, 'linked', 'active goal tied to latest action cause', '/residents?triage=goal-link'),
     coverageCountFact('Speech', speechLive, online, 'live', 'recent say/feed line visible', '/residents?triage=quiet'),
