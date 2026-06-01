@@ -1708,8 +1708,8 @@ describe('resident loop helpers', () => {
     const rollup = residentProofRollup(rows);
     expect(rollup).toEqual({
       tone: 'warn',
-      headline: '1/2 residents have live loop proofs',
-      detail: 'Top gaps: AP, Plan, Action',
+      headline: '1/2 residents active now; 1 complete proof bundle',
+      detail: 'Strict proof gaps: AP, Plan, Action',
       actions: [
         {
           label: 'Top up AP',
@@ -1727,6 +1727,64 @@ describe('resident loop helpers', () => {
           detail: 'Open resident detail or runtime logs for failed or missing actions.',
         },
       ],
+      activeNow: 1,
+      healthy: 1,
+      warn: 1,
+      fail: 0,
+      online: 2,
+    });
+  });
+
+  test('separates active-now liveness from strict complete proof bundles', () => {
+    const rows = [
+      row({
+        name: 'res:complete',
+        attention: 75,
+        thinking: { mode: 'executing', activePlan: 'Earn GP for AP' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'pickup_item', result: 'success', source: 'thinking', tick: 200 },
+          latestPerception: { resident: { inventory: [{ itemId: 995, amount: 42 }] } },
+          feed: {
+            attached: true,
+            tick: 200,
+            ageMs: 4000,
+            nearby: { players: 0, npcs: 1, objects: 0, worldItems: 0 },
+            events: 1,
+            availableActions: 4,
+            latestEventKind: 'say',
+            latestEventText: 'I can fund AP from coin 995.',
+          },
+        },
+        memory: {
+          files: ['facts/economy.md'],
+          facts: [{ topic: 'economy', path: 'facts/economy.md', text: 'Coin proof collected.' }],
+        },
+      }),
+      row({
+        name: 'res:active-thin',
+        attention: 80,
+        thinking: { mode: 'idle', activePlan: '' },
+        body: {
+          controlHeld: true,
+          lastAction: { kind: 'walk', result: 'success', source: 'body', tick: 201 },
+          feed: {
+            attached: true,
+            tick: 201,
+            ageMs: 2000,
+            nearby: { players: 0, npcs: 1, objects: 1, worldItems: 0 },
+            events: 1,
+            availableActions: 5,
+          },
+        },
+      }),
+    ];
+
+    expect(residentProofRollup(rows)).toMatchObject({
+      tone: 'warn',
+      headline: '2/2 residents active now; 1 complete proof bundle',
+      detail: 'Strict proof gaps: Plan, Speech, GP',
+      activeNow: 2,
       healthy: 1,
       warn: 1,
       fail: 0,
@@ -2363,6 +2421,7 @@ describe('resident loop helpers', () => {
           detail: 'Start or reconnect the controller before treating this as live proof.',
         },
       ],
+      activeNow: 0,
       healthy: 0,
       warn: 0,
       fail: 0,

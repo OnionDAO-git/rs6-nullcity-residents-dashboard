@@ -128,6 +128,7 @@ export interface ResidentProofRollup {
   headline: string;
   detail: string;
   actions: ResidentProofRollupAction[];
+  activeNow: number;
   healthy: number;
   warn: number;
   fail: number;
@@ -1905,6 +1906,7 @@ export function residentProofRollup(
         tone: 'warn',
         detail: 'Start or reconnect the controller before treating this as live proof.',
       }],
+      activeNow: 0,
       healthy: 0,
       warn: 0,
       fail: 0,
@@ -1915,12 +1917,14 @@ export function residentProofRollup(
   let healthy = 0;
   let warn = 0;
   let fail = 0;
+  let activeNow = 0;
   const gapCounts = new Map<string, number>();
   const gapOrder = new Map<string, number>();
   let gapIndex = 0;
 
   for (const row of onlineRows) {
     const pulse = residentProofPulse(row, resolveSignals(row));
+    if (residentIsActiveNow(row)) activeNow += 1;
     if (pulse.tone === 'ok') healthy += 1;
     else if (pulse.tone === 'warn') warn += 1;
     else fail += 1;
@@ -1945,19 +1949,29 @@ export function residentProofRollup(
     .map(([label]) => label);
 
   const tone: ResidentProofRollup['tone'] = healthy === onlineRows.length ? 'ok' : fail > 0 && healthy === 0 ? 'fail' : 'warn';
-  const detail = topGaps.length ? `Top gaps: ${topGaps.join(', ')}` : 'All tracked AP/GP loop proofs are live.';
+  const detail = topGaps.length ? `Strict proof gaps: ${topGaps.join(', ')}` : 'All tracked strict proof bundles are live; active residents have current feed or action evidence.';
   const actions = topGaps.map(proofGapAction);
+  const proofBundleLabel = healthy === 1 ? '1 complete proof bundle' : `${healthy.toLocaleString()} complete proof bundles`;
 
   return {
     tone,
-    headline: `${healthy.toLocaleString()}/${onlineRows.length.toLocaleString()} residents have live loop proofs`,
+    headline: `${activeNow.toLocaleString()}/${onlineRows.length.toLocaleString()} residents active now; ${proofBundleLabel}`,
     detail,
     actions,
+    activeNow,
     healthy,
     warn,
     fail,
     online: onlineRows.length,
   };
+}
+
+function residentIsActiveNow(row: ResidentDashboardRow): boolean {
+  if (!row.online) return false;
+  if (feedLabel(row) === 'live') return true;
+  return residentLoopCheckpoints(row).some(checkpoint => (
+    (checkpoint.key === 'action' || checkpoint.key === 'speech') && checkpoint.tone === 'ok'
+  ));
 }
 
 export function residentLivenessLedger(
