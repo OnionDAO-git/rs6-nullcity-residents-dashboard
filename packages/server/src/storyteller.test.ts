@@ -274,4 +274,46 @@ describe('readStorytellerDigestFeed', () => {
       ['run-dry', 'dry-run', undefined],
     ]);
   });
+
+  test('prefers canon over raw run when the same digest timestamp appears in both places', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
+    const digest = {
+      digestId: 'digest-shared',
+      builtAt: '2026-05-30T01:00:00.000Z',
+      topEvents: [],
+      residents: [],
+    };
+
+    await fs.mkdir(path.join(storytellerRoot, 'digest-shared'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'digest-shared', 'digest.json'), JSON.stringify(digest));
+    await fs.writeFile(path.join(storytellerRoot, 'digest-shared', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-raw',
+      needsReview: false,
+      publicTitle: 'Raw run',
+      publicBullets: [],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: [],
+    }));
+
+    await fs.mkdir(path.join(storytellerRoot, 'canon', 'digest-shared'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-shared', 'digest.json'), JSON.stringify(digest));
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-shared', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-canon',
+      needsReview: false,
+      publicTitle: 'Canon run',
+      publicBullets: [],
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: [],
+    }));
+
+    const feed = await readStorytellerDigestFeed(memoryRoot, 2);
+
+    expect(feed.items.map(item => [item.queue, item.dispatch?.dispatchId])).toEqual([
+      ['canon', 'dispatch-canon'],
+      ['dry-run', 'dispatch-raw'],
+    ]);
+  });
 });

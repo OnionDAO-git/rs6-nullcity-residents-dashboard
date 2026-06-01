@@ -49,6 +49,11 @@ export type StorytellerQueue = 'dry-run' | 'canon' | 'review';
 
 const DEFAULT_LIMIT = 12;
 const STORYTELLER_QUEUE_DIRS = ['canon', 'review'] as const;
+const STORYTELLER_QUEUE_PRIORITY: Record<StorytellerQueue, number> = {
+  canon: 0,
+  review: 1,
+  'dry-run': 2,
+};
 
 export async function readStorytellerDigestFeed(memoryRoot: string, limit = DEFAULT_LIMIT): Promise<StorytellerDigestFeed> {
   const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
@@ -171,7 +176,12 @@ function readTopEvent(value: unknown): StorytellerDigestEventSummary | undefined
 }
 
 function sortStorytellerRuns(a: StorytellerDigestSummary, b: StorytellerDigestSummary): number {
-  return timestampOrZero(b.builtAt) - timestampOrZero(a.builtAt);
+  return (
+    timestampOrZero(b.builtAt) - timestampOrZero(a.builtAt) ||
+    STORYTELLER_QUEUE_PRIORITY[a.queue] - STORYTELLER_QUEUE_PRIORITY[b.queue] ||
+    timestampOrZero(b.dispatch?.generatedAt) - timestampOrZero(a.dispatch?.generatedAt) ||
+    a.runId.localeCompare(b.runId)
+  );
 }
 
 function timestampOrZero(value: string | undefined): number {

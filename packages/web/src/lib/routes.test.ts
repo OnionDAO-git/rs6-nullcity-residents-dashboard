@@ -81,10 +81,10 @@ describe('dashboard route helpers', () => {
     expect(cityRouteNeedsSnapshot('/residents/res%3Aagent')).toBe(true);
   });
 
-  test('keeps the projector overview public while loading live city and Storyteller state', () => {
+  test('keeps the projector overview public while avoiding the heavy city snapshot', () => {
     expect(isKnownCityRoute('/overview')).toBe(true);
     expect(isProtectedCityRoute('/overview')).toBe(false);
-    expect(cityRouteNeedsSnapshot('/overview')).toBe(true);
+    expect(cityRouteNeedsSnapshot('/overview')).toBe(false);
     expect(cityRouteNeedsStoryDigests('/overview')).toBe(true);
   });
 

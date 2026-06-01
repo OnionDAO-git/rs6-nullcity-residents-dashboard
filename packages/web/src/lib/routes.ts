@@ -112,7 +112,6 @@ export function cityRouteNeedsStoryDigests(route: string): boolean {
 export function cityRouteNeedsSnapshot(route: string): boolean {
   const normalized = normalizePath(route);
   return normalized === '/' ||
-    normalized === '/overview' ||
     normalized === '/economy' ||
     normalized === '/profile' ||
     normalized === '/world' ||

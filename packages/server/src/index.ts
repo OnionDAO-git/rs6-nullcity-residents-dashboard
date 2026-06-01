@@ -5,6 +5,7 @@ import { config, dashboardRequestIdleTimeoutSeconds, parseRsClientHost } from '.
 import { readResidentEconomy } from './economy';
 import { routePublicEventApi } from './event-public';
 import { GatewayClient } from './gateway';
+import { toPublicOverviewResident } from './public-overview';
 import { buildEventReadinessSummary } from './readiness';
 import { RuntimeRepository } from './runtime';
 import { readStorytellerDigestFeed } from './storyteller';
@@ -246,6 +247,17 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
       patrons,
       relationships,
       readiness,
+    });
+  }
+
+  if (method === 'GET' && pathname === '/api/public/overview') {
+    const residents = await safeResidents('all');
+    const rows = await enrichResidentRows(residents);
+    const patrons = await runtime.patronSummary(12).catch(() => undefined);
+    return jsonResponse({
+      generatedAt: new Date().toISOString(),
+      residents: rows.map(toPublicOverviewResident),
+      patronAp: patrons?.totalShardBalance,
     });
   }
 

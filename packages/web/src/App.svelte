@@ -3,7 +3,7 @@
   import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { createDomCanvasAdapter, createForkedRuntimeLifecycleAdapter, createGameClient, createHttpSessionTicketAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
-  import { api, routeTo, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
+  import { api, routeTo, type PublicOverviewSnapshot, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
   import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
@@ -197,6 +197,7 @@
   let cityResidentGoalContracts: Record<string, ResidentGoalContractSignal> = {};
   let cityLibraryLives: LibrarySoulLife[] = [];
   let cityStoryDigests: StorytellerDigestSummary[] = [];
+  let cityProjectorPatronAp: number | undefined;
   let cityStoryRunList: StorytellerDigestRunList = storytellerDigestRunList([]);
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
@@ -501,7 +502,7 @@
     residents: cityResidents,
     digests: cityStoryDigests,
     overview,
-    patronAp: overview?.patrons?.totalShardBalance,
+    patronAp: cityProjectorPatronAp ?? overview?.patrons?.totalShardBalance,
     now: new Date(),
   });
   $: cityResidentTriageFocus = !isDebugRoute && route === '/residents' ? residentTriageFocusFromSearch(browserSearch) : '';
@@ -767,6 +768,12 @@
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
       return;
     }
+    if (activeRoute === '/overview') {
+      closeCityEconomyStream();
+      await loadCityProjectorSnapshot();
+      cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
+      return;
+    }
     if (!cityRouteNeedsSnapshot(activeRoute)) {
       closeCityEconomyStream();
       return;
@@ -955,6 +962,7 @@
   }
 
   async function loadCitySnapshot() {
+    cityProjectorPatronAp = undefined;
     const snapshot = await loadCitySnapshotWithLiveFallback({
       overview: api.overview,
       residents: () => api.residents('all'),
@@ -964,6 +972,20 @@
     if (snapshot.gatewayStatus) gatewayStatus = snapshot.gatewayStatus;
     residents = snapshot.residents;
     cityDataError = snapshot.error;
+  }
+
+  async function loadCityProjectorSnapshot() {
+    let snapshot: PublicOverviewSnapshot = { generatedAt: new Date().toISOString(), residents: [] };
+    try {
+      snapshot = await api.publicOverview();
+      cityDataError = '';
+    } catch (err) {
+      handleCityApiError(err);
+    }
+    overview = undefined;
+    gatewayStatus = undefined;
+    residents = snapshot.residents;
+    cityProjectorPatronAp = snapshot.patronAp;
   }
 
   async function loadResidentGoalContracts(rows: ResidentDashboardRow[]): Promise<Record<string, ResidentGoalContractSignal>> {
@@ -3360,12 +3382,13 @@
 {#snippet CityProjectorOverview()}
   <main class="projector-overview" aria-label="Null City public overview">
     <header class="projector-header">
-      <div>
+      <div class="projector-title-block">
         <p class="kicker">Projector Feed</p>
         <h1>Null City Live</h1>
+        <button type="button" class="projector-dashboard-link" onclick={() => cityNav('/')}>Dashboard</button>
       </div>
       <div class="projector-status-strip" aria-label="Live city counters">
-        {#each cityProjectorOverview.citySignals.slice(0, 3) as signal (signal.label)}
+        {#each cityProjectorOverview.citySignals as signal (signal.label)}
           <span class={`tone-${signal.tone || 'ok'}`}>
             <small>{signal.label}</small>
             <strong>{signal.detail}</strong>
@@ -3388,11 +3411,28 @@
           <span class={`tag ${cityProjectorOverview.dispatch.statusTone}`}>{cityProjectorOverview.dispatch.statusLabel}</span>
         </div>
         <h2>{cityProjectorOverview.dispatch.title}</h2>
-        <p>{cityProjectorOverview.dispatch.body}</p>
+        <div class="projector-story-copy">
+          {#if cityProjectorOverview.dispatch.bodyLead}
+            <p class="projector-story-lede">{cityProjectorOverview.dispatch.bodyLead}</p>
+          {/if}
+          {#if cityProjectorOverview.dispatch.bodyParagraphs.length}
+            <div class="projector-story-paragraphs">
+              {#each cityProjectorOverview.dispatch.bodyParagraphs as paragraph}
+                <p>{paragraph}</p>
+              {/each}
+            </div>
+          {/if}
+        </div>
         {#if cityProjectorOverview.dispatch.bullets.length}
+          <div class="projector-story-beats-header">
+            <div class="panel-title">Key Facts</div>
+          </div>
           <div class="projector-story-beats" aria-label="Story beats">
-            {#each cityProjectorOverview.dispatch.bullets as bullet}
-              <span>{bullet}</span>
+            {#each cityProjectorOverview.dispatch.bullets as bullet, index}
+              <div class="projector-story-beat">
+                <small>Fact {index + 1}</small>
+                <span>{bullet}</span>
+              </div>
             {/each}
           </div>
         {/if}
@@ -3412,9 +3452,9 @@
         {@render ProjectorAtlas({ model: cityProjectorOverview })}
       </article>
 
-      <aside class="projector-stakes-rail" aria-label="Null City stakes and live action">
-        {@render ProjectorListPanel({ title: 'Stakes', items: cityProjectorOverview.citySignals })}
-        {@render ProjectorListPanel({ title: 'Top Actions', items: cityProjectorOverview.residentActions.slice(0, 5) })}
+      <aside class="projector-stakes-rail" aria-label="Null City leaderboards and drama">
+        {@render ProjectorListPanel({ title: 'Leaderboard', items: cityProjectorOverview.leaderboardItems })}
+        {@render ProjectorListPanel({ title: 'Drama Radar', items: cityProjectorOverview.dramaItems })}
         {@render ProjectorListPanel({ title: 'Watch Next', items: cityProjectorOverview.watchItems })}
       </aside>
     </section>

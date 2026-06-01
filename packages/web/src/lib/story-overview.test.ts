@@ -61,6 +61,7 @@ describe('story overview projector model', () => {
       {
         label: 'Varrock',
         detail: '1 resident beyond the current viewport',
+        count: 1,
         residents: ['Wren Calix 3230,3428'],
       },
     ]);
@@ -92,6 +93,101 @@ describe('story overview projector model', () => {
     });
 
     expect(model.dispatch.statusLabel).toBe('review draft');
+  });
+
+  test('uses Storyteller dispatch body and bullets even without a public title', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [{
+        runId: 'body-only-run',
+        digestId: 'digest-body-only',
+        queue: 'canon',
+        topEventCount: 0,
+        residentCount: 0,
+        topEvents: [],
+        dispatch: {
+          dispatchId: 'dispatch-body-only',
+          needsReview: false,
+          warningCount: 0,
+          publicBody: 'res:wren-calix found the noisy part of the city.',
+          publicBullets: ['res:wren-calix is now the headline.'],
+          operatorWarnings: [],
+          reviewReasons: [],
+          eventRefCount: 0,
+          eventRefsUsed: [],
+        },
+      }],
+    });
+
+    expect(model.dispatch.body).toBe('Wren Calix found the noisy part of the city.');
+    expect(model.dispatch.bullets).toEqual(['Wren Calix is now the headline.']);
+    expect(model.dispatch.statusLabel).toBe('canon');
+  });
+
+  test('formats Storyteller copy into a lead sentence and readable paragraphs', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [{
+        runId: 'formatted-run',
+        digestId: 'digest-formatted',
+        queue: 'canon',
+        topEventCount: 0,
+        residentCount: 0,
+        topEvents: [],
+        dispatch: {
+          dispatchId: 'dispatch-formatted',
+          needsReview: false,
+          warningCount: 0,
+          publicTitle: 'The evening bulletin',
+          publicBody: 'Good evening from Null City. Hans shook off a snag. The Steward counted the crowd. Twelve residents stayed active. No one is low on AP.',
+          publicBullets: [],
+          operatorWarnings: [],
+          reviewReasons: [],
+          eventRefCount: 0,
+          eventRefsUsed: [],
+        },
+      }],
+    });
+
+    expect(model.dispatch.body).toBe('Good evening from Null City. Hans shook off a snag. The Steward counted the crowd. Twelve residents stayed active. No one is low on AP.');
+    expect(model.dispatch.bodyLead).toBe('Good evening from Null City.');
+    expect(model.dispatch.bodyParagraphs).toEqual([
+      'Hans shook off a snag. The Steward counted the crowd.',
+      'Twelve residents stayed active. No one is low on AP.',
+    ]);
+  });
+
+  test('keeps long Storyteller dispatches to three scannable body paragraphs', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [{
+        runId: 'long-run',
+        digestId: 'digest-long',
+        queue: 'canon',
+        topEventCount: 0,
+        residentCount: 0,
+        topEvents: [],
+        dispatch: {
+          dispatchId: 'dispatch-long',
+          needsReview: false,
+          warningCount: 0,
+          publicTitle: 'A full city bulletin',
+          publicBody: 'Good evening from Null City. Hans shook off a snag. The Steward counted the crowd. QA Social waved from the road. Pip stayed near the church. Father Aereck kept watch. Twelve residents stayed active. No one is low on AP.',
+          publicBullets: [],
+          operatorWarnings: [],
+          reviewReasons: [],
+          eventRefCount: 0,
+          eventRefsUsed: [],
+        },
+      }],
+    });
+
+    expect(model.dispatch.bodyLead).toBe('Good evening from Null City.');
+    expect(model.dispatch.bodyParagraphs).toEqual([
+      'Hans shook off a snag. The Steward counted the crowd. QA Social waved from the road.',
+      'Pip stayed near the church. Father Aereck kept watch. Twelve residents stayed active.',
+      'No one is low on AP.',
+    ]);
   });
 
   test('keeps the v1 atlas on Lumbridge landmarks even when the latest resident is elsewhere', () => {
@@ -152,6 +248,41 @@ describe('story overview projector model', () => {
     });
   });
 
+  test('marks low-attention positioned residents as watch pins when no event is active', () => {
+    const model = buildStoryOverviewModel({
+      residents: [
+        resident({ name: 'res:tired-anchor', attention: 1, position: { x: 3162, y: 3228, level: 0 } }),
+      ],
+      digests: [],
+    });
+
+    expect(model.atlas.pins[0]).toMatchObject({
+      residentName: 'res:tired-anchor',
+      eventLabel: 'quiet',
+      tone: 'watch',
+    });
+  });
+
+  test('reports true off-map tension count when a region has more than five residents', () => {
+    const residents = Array.from({ length: 7 }, (_item, index) => resident({
+      name: `res:varrock-${index}`,
+      position: { x: 3230 + index, y: 3428, level: 0 },
+    }));
+
+    const model = buildStoryOverviewModel({
+      residents,
+      digests: [],
+    });
+
+    expect(model.atlas.offMapRegions[0]).toMatchObject({
+      label: 'Varrock',
+      detail: '7 residents beyond the current viewport',
+    });
+    expect(model.atlas.offMapRegions[0]?.residents).toHaveLength(5);
+    expect(model.watchItems.find(item => item.label === 'Off-Map Tension')?.detail).toBe('7 residents outside the atlas viewport');
+    expect(model.dramaItems.find(item => item.label === 'Off-Map Tension')).toBeUndefined();
+  });
+
   test('labels review-state Storyteller dispatches and keeps resident actions grounded', () => {
     const digest: StorytellerDigestSummary = {
       runId: 'story-run-1',
@@ -209,5 +340,69 @@ describe('story overview projector model', () => {
       path: '/residents/agent',
     });
     expect(model.citySignals.map(signal => signal.label)).toContain('Visible AP');
+  });
+
+  test('builds right-rail leaderboards and drama without duplicating global counters', () => {
+    const digest: StorytellerDigestSummary = {
+      runId: 'story-run-drama',
+      digestId: 'digest-drama',
+      queue: 'canon',
+      topEventCount: 1,
+      residentCount: 2,
+      topEvents: [
+        {
+          ref: 'agent-report',
+          kind: 'stuck_recovered',
+          residentName: 'res:agent',
+          note: 'res:agent shook off a snag and reported the crowd.',
+          importance: 'high',
+          evidenceLabels: ['tick 42'],
+        },
+      ],
+    };
+
+    const model = buildStoryOverviewModel({
+      residents: [
+        resident({
+          name: 'res:agent',
+          position: { x: 3224, y: 3217, level: 0 },
+          feed: feed({
+            latestEventKind: 'chat',
+            nearby: { players: 2, npcs: 31, objects: 0, worldItems: 0 },
+            events: 2,
+          }),
+        }),
+        resident({
+          name: 'res:hans',
+          position: { x: 3222, y: 3217, level: 0 },
+          feed: feed({ latestEventKind: 'chat' }),
+        }),
+        resident({
+          name: 'res:object-magnet',
+          position: { x: 3210, y: 3210, level: 0 },
+          feed: feed({ nearby: { players: 0, npcs: 0, objects: 999, worldItems: 0 } }),
+        }),
+      ],
+      digests: [digest],
+      patronAp: 6381,
+    });
+
+    expect(model.leaderboardItems).toHaveLength(2);
+    expect(model.citySignals.map(item => item.label)).toEqual(['Online Residents', 'Mapped Residents', 'Visible AP', 'Storyteller']);
+    expect(model.leaderboardItems[0]).toMatchObject({
+      label: 'The Steward',
+      detail: 'chat | 33 nearby | 3224,3217',
+    });
+    expect(model.leaderboardItems.map(item => item.label)).not.toContain('Object Magnet');
+    expect(model.dramaItems.length).toBeLessThanOrEqual(3);
+    expect(model.watchItems.length).toBeLessThanOrEqual(2);
+    expect(model.dramaItems[0]).toMatchObject({
+      label: 'The Steward',
+      detail: 'The Steward shook off a snag and reported the crowd.',
+      tone: 'warn',
+    });
+    expect(model.dramaItems.map(item => item.label)).not.toContain('Online Residents');
+    expect(model.dramaItems.map(item => item.label)).not.toContain('Mapped Residents');
+    expect(model.dramaItems.map(item => item.label)).not.toContain('Visible AP');
   });
 });

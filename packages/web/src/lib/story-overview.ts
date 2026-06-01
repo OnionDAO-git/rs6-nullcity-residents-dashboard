@@ -31,6 +31,7 @@ export interface StoryOverviewPin {
 export interface StoryOverviewRegion {
   label: string;
   detail: string;
+  count: number;
   residents: string[];
 }
 
@@ -44,6 +45,8 @@ export interface StoryOverviewAtlas {
 export interface StoryOverviewDispatch {
   title: string;
   body: string;
+  bodyLead: string;
+  bodyParagraphs: string[];
   bullets: string[];
   statusLabel: string;
   statusTone: 'ok' | 'warn';
@@ -61,7 +64,9 @@ export interface StoryOverviewModel {
   dispatch: StoryOverviewDispatch;
   atlas: StoryOverviewAtlas;
   residentActions: StoryOverviewListItem[];
+  leaderboardItems: StoryOverviewListItem[];
   citySignals: StoryOverviewListItem[];
+  dramaItems: StoryOverviewListItem[];
   watchItems: StoryOverviewListItem[];
 }
 
@@ -89,7 +94,7 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
   const positioned = residents
     .map(row => ({ row, position: residentPosition(row) }))
     .filter((entry): entry is { row: ResidentDashboardRow; position: Position } => Boolean(entry.position));
-  const digest = input.digests.find(item => item.dispatch?.publicTitle || item.topEvents.length > 0);
+  const digest = input.digests.find(hasProjectorDigestContent);
   const storytellerEventKinds = storytellerEventKindByResident(digest);
   const leadResident = findLeadResident(residents, digest);
   const viewport = chooseViewport();
@@ -109,8 +114,10 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
       totalPositioned: positioned.length,
     },
     residentActions: buildResidentActions(residents, leadResident, storytellerEventKinds),
+    leaderboardItems: buildLeaderboardItems(residents, leadResident, storytellerEventKinds),
     citySignals: buildCitySignals(input, digest, positioned.length),
-    watchItems: buildWatchItems(residents, digest, offMapRegions),
+    dramaItems: buildDramaItems(residents, digest, offMapRegions),
+    watchItems: buildWatchItems(residents, digest, offMapRegions, leadResident),
   };
 }
 
@@ -144,6 +151,7 @@ function residentPin(
 ): StoryOverviewPin {
   const eventLabel = eventKindLabel(row.feed?.latestEventKind || row.lastEvent?.kind || row.storyArc?.latestEventKind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
   const isLead = Boolean(leadResident && namesMatch(row.name, leadResident.name));
+  const needsWatch = row.inCombat || (row.attention ?? 999) <= 2;
   const level = position.level ?? 0;
   return {
     residentName: row.name,
@@ -154,7 +162,7 @@ function residentPin(
     level,
     leftPct: clamp(((position.x - viewport.minX) / (viewport.maxX - viewport.minX)) * 100, 4, 96),
     topPct: clamp((1 - ((position.y - viewport.minY) / (viewport.maxY - viewport.minY))) * 100, 4, 96),
-    tone: isLead || eventLabel !== 'quiet' ? 'event' : row.online ? 'ok' : 'quiet',
+    tone: eventLabel !== 'quiet' || (isLead && !needsWatch) ? 'event' : needsWatch ? 'watch' : row.online ? 'ok' : 'quiet',
     eventLabel,
     detail: `${eventLabel} near ${position.x},${position.y}`,
     levelLabel: level > 0 ? `L${level}` : '',
@@ -174,9 +182,19 @@ function buildOffMapRegions(positioned: { row: ResidentDashboardRow; position: P
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([label, residents]) => ({
       label,
+      count: residents.length,
       detail: `${residents.length.toLocaleString()} resident${residents.length === 1 ? '' : 's'} beyond the current viewport`,
       residents: residents.slice(0, 5),
     }));
+}
+
+function hasProjectorDigestContent(item: StorytellerDigestSummary): boolean {
+  return Boolean(
+    item.dispatch?.publicTitle ||
+    item.dispatch?.publicBody ||
+    item.dispatch?.publicBullets?.length ||
+    item.topEvents.length > 0,
+  );
 }
 
 function regionForPosition(position: Position): string {
@@ -201,14 +219,47 @@ function buildDispatch(
     : 'Residents with live positions will appear here as soon as the dashboard feed reports them.';
   const needsReview = Boolean(dispatch?.needsReview || (digest && digest.queue !== 'canon'));
   const generated = dispatch?.generatedAt || digest?.builtAt;
+  const body = prettifyResidentRefs(dispatch?.publicBody || fallbackBody);
+  const formattedBody = formatStoryBody(body);
   return {
     title: prettifyResidentRefs(dispatch?.publicTitle || fallbackTitle),
-    body: prettifyResidentRefs(dispatch?.publicBody || fallbackBody),
+    body,
+    bodyLead: formattedBody.bodyLead,
+    bodyParagraphs: formattedBody.bodyParagraphs,
     bullets: buildDispatchBullets(digest),
     statusLabel: !digest ? 'live feed' : needsReview ? 'review draft' : 'canon',
     statusTone: needsReview ? 'warn' : 'ok',
     detail: generated ? `updated ${relativeTime(generated, now)}` : 'waiting for first dispatch',
   };
+}
+
+function formatStoryBody(body: string): Pick<StoryOverviewDispatch, 'bodyLead' | 'bodyParagraphs'> {
+  const sentences = splitStorySentences(body);
+  if (!sentences.length) return { bodyLead: '', bodyParagraphs: [] };
+  const bodyLead = sentences[0] || '';
+  const remaining = sentences.slice(1);
+  return {
+    bodyLead,
+    bodyParagraphs: chunkSentences(remaining, storyParagraphChunkSize(remaining.length)),
+  };
+}
+
+function splitStorySentences(body: string): string[] {
+  const compact = body.replace(/\s+/g, ' ').trim();
+  if (!compact) return [];
+  return compact.match(/[^.!?]+[.!?]+(?:["')\]]+)?|[^.!?]+$/g)?.map(sentence => sentence.trim()).filter(Boolean) || [compact];
+}
+
+function chunkSentences(sentences: string[], size: number): string[] {
+  const chunks: string[] = [];
+  for (let index = 0; index < sentences.length; index += size) {
+    chunks.push(sentences.slice(index, index + size).join(' '));
+  }
+  return chunks;
+}
+
+function storyParagraphChunkSize(sentenceCount: number): number {
+  return sentenceCount > 4 ? 3 : 2;
 }
 
 function buildDispatchBullets(digest: StorytellerDigestSummary | undefined): string[] {
@@ -259,23 +310,140 @@ function buildCitySignals(
   ];
 }
 
-function buildWatchItems(
+function buildLeaderboardItems(
+  residents: ResidentDashboardRow[],
+  leadResident: ResidentDashboardRow | undefined,
+  storytellerEventKinds: Map<string, string>,
+): StoryOverviewListItem[] {
+  return [...residents]
+    .filter(row => isHighQualityLeaderboardResident(row, leadResident, storytellerEventKinds))
+    .sort((a, b) => leaderboardScore(b, leadResident, storytellerEventKinds) - leaderboardScore(a, leadResident, storytellerEventKinds))
+    .slice(0, 3)
+    .map(row => {
+      const position = residentPosition(row);
+      const nearby = nearbyActivityCount(row);
+      const eventLabel = eventKindLabel(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
+      const detailParts = [
+        eventLabel,
+        nearby > 0 ? `${nearby.toLocaleString()} nearby` : '',
+        position ? `${position.x},${position.y}` : '',
+      ].filter(Boolean);
+      return {
+        label: displayName(row.name),
+        detail: detailParts.join(' | ') || 'waiting for live signal',
+        path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
+        tone: row.inCombat || (row.attention ?? 999) <= 2 ? 'warn' : 'ok',
+      };
+    });
+}
+
+function buildDramaItems(
   residents: ResidentDashboardRow[],
   digest: StorytellerDigestSummary | undefined,
   offMapRegions: StoryOverviewRegion[],
 ): StoryOverviewListItem[] {
+  const items: StoryOverviewListItem[] = [];
+  for (const event of (digest?.topEvents || []).filter(isHighQualityDramaEvent)) {
+    const label = event.residentName ? displayName(event.residentName) : eventKindLabel(event.kind);
+    items.push({
+      label,
+      detail: compactDetail(prettifyResidentRefs(event.note || eventKindLabel(event.kind))),
+      ...(event.residentName ? { path: `/residents/${encodeURIComponent(residentRouteSlug(event.residentName))}` } : {}),
+      tone: event.importance === 'critical' || event.importance === 'high' ? 'warn' : 'ok',
+    });
+  }
+
+  for (const row of residents.filter(row => row.inCombat).slice(0, 3)) {
+    const position = residentPosition(row);
+    items.push({
+      label: `${displayName(row.name)} in combat`,
+      detail: position ? `combat near ${position.x},${position.y}` : 'combat reported without a current coordinate',
+      path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
+      tone: 'warn',
+    });
+  }
+
+  for (const row of residents.filter(row => (row.attention ?? 999) <= 2).slice(0, 3)) {
+    items.push({
+      label: `${displayName(row.name)} needs AP`,
+      detail: `${(row.attention ?? 0).toLocaleString()} AP remaining`,
+      path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
+      tone: 'warn',
+    });
+  }
+
+  if (!items.length) {
+    items.push({ label: 'Stable Window', detail: 'No major alerts in the current public feed.', tone: 'ok' });
+  }
+
+  return items.slice(0, 3);
+}
+
+function buildWatchItems(
+  residents: ResidentDashboardRow[],
+  digest: StorytellerDigestSummary | undefined,
+  offMapRegions: StoryOverviewRegion[],
+  leadResident: ResidentDashboardRow | undefined,
+): StoryOverviewListItem[] {
   const lowAp = residents.filter(row => (row.attention ?? 999) <= 2);
   const items: StoryOverviewListItem[] = [];
+  if (leadResident) {
+    const position = residentPosition(leadResident);
+    const eventLabel = eventKindLabel(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || leadResident.body?.lastAction?.kind || '');
+    items.push({
+      label: `Follow ${displayName(leadResident.name)}`,
+      detail: position ? `${eventLabel} near ${position.x},${position.y}` : eventLabel,
+      path: `/residents/${encodeURIComponent(residentRouteSlug(leadResident.name))}`,
+      tone: leadResident.inCombat || (leadResident.attention ?? 999) <= 2 ? 'warn' : 'ok',
+    });
+  }
   if (digest?.dispatch?.needsReview || (digest && digest.queue !== 'canon')) {
     items.push({ label: 'Story Review', detail: 'Latest dispatch is a review draft, not canon yet.', tone: 'warn', path: '/story' });
   }
   if (offMapRegions.length) {
-    items.push({ label: 'Off-Map Tension', detail: `${offMapRegions.reduce((sum, region) => sum + region.residents.length, 0)} residents outside the atlas viewport`, tone: 'ok' });
+    items.push({ label: 'Off-Map Tension', detail: `${offMapRegions.reduce((sum, region) => sum + region.count, 0)} residents outside the atlas viewport`, tone: 'ok' });
   }
   if (lowAp.length) {
     items.push({ label: 'AP Runway', detail: `${lowAp.length} residents are at or below the support floor`, tone: 'warn', path: '/residents?triage=attention' });
   }
-  return items.slice(0, 5);
+  return items.slice(0, 2);
+}
+
+function leaderboardScore(row: ResidentDashboardRow, leadResident?: ResidentDashboardRow, storytellerEventKinds = new Map<string, string>()): number {
+  return residentScore(row, leadResident, storytellerEventKinds)
+    + nearbyActivityCount(row)
+    + ((row.feed?.events ?? 0) * 4)
+    + ((row.feed?.availableActions ?? 0) * 2);
+}
+
+function nearbyActivityCount(row: ResidentDashboardRow): number {
+  const nearby = row.feed?.nearby;
+  if (!nearby) return 0;
+  return (nearby.players ?? 0) + (nearby.npcs ?? 0);
+}
+
+function isHighQualityLeaderboardResident(
+  row: ResidentDashboardRow,
+  leadResident: ResidentDashboardRow | undefined,
+  storytellerEventKinds: Map<string, string>,
+): boolean {
+  if (!(row.online || residentPosition(row))) return false;
+  if (leadResident && namesMatch(row.name, leadResident.name)) return true;
+  if (storytellerEventKinds.has(residentRouteSlug(row.name))) return true;
+  if (row.inCombat || (row.attention ?? 999) <= 2) return true;
+  if (row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind) return true;
+  return nearbyActivityCount(row) > 0;
+}
+
+function isHighQualityDramaEvent(event: NonNullable<StorytellerDigestSummary['topEvents']>[number]): boolean {
+  if (event.importance === 'critical' || event.importance === 'high' || event.importance === 'medium') return true;
+  return ['resident_faded', 'ap_for_gp_exchange', 'ap_gp_exchange', 'ncri_sale', 'ncri_minted', 'goal_completed', 'stuck_recovered'].includes(event.kind);
+}
+
+function compactDetail(value: string, maxLength = 96): string {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
 function residentScore(row: ResidentDashboardRow, leadResident?: ResidentDashboardRow, storytellerEventKinds = new Map<string, string>()): number {

@@ -75,6 +75,7 @@ function formatErrorMessage(text: string): string {
 
 export const api = {
   overview: () => request<DashboardOverview>('/api/overview'),
+  publicOverview: () => request<PublicOverviewSnapshot>('/api/public/overview'),
   gatewayStatus: () => request<GatewayStatus>('/api/gateway/status'),
   controllerStatus: () => request<ControllerStatus>('/api/controller/status'),
   residents: (filter = 'all') => request<ResidentDashboardRow[]>(`/api/residents?filter=${encodeURIComponent(filter)}`),
@@ -104,6 +105,12 @@ export const api = {
   residentEconomy: (resident: string) => request<ResidentEconomy>(`/api/resident/${encodeURIComponent(resident)}/economy`),
   storytellerDigests: (limit = 12) => request<StorytellerDigestFeed>(`/api/storyteller/digests?limit=${encodeURIComponent(limit)}`),
 };
+
+export interface PublicOverviewSnapshot {
+  generatedAt: string;
+  residents: ResidentDashboardRow[];
+  patronAp?: number;
+}
 
 export interface EconomyEvent {
   id: string;
