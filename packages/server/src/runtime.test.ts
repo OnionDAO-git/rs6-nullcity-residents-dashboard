@@ -848,6 +848,58 @@ describe('RuntimeRepository letters', () => {
     });
     expect(letters[0]).not.toHaveProperty('body');
   });
+
+  test('dedupes broadcasts and suppresses false death letters for living residents', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-death-letters-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+    const lettersRoot = path.join(memoryRoot, 'data', 'letters');
+    await fs.mkdir(path.join(lettersRoot, 'alice'), { recursive: true });
+    await fs.mkdir(path.join(lettersRoot, 'bob'), { recursive: true });
+    const falseDeathBroadcast = {
+      kind: 'broadcast',
+      senderResident: 'res:qa-social',
+      subject: '[Broadcast] On the passing of res:qa-social',
+      body: 'private stale body',
+      dispatchedAt: '2026-06-01T22:59:49.420Z',
+      deliveryChannels: ['web-inbox'],
+    };
+    await fs.writeFile(
+      path.join(lettersRoot, 'alice', 'inbox.jsonl'),
+      [
+        JSON.stringify({ ...falseDeathBroadcast, recipient: 'alice' }),
+        JSON.stringify({
+          kind: 'broadcast',
+          recipient: 'alice',
+          senderResident: 'res:hans',
+          subject: 'Hans found the courtyard bell',
+          dispatchedAt: '2026-06-02T00:00:00.000Z',
+          deliveryChannels: ['web-inbox'],
+        }),
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(lettersRoot, 'bob', 'inbox.jsonl'),
+      JSON.stringify({ ...falseDeathBroadcast, recipient: 'bob' }),
+      'utf8',
+    );
+
+    const letters = await repository.recentLetters(12, {
+      dedupeBroadcasts: true,
+      livingResidents: ['res:qa-social'],
+    });
+
+    expect(letters.map(letter => letter.subject)).toEqual(['Hans found the courtyard bell']);
+    expect(JSON.stringify(letters)).not.toContain('passing of res:qa-social');
+    expect(JSON.stringify(letters)).not.toContain('private stale body');
+  });
 });
 
 describe('RuntimeRepository patrons', () => {

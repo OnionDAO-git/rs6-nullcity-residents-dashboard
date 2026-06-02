@@ -216,9 +216,10 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   if (method === 'GET' && pathname === '/api/overview') {
     const residents = await safeResidents(url.searchParams.get('filter') || 'all');
     const rows = await enrichResidentRows(residents);
+    const livingResidents = rows.filter(row => row.online).map(row => row.name);
     const [logs, recentLetters, patrons, relationships, gatewayStatus, controllerStatus, souls] = await Promise.all([
       runtime.readAllLogs(60),
-      runtime.recentLetters(12),
+      runtime.recentLetters(12, { dedupeBroadcasts: true, livingResidents }),
       runtime.patronSummary(12),
       runtime.relationshipSummary(12, rows.map(row => row.name)),
       gateway.probeStatus(),

@@ -333,8 +333,12 @@ export class RuntimeRepository {
       }),
     );
     const letters = inboxes.flat();
-    const visibleLetters = options.excludeSyntheticSenders ? letters.filter(letter => !isSyntheticLetterSender(letter)) : letters;
-    return visibleLetters
+    const livingResidents = options.livingResidents ? normalizedResidentSet(options.livingResidents) : undefined;
+    const visibleLetters = letters
+      .filter(letter => !options.excludeSyntheticSenders || !isSyntheticLetterSender(letter))
+      .filter(letter => !isFalseDeathLetterForLivingResident(letter, livingResidents));
+    const normalizedLetters = options.dedupeBroadcasts ? dedupeBroadcastLetters(visibleLetters) : visibleLetters;
+    return normalizedLetters
       .sort((a, b) => timestampMs(b.dispatchedAt) - timestampMs(a.dispatchedAt))
       .slice(0, Math.max(0, limit));
   }
@@ -559,6 +563,8 @@ export class RuntimeRepository {
 
 type RecentLettersOptions = {
   excludeSyntheticSenders?: boolean;
+  dedupeBroadcasts?: boolean;
+  livingResidents?: Iterable<string>;
 };
 
 function isDirectInboxFile(file: string): boolean {
@@ -613,6 +619,33 @@ function normalizeRecentLetter(value: unknown, file: string, index: number): Rec
 
 function isSyntheticLetterSender(letter: RecentLetterSummary): boolean {
   return letter.senderResident ? /^res-(qa-|bench-|test-|tmp-|synthetic-|bmk[_-])/i.test(residentSlug(letter.senderResident)) : false;
+}
+
+function isFalseDeathLetterForLivingResident(letter: RecentLetterSummary, livingResidents?: Set<string>): boolean {
+  if (!livingResidents || livingResidents.size === 0 || !letter.senderResident) return false;
+  if (!livingResidents.has(feedKey(letter.senderResident))) return false;
+  return isDeathBroadcastLetter(letter);
+}
+
+function isDeathBroadcastLetter(letter: RecentLetterSummary): boolean {
+  const subject = letter.subject.toLowerCase();
+  return letter.kind === 'epitaph' || letter.kind === 'epitaph_letter' || /\b(passing|death|died|rests in the library)\b/.test(subject);
+}
+
+function dedupeBroadcastLetters(letters: RecentLetterSummary[]): RecentLetterSummary[] {
+  const seen = new Set<string>();
+  return letters.filter(letter => {
+    if (letter.kind !== 'broadcast') return true;
+    const key = [
+      letter.kind,
+      letter.senderResident ? feedKey(letter.senderResident) : '',
+      letter.subject.trim().toLowerCase(),
+      letter.dispatchedAt || '',
+    ].join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeStoryArc(value: unknown): StoryArcDashboardSummary | undefined {
