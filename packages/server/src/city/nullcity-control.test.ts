@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createNullCityControlClient } from './nullcity-control';
+import { cityConfigFromEnv } from './config';
 
 const originalFetch = globalThis.fetch;
 
@@ -203,6 +204,36 @@ describe('createNullCityControlClient', () => {
       economyEventCount: 28,
       degradedFlags: [],
     });
+  });
+
+  test('uses normalized config base path when runtime env provides a bare City API host', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = (async input => {
+      calls.push(String(input));
+      return new Response(
+        JSON.stringify({
+          asOf: '2026-06-02T17:12:00.000Z',
+          controllerUptimeSec: 120,
+          residentCount: 10,
+          activeResidentCount: 10,
+          economyEventCount: 253,
+          degradedFlags: [],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: cityConfigFromEnv({
+        NULLCITY_CITY_API_URL: 'http://127.0.0.1:43611',
+        NULLCITY_CITY_API_TOKEN: 'operator-token',
+      }).nullcityControlBaseUrl!,
+      token: 'operator-token',
+    });
+
+    await client.economyHeartbeat!();
+
+    expect(calls).toEqual(['http://127.0.0.1:43611/api/nullcity/economy/heartbeat']);
   });
 
   test('opens the controller economy SSE stream with bearer auth and query params', async () => {

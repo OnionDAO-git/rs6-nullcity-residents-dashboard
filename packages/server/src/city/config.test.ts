@@ -12,6 +12,25 @@ describe('cityConfigFromEnv', () => {
     expect(config.nullcityControlToken).toBe('city-token');
   });
 
+  test('normalizes bare City API hosts to the controller Null City route prefix', () => {
+    const config = cityConfigFromEnv({
+      NULLCITY_CITY_API_URL: 'http://controller.test:43611',
+      NULLCITY_CITY_API_TOKEN: 'city-token',
+    });
+
+    expect(config.nullcityControlBaseUrl).toBe('http://controller.test:43611/api/nullcity');
+    expect(config.nullcityControlToken).toBe('city-token');
+  });
+
+  test('preserves explicitly prefixed City API hosts after trimming trailing slashes', () => {
+    const config = cityConfigFromEnv({
+      NULLCITY_CITY_API_URL: 'http://controller.test:43611/api/nullcity/',
+      NULLCITY_CITY_API_TOKEN: 'city-token',
+    });
+
+    expect(config.nullcityControlBaseUrl).toBe('http://controller.test:43611/api/nullcity');
+  });
+
   test('does not auto-enable the admin control bridge from generic controller env', () => {
     const config = cityConfigFromEnv({
       CONTROLLER_CITY_HTTP_PORT: '8787',

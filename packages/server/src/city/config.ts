@@ -27,7 +27,7 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     publicBaseUrl: clean(env.CITY_PUBLIC_BASE_URL),
     printBridgeToken: clean(env.CITY_PRINT_BRIDGE_TOKEN) || clean(env.PRINT_BRIDGE_CITY_TOKEN),
-    nullcityControlBaseUrl: clean(env.NULLCITY_CITY_API_URL) || clean(env.CITY_DASHBOARD_NULLCITY_URL),
+    nullcityControlBaseUrl: normalizeNullCityControlBaseUrl(clean(env.NULLCITY_CITY_API_URL) || clean(env.CITY_DASHBOARD_NULLCITY_URL)),
     nullcityControlToken: clean(env.NULLCITY_CITY_API_TOKEN) || clean(env.CITY_DASHBOARD_NULLCITY_TOKEN),
     baseBirthApCost: numberEnv(env.CITY_SOUL_BASE_BIRTH_AP, 500),
     skillLevelApCost: numberEnv(env.CITY_SOUL_SKILL_LEVEL_AP, 10),
@@ -41,6 +41,21 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
 function clean(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeNullCityControlBaseUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const withoutTrailingSlash = value.replace(/\/+$/, '');
+  try {
+    const url = new URL(withoutTrailingSlash);
+    if (url.pathname === '' || url.pathname === '/') {
+      url.pathname = '/api/nullcity';
+      return url.toString().replace(/\/+$/, '');
+    }
+  } catch {
+    return withoutTrailingSlash;
+  }
+  return withoutTrailingSlash;
 }
 
 function numberEnv(value: string | undefined, fallback: number): number {
