@@ -2524,6 +2524,8 @@
   }
 
   function residentPlanLabel(row: ResidentDashboardRow | undefined): string {
+    const stage = row?.thinking?.activePlanDetails?.currentStage;
+    if (stage?.subgoal) return stage.subgoal;
     return row?.thinking?.activePlan || 'No active plan published';
   }
 
@@ -2620,10 +2622,13 @@
     const cognition = asRecord(state.cognition);
     const goal = asRecord(cognition.activeGoal);
     const inference = runtime?.thinking.latestInference;
+    const activePlan = runtime?.thinking.activePlanDetails;
     return [
       { label: 'Controller', value: runtime?.state ? 'runtime active' : runtime?.online ? 'waiting for runtime' : 'offline', detail: runtime?.state ? undefined : 'controller has not written runtime-state yet' },
       { label: 'Mode', value: runtime?.thinking.mode || 'unknown', detail: runtime?.thinking.lastInferenceCause || undefined },
       { label: 'Thought', value: activity.inferenceLabel, detail: activity.inferenceAgeLabel },
+      { label: 'Plan', value: activePlan?.goalDescription || runtime?.thinking.activePlan || 'no durable plan', detail: activePlanDetail(activePlan) },
+      { label: 'Current Stage', value: activePlan?.currentStage?.subgoal || '-', detail: activePlanStageDetail(activePlan) },
       { label: 'Goal', value: stringField(goal, 'description') || activity.goalLabel, detail: goalDetail(goal) },
       { label: 'Move Intent', value: activity.moveLabel, detail: activity.moveDetail },
       { label: 'Resources', value: activity.attentionLabel, detail: budgetLabel(runtime) },
@@ -2666,6 +2671,25 @@
     const success = stringField(goal, 'success');
     const ttl = numberField(goal, 'ttlTicks');
     return [steps ? `${steps} steps` : '', success, ttl !== undefined ? `ttl ${ttl}` : ''].filter(Boolean).join(' | ') || '-';
+  }
+
+  function activePlanDetail(plan: RuntimeReadModel['thinking']['activePlanDetails'] | undefined): string {
+    if (!plan) return '-';
+    const parts = [
+      plan.status,
+      plan.source,
+      plan.stages.length ? `${plan.stages.length} stages` : '',
+      plan.currentStageIndex !== undefined ? `stage ${plan.currentStageIndex + 1}` : '',
+      plan.createdAtTick !== undefined ? `created tick ${plan.createdAtTick}` : '',
+    ].filter(Boolean);
+    return parts.join(' | ') || '-';
+  }
+
+  function activePlanStageDetail(plan: RuntimeReadModel['thinking']['activePlanDetails'] | undefined): string {
+    const stage = plan?.currentStage;
+    if (!stage) return '-';
+    const requirements = stage.requirements.length ? `needs ${stage.requirements.join(', ')}` : '';
+    return [stage.id, stage.status, requirements, stage.successCriteria].filter(Boolean).join(' | ') || '-';
   }
 
   function budgetLabel(runtime: RuntimeReadModel | undefined): string {

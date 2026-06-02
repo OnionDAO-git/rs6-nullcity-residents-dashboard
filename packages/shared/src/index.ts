@@ -288,6 +288,7 @@ export interface RuntimeReadModel {
   thinking: {
     mode: 'idle' | 'executing' | 'deciding' | 'offline' | 'unknown';
     activePlan?: string;
+    activePlanDetails?: ResidentActivePlanSummary;
     previousIntent?: unknown;
     inFlightRequest?: string;
     lastInferenceCause?: string;
@@ -332,6 +333,25 @@ export interface RuntimeReadModel {
     inference: InferenceLogEntry[];
   };
   errors: string[];
+}
+
+export interface ResidentPlanStageSummary {
+  id: string;
+  subgoal: string;
+  status: string;
+  requirements: string[];
+  successCriteria?: string;
+}
+
+export interface ResidentActivePlanSummary {
+  goalId?: string;
+  goalDescription: string;
+  status?: string;
+  currentStageIndex?: number;
+  currentStage?: ResidentPlanStageSummary;
+  stages: ResidentPlanStageSummary[];
+  createdAtTick?: number;
+  source: 'plan-store' | 'cognition' | 'soul';
 }
 
 export interface ResidentDashboardRow {

@@ -19,6 +19,7 @@ import type {
   PatronDashboardSummary,
   PatronStandingSummary,
   PatronStandingTier,
+  ResidentActivePlanSummary,
   RecentLetterSummary,
   RelationshipActivitySummary,
   ResidentMemoryFactSummary,
@@ -90,7 +91,7 @@ export class RuntimeRepository {
   async residentRuntime(resident: string, summary?: ResidentSummary, feed?: ResidentFeedSnapshot): Promise<RuntimeReadModel> {
     const slug = residentSlug(resident);
     const memoryDir = path.join(this.memoryRoot, slug);
-    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, memoryFacts, actions, trajectoryActions, inference, saved, progress, storyArc, soul] = await Promise.all([
+    const [state, indexMarkdown, hooksMarkdown, rulesMarkdown, memoryFiles, memoryFacts, actions, trajectoryActions, inference, saved, progress, storyArc, activePlanDetails, soul] = await Promise.all([
       readJsonFile<RuntimeState>(path.join(memoryDir, 'runtime-state.json')),
       readTextFile(path.join(memoryDir, 'INDEX.md')),
       readTextFile(path.join(memoryDir, 'hooks.md')),
@@ -103,6 +104,7 @@ export class RuntimeRepository {
       this.readResidentSave(resident),
       this.readResidentProgress(memoryDir),
       this.readResidentStoryArc(resident),
+      this.readResidentActivePlan(resident),
       this.readSoulForResident(resident),
     ]);
 
@@ -123,7 +125,8 @@ export class RuntimeRepository {
       state,
       thinking: {
         mode: summary?.online ? inferThinkingMode(latestInference) : 'offline',
-        activePlan: activePlanFromStateOrSoul(state, soul),
+        activePlan: activePlanDetails?.goalDescription || activePlanFromStateOrSoul(state, soul),
+        activePlanDetails,
         previousIntent: state?.previousIntent,
         lastInferenceCause: stringField(latestInference, 'cause'),
         hooksMarkdown,
@@ -261,6 +264,19 @@ export class RuntimeRepository {
   async readMemoryFile(resident: string, relativePath: string): Promise<string | undefined> {
     const memoryDir = path.join(this.memoryRoot, residentSlug(resident));
     return readTextFile(safeJoin(memoryDir, relativePath));
+  }
+
+  private async readResidentActivePlan(resident: string): Promise<ResidentActivePlanSummary | undefined> {
+    const slug = residentSlug(resident);
+    const candidates = [
+      path.join(this.memoryRoot, 'library', slug, 'active-plan.json'),
+      path.join(this.memoryRoot, slug, 'active-plan.json'),
+    ];
+    for (const candidate of candidates) {
+      const summary = activePlanSummary(await readJsonFile<unknown>(candidate));
+      if (summary) return summary;
+    }
+    return undefined;
   }
 
   async deleteResidentFiles(resident: string): Promise<{ removed: string[] }> {
@@ -1587,6 +1603,49 @@ function activePlanFromStateOrSoul(state: RuntimeState | undefined, soul: SoulSu
   );
 }
 
+function activePlanSummary(value: unknown): ResidentActivePlanSummary | undefined {
+  const record = asRecord(value);
+  const goalDescription = cleanScalar(stringField(record, 'goalDescription'));
+  if (!goalDescription) return undefined;
+  const rawStages = Array.isArray(record.stages) ? record.stages : [];
+  const stages = rawStages.map(activePlanStageSummary).filter((stage): stage is NonNullable<ResidentActivePlanSummary['currentStage']> => Boolean(stage));
+  const currentStageIndex = integerFromRecord(record, 'currentStageIndex');
+  const currentStage =
+    currentStageIndex !== undefined && stages[currentStageIndex]
+      ? stages[currentStageIndex]
+      : stages.find(stage => stage.status === 'active') || stages[0];
+  const createdAtTick = integerFromRecord(record, 'createdAtTick');
+  return {
+    ...(cleanScalar(stringField(record, 'goalId')) ? { goalId: cleanScalar(stringField(record, 'goalId')) } : {}),
+    goalDescription,
+    ...(cleanScalar(stringField(record, 'status')) ? { status: cleanScalar(stringField(record, 'status')) } : {}),
+    ...(currentStageIndex !== undefined ? { currentStageIndex } : {}),
+    ...(currentStage ? { currentStage } : {}),
+    stages,
+    ...(createdAtTick !== undefined ? { createdAtTick } : {}),
+    source: 'plan-store',
+  };
+}
+
+function activePlanStageSummary(value: unknown): ResidentActivePlanSummary['currentStage'] | undefined {
+  const record = asRecord(value);
+  const id = cleanScalar(stringField(record, 'id'));
+  const subgoal = cleanScalar(stringField(record, 'subgoal'));
+  if (!id || !subgoal) return undefined;
+  return {
+    id,
+    subgoal,
+    status: cleanScalar(stringField(record, 'status')) || 'unknown',
+    requirements: stringArray(record.requirements) || [],
+    ...(cleanScalar(stringField(record, 'successCriteria')) ? { successCriteria: cleanScalar(stringField(record, 'successCriteria')) } : {}),
+  };
+}
+
+function integerFromRecord(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return Number.isInteger(value) ? value as number : undefined;
+}
+
 function orientationGoalSummary(value: unknown): SoulSummary['orientationGoal'] | undefined {
   const record = asRecord(value);
   const description = cleanScalar(stringField(record, 'description'));
@@ -1827,6 +1886,7 @@ function slimThinking(thinking: RuntimeReadModel['thinking']): RuntimeReadModel[
   return {
     mode: thinking.mode,
     activePlan: thinking.activePlan,
+    activePlanDetails: thinking.activePlanDetails,
     previousIntent: thinking.previousIntent,
     inFlightRequest: thinking.inFlightRequest,
     lastInferenceCause: thinking.lastInferenceCause,

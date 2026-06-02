@@ -365,6 +365,141 @@ describe('RuntimeRepository resident feeds', () => {
     expect(rows[1]?.stack?.orientationGoal?.description).toBe('Keep the square lit and turn firemaking into public myth.');
   });
 
+  test('surfaces durable active plan stage details from controller memory', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-active-plan-'));
+    const memoryRoot = path.join(root, 'memory');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+
+    await fs.mkdir(path.join(memoryRoot, 'res-agent'), { recursive: true });
+    await fs.writeFile(
+      path.join(memoryRoot, 'res-agent', 'runtime-state.json'),
+      JSON.stringify({
+        resident: 'res:agent',
+        attention: 64,
+        tick: 88,
+        legacy: { kind: 'endurer', progress: {}, complete: false },
+        budgets: { minuteStartedAt: '2026-06-02T00:00:00.000Z', dayStartedAt: '2026-06-02T00:00:00.000Z', requestsThisMinute: 0, requestsToday: 0 },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(memoryRoot, 'res-agent', 'active-plan.json'),
+      JSON.stringify({
+        goalId: 'make-firemaking-route',
+        goalDescription: 'Build a reliable Lumbridge firemaking route.',
+        status: 'active',
+        currentStageIndex: 1,
+        createdAtTick: 77,
+        stages: [
+          {
+            id: 'get-axe',
+            subgoal: 'Acquire an axe.',
+            requirements: ['bronze axe'],
+            successCriteria: 'An axe is in inventory.',
+            status: 'done',
+          },
+          {
+            id: 'gather-logs',
+            subgoal: 'Gather logs near Lumbridge.',
+            requirements: ['axe'],
+            successCriteria: 'At least one log is in inventory.',
+            status: 'active',
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const model = await repository.residentRuntime('res:agent', { name: 'res:agent', online: true });
+    const rows = await repository.enrichResidents([{ name: 'res:agent', online: true }]);
+
+    expect(model.thinking.activePlan).toBe('Build a reliable Lumbridge firemaking route.');
+    expect(model.thinking.activePlanDetails).toEqual({
+      goalId: 'make-firemaking-route',
+      goalDescription: 'Build a reliable Lumbridge firemaking route.',
+      status: 'active',
+      currentStageIndex: 1,
+      createdAtTick: 77,
+      source: 'plan-store',
+      currentStage: {
+        id: 'gather-logs',
+        subgoal: 'Gather logs near Lumbridge.',
+        requirements: ['axe'],
+        successCriteria: 'At least one log is in inventory.',
+        status: 'active',
+      },
+      stages: [
+        {
+          id: 'get-axe',
+          subgoal: 'Acquire an axe.',
+          requirements: ['bronze axe'],
+          successCriteria: 'An axe is in inventory.',
+          status: 'done',
+        },
+        {
+          id: 'gather-logs',
+          subgoal: 'Gather logs near Lumbridge.',
+          requirements: ['axe'],
+          successCriteria: 'At least one log is in inventory.',
+          status: 'active',
+        },
+      ],
+    });
+    expect(rows[0]?.thinking?.activePlanDetails?.currentStage?.id).toBe('gather-logs');
+  });
+
+  test('prefers Library active-plan files over direct memory active-plan files', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-library-active-plan-'));
+    const memoryRoot = path.join(root, 'memory');
+    const directDir = path.join(memoryRoot, 'res-agent');
+    const libraryDir = path.join(memoryRoot, 'library', 'res-agent');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+    );
+
+    await fs.mkdir(directDir, { recursive: true });
+    await fs.mkdir(libraryDir, { recursive: true });
+    await fs.writeFile(path.join(directDir, 'runtime-state.json'), JSON.stringify({ resident: 'res:agent', tick: 9 }), 'utf8');
+    await fs.writeFile(
+      path.join(directDir, 'active-plan.json'),
+      JSON.stringify({
+        goalId: 'direct-plan',
+        goalDescription: 'Direct memory plan.',
+        currentStageIndex: 0,
+        status: 'active',
+        stages: [{ id: 'direct-stage', subgoal: 'Use direct memory.', requirements: [], successCriteria: 'direct', status: 'active' }],
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(libraryDir, 'active-plan.json'),
+      JSON.stringify({
+        goalId: 'library-plan',
+        goalDescription: 'Library plan wins.',
+        currentStageIndex: 0,
+        status: 'active',
+        stages: [{ id: 'library-stage', subgoal: 'Use Library plan.', requirements: [], successCriteria: 'library', status: 'active' }],
+      }),
+      'utf8',
+    );
+
+    const model = await repository.residentRuntime('res:agent', { name: 'res:agent', online: true });
+
+    expect(model.thinking.activePlan).toBe('Library plan wins.');
+    expect(model.thinking.activePlanDetails?.goalId).toBe('library-plan');
+    expect(model.thinking.activePlanDetails?.currentStage?.id).toBe('library-stage');
+  });
+
   test('merges trajectory action_result evidence so final timeouts beat gateway acknowledgements', async () => {
     const { RuntimeRepository } = await import('./runtime');
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-trajectory-results-'));
