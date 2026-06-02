@@ -450,6 +450,22 @@ describe('storytellerLatestPreview', () => {
   test('collapses repeated recovery events into one public movement moment', () => {
     const recoveryDigest = digest({
       digestId: 'recovery-digest',
+      queue: 'canon',
+      dispatch: {
+        dispatchId: 'dispatch-recovery',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        publicTitle: 'Movement returned',
+        publicBody: '',
+        publicBullets: [],
+        operatorWarnings: [],
+        reviewReasons: [],
+        warningCount: 0,
+        eventRefCount: 4,
+        eventRefsUsed: ['stuck-1', 'stuck-2', 'stuck-3', 'goal-1'],
+        estimatedCostUsd: null,
+      },
       topEventCount: 4,
       topEvents: [
         {
@@ -541,7 +557,7 @@ describe('storytellerLatestPreview', () => {
     });
   });
 
-  test('derives a readable preview from top events when the dispatch needs review', () => {
+  test('returns safe static preview copy when the dispatch needs review', () => {
     const preview = storytellerLatestPreview(digest({
       dispatch: {
         dispatchId: 'dispatch-review',
@@ -562,24 +578,56 @@ describe('storytellerLatestPreview', () => {
 
     expect(preview).toMatchObject({
       tone: 'warn',
-      source: 'events',
+      source: 'summary',
       label: 'review',
-      title: 'Operator draft',
-      detail: 'Dispatch is grounded but needs operator review before public broadcast. Preview is derived from 2 grounded top events.',
+      title: 'Storyteller preview held for review',
+      detail: 'Dispatch is grounded but needs operator review before public broadcast. Non-canon Storyteller copy is hidden until an operator approves it for public canon.',
       bullets: [],
     });
-    expect(preview.body).toContain('Hans traded GP for attention: burned 25 GP for 50 AP');
-    expect(preview.body).toContain('Pip received attention: received AP grant');
+    expect(preview.body).toBe('This Storyteller run is held for operator review. Inspect its grounded evidence before using it as public canon.');
     expect(preview.body).not.toContain('Raw operator QA text');
+    expect(preview.body).not.toContain('Hans traded GP for attention');
+  });
+
+  test('fails closed for otherwise ready dispatches outside the canon queue', () => {
+    const preview = storytellerLatestPreview(digest({
+      queue: 'review',
+      dispatch: {
+        dispatchId: 'dispatch-review-queue',
+        generatedAt: '2026-05-30T04:05:00.000Z',
+        modelProfile: 'default',
+        needsReview: false,
+        publicTitle: 'Looks ready but is review-only',
+        publicBody: 'This model output should not become the landing preview yet.',
+        publicBullets: ['Looks public, but is not canon.'],
+        operatorWarnings: [],
+        reviewReasons: [],
+        warningCount: 0,
+        eventRefCount: 1,
+        eventRefsUsed: ['e1'],
+        estimatedCostUsd: null,
+      },
+    }), Date.parse('2026-05-30T04:10:00.000Z'));
+
+    expect(preview).toMatchObject({
+      tone: 'warn',
+      source: 'summary',
+      label: 'ready',
+      title: 'Storyteller preview held for review',
+      detail: 'Dispatch is grounded and ready for public review. Run is in the review queue, so public preview copy is hidden until it is promoted to canon.',
+      bullets: [],
+    });
+    expect(preview.body).toBe('This Storyteller run is held for operator review. Inspect its grounded evidence before using it as public canon.');
+    expect(preview.body).not.toContain('This model output should not become the landing preview yet.');
   });
 
   test('keeps dry-run and empty preview states explicit', () => {
     expect(storytellerLatestPreview(digest(), Date.parse('2026-05-30T04:10:00.000Z'))).toMatchObject({
       tone: 'warn',
-      source: 'events',
+      source: 'summary',
       label: 'dry-run',
-      title: 'dig-1',
-      body: 'Hans traded GP for attention: burned 25 GP for 50 AP Pip received attention: received AP grant',
+      title: 'Storyteller preview held for review',
+      body: 'This Storyteller run is held for operator review. Inspect its grounded evidence before using it as public canon.',
     });
 
     const emptyPreview = storytellerLatestPreview(undefined);

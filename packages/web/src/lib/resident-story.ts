@@ -78,6 +78,9 @@ export interface StorytellerLibraryPreview {
   eventLabel: string;
 }
 
+const STORYTELLER_HELD_PREVIEW_TITLE = 'Storyteller preview held for review';
+const STORYTELLER_HELD_PREVIEW_BODY = 'This Storyteller run is held for operator review. Inspect its grounded evidence before using it as public canon.';
+
 export function residentStoryEvents(
   resident: ResidentDashboardRow | undefined,
   digests: StorytellerDigestSummary[],
@@ -311,6 +314,11 @@ export function storytellerLatestPreview(
   const dispatchBody = digest.dispatch?.publicBody?.trim();
   const bullets = cleanBullets(digest.dispatch?.publicBullets || []);
   const title = dispatchTitle || digest.summary?.trim() || digest.digestId || digest.runId;
+  const queueIsNonCanon = digest.queue !== undefined && digest.queue !== 'canon';
+
+  if (status.label !== 'ready' || queueIsNonCanon) {
+    return storytellerHeldPreview(digest, status, queueIsNonCanon);
+  }
 
   if (status.label === 'ready' && dispatchBody) {
     return {
@@ -351,6 +359,33 @@ export function storytellerLatestPreview(
     detail: `${status.summary} No grounded top events are available for a public preview.`,
     bullets: status.label === 'ready' ? bullets : [],
   };
+}
+
+function storytellerHeldPreview(
+  digest: StorytellerDigestSummary,
+  status: StorytellerDigestStatus,
+  queueIsNonCanon: boolean,
+): StorytellerLatestPreview {
+  return {
+    tone: 'warn',
+    source: 'summary',
+    label: status.label,
+    title: STORYTELLER_HELD_PREVIEW_TITLE,
+    body: STORYTELLER_HELD_PREVIEW_BODY,
+    detail: storytellerHeldPreviewDetail(digest, status, queueIsNonCanon),
+    bullets: [],
+  };
+}
+
+function storytellerHeldPreviewDetail(
+  digest: StorytellerDigestSummary,
+  status: StorytellerDigestStatus,
+  queueIsNonCanon: boolean,
+): string {
+  if (queueIsNonCanon) {
+    return `${status.summary} Run is in the ${digest.queue} queue, so public preview copy is hidden until it is promoted to canon.`;
+  }
+  return `${status.summary} Non-canon Storyteller copy is hidden until an operator approves it for public canon.`;
 }
 
 export function storytellerLibraryPreview(
