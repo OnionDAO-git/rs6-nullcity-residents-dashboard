@@ -109,4 +109,56 @@ describe('public overview projection', () => {
     });
     expect(JSON.stringify(projected)).not.toContain('secret');
   });
+
+  test('does not leak nested private fields through shared object references', () => {
+    const row: ResidentDashboardRow = {
+      name: 'res:hans',
+      online: true,
+      position: { x: 3221, y: 3218, level: 0, privateShard: 'secret-position' } as unknown as ResidentDashboardRow['position'],
+      feed: {
+        attached: true,
+        tick: 12,
+        position: { x: 3221, y: 3218, level: 0, privateFeed: 'secret-feed-position' } as unknown as NonNullable<ResidentDashboardRow['feed']>['position'],
+        nearby: {
+          players: 1,
+          npcs: 2,
+          objects: 3,
+          worldItems: 4,
+          controllerIds: ['secret-controller-id'],
+        } as unknown as NonNullable<ResidentDashboardRow['feed']>['nearby'],
+        events: 5,
+        availableActions: 6,
+        latestEventKind: 'movement',
+      },
+      body: {
+        controlHeld: false,
+        position: { x: 3221, y: 3218, level: 0, savedInventory: ['secret-item'] } as unknown as NonNullable<ResidentDashboardRow['body']>['position'],
+        lastAction: {
+          kind: 'move_to',
+          result: 'ok',
+          tick: 13,
+          source: 'body',
+        },
+        gatewayHealthy: true,
+      },
+      lastEvent: {
+        kind: 'movement',
+        tick: 13,
+        at: '2026-06-02T00:00:00Z',
+      },
+    };
+
+    const projected = toPublicOverviewResident(row);
+
+    if (row.position) (row.position as unknown as Record<string, unknown>).x = 9999;
+    if (row.feed?.nearby) (row.feed.nearby as Record<string, unknown>).players = 9999;
+    if (row.body?.position) (row.body.position as unknown as Record<string, unknown>).x = 9999;
+
+    expect(projected.position).toEqual({ x: 3221, y: 3218, level: 0 });
+    expect(projected.feed?.position).toEqual({ x: 3221, y: 3218, level: 0 });
+    expect(projected.feed?.nearby).toEqual({ players: 1, npcs: 2, objects: 3, worldItems: 4 });
+    expect(projected.body?.position).toEqual({ x: 3221, y: 3218, level: 0 });
+    expect(JSON.stringify(projected)).not.toContain('secret');
+    expect(JSON.stringify(projected)).not.toContain('9999');
+  });
 });
