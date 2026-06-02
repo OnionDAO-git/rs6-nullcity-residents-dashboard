@@ -91,6 +91,8 @@ export function isProtectedCityRoute(route: string): boolean {
     normalized.startsWith('/inbox/') ||
     normalized === '/prints' ||
     normalized.startsWith('/prints/') ||
+    normalized === '/story' ||
+    normalized.startsWith('/story/') ||
     normalized.startsWith('/admin');
 }
 
