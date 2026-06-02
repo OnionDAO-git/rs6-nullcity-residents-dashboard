@@ -9,9 +9,12 @@ Before changing dashboard behavior, read:
 1. `SPEC.md` for the original operations-dashboard architecture.
 2. `spec/README.md` for the current city-dashboard plan set.
 3. `spec/09-implementation-roadmap.md` for phase order and verification gates.
-4. `../rs6-nullcity-server/AGENTS.md` for cross-repo rules and server boundaries.
-5. `../rs6-nullcity-server/docs/2026-05-29-weekend-sprint-plan.md` for the active weekend product direction.
-6. `../rs6-nullcity-server/docs/city-dashboard-integration.md` for server JSON contracts.
+4. `../rs6-nullcity-server/AGENTS.md` and `../rs6-nullcity-server/docs/README.md` for cross-repo rules and server boundaries.
+5. `../rs6-nullcity-server/docs/agent-status.md` tail for live locks and runtime requests.
+6. `../rs6-nullcity-server/docs/issue-register.md` for dashboard bugs and QA findings that need dev fixes.
+7. `../rs6-nullcity-server/docs/city-dashboard-integration.md` for server JSON contracts.
+
+Open P0/P1 rows in the server issue register whose evidence or next action names dashboard files are the dashboard dev-agent intake queue. Claim and fix one of those before taking adjacent `D*` or roadmap work unless every matching row is blocked or already leased.
 
 ## Mission
 
@@ -41,10 +44,19 @@ Use these `D*` packets alongside `spec/09-implementation-roadmap.md`:
 - Keep server commits and dashboard commits separate unless James explicitly asks for a cross-repo landing.
 - Do not commit secrets, API keys, cookies, printer credentials, or private human handles.
 
+## Shared Runtime
+
+James's local dashboard ports are part of the shared Null City stack:
+
+- Dashboard BFF: `127.0.0.1:8787` (`nullcity-dashboard-server`)
+- Dashboard web dev server: `127.0.0.1:5174` (`nullcity-dashboard-web`)
+
+If you need the shared dashboard restarted, append a `RUNTIME-REQUEST` line to `../rs6-nullcity-server/docs/agent-status.md` following `../rs6-nullcity-server/docs/runtime-stewardship.md`. Dashboard restarts are low risk, but the steward still owns shared screen sessions so live tests are not interrupted. For private experiments, run your own dev server on a different port and say so in your handoff.
+
 Paste-ready kickoff prompt:
 
 ```text
-You are an autonomous dashboard agent in /Users/james/Code/OnionDAO/rs6-nullcity-residents-dashboard on branch main. Read AGENTS.md, SPEC.md, spec/README.md, spec/09-implementation-roadmap.md, and ../rs6-nullcity-server/docs/2026-05-29-weekend-sprint-plan.md. Claim one D* packet or one phase from spec/09, implement UI/BFF changes in this repo, request/record any server API needs through ../rs6-nullcity-server/docs/city-dashboard-integration.md or S11, run bun run typecheck && bun run check && bun run build, commit and push main.
+You are an autonomous dashboard agent in <dashboard-repo> on branch main. Read AGENTS.md, SPEC.md, spec/README.md, spec/09-implementation-roadmap.md, and the server AGENTS.md/docs/README.md/docs/agent-status.md tail/docs/issue-register.md. First inspect Open P0/P1 issue-register rows naming dashboard files; claim the highest-severity unblocked dashboard issue before D*/spec backlog work. Implement UI/BFF changes in this repo, request/record any server API needs through server docs/city-dashboard-integration.md or S11, request shared runtime restarts through server docs/agent-status.md, run bun run typecheck && bun run check && bun run build, commit explicit files, and push main.
 ```
 
 ## Verification
