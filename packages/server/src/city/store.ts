@@ -87,6 +87,32 @@ export interface PrinterUpsertInput {
   capabilities?: Record<string, unknown>;
 }
 
+export interface PrintQueueEnqueueInput {
+  printRequestId: string;
+  printerId?: string;
+  priority?: number;
+  queuePosition?: number;
+}
+
+export interface PrintQueueClaimInput {
+  bridgeId?: string;
+  printerIds: string[];
+}
+
+export interface PrintBridgeJob {
+  id: string;
+  printRequestId: string;
+  title: string;
+  printerId?: string;
+  sourceFilePath?: string;
+  sourceUrl?: string;
+  slicerProfile?: string;
+  requestedMaterial?: string;
+  requestedColor?: string;
+  quantity: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface CityStore {
   readonly mode: string;
 
@@ -111,6 +137,8 @@ export interface CityStore {
   listPrinters(): Promise<Printer[]>;
   upsertPrinter(input: PrinterUpsertInput): Promise<Printer>;
   listPrintQueue(): Promise<PrintQueueEntry[]>;
+  enqueuePrintRequest(input: PrintQueueEnqueueInput): Promise<PrintQueueEntry>;
+  claimNextPrintQueueJob(input: PrintQueueClaimInput): Promise<PrintBridgeJob | undefined>;
 
   listResidents(): Promise<ResidentReadModel[]>;
   getResident(id: string): Promise<ResidentReadModel | undefined>;
@@ -485,6 +513,49 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
       return [...printQueue].sort((a, b) => (a.queuePosition || 9999) - (b.queuePosition || 9999));
     },
 
+    async enqueuePrintRequest(input) {
+      const request = printRequests.get(input.printRequestId);
+      if (!request) throw new CityStoreError('print_request_not_found', 404);
+      const at = timestamp();
+      const entry: PrintQueueEntry = {
+        id: makeId('queue'),
+        printRequestId: request.id,
+        printerId: input.printerId,
+        status: 'queued',
+        priority: Number.isInteger(input.priority) ? Math.max(0, Number(input.priority)) : 100,
+        queuePosition: Number.isInteger(input.queuePosition) ? Math.max(0, Number(input.queuePosition)) : printQueue.length + 1,
+        createdAt: at,
+        updatedAt: at,
+      };
+      request.status = 'queued';
+      request.assignedPrinterId = input.printerId ?? request.assignedPrinterId;
+      request.updatedAt = at;
+      printQueue.push(entry);
+      return entry;
+    },
+
+    async claimNextPrintQueueJob(input) {
+      const availablePrinters = new Set(input.printerIds.filter(Boolean));
+      const sorted = [...printQueue].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
+      for (const entry of sorted) {
+        if (entry.status !== 'queued') continue;
+        const request = printRequests.get(entry.printRequestId);
+        if (!request) continue;
+        const printer = eligiblePrinter(entry.printerId, availablePrinters, input.bridgeId, [...printers.values()]);
+        if (!printer) continue;
+        const at = timestamp();
+        entry.status = 'claimed';
+        entry.printerId = printer.id;
+        entry.startedAt = at;
+        entry.updatedAt = at;
+        request.status = 'queued';
+        request.assignedPrinterId = printer.id;
+        request.updatedAt = at;
+        return printBridgeJob(entry, request);
+      }
+      return undefined;
+    },
+
     async listResidents() {
       return [...residents.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
     },
@@ -582,4 +653,37 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
 
 function definedPatch<T extends Record<string, unknown>>(patch: T): Partial<T> {
   return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<T>;
+}
+
+function eligiblePrinter(
+  assignedPrinterId: string | undefined,
+  availablePrinterIds: Set<string>,
+  bridgeId: string | undefined,
+  printers: Printer[],
+): Printer | undefined {
+  const candidates = assignedPrinterId
+    ? printers.filter(printer => printer.id === assignedPrinterId)
+    : printers.filter(printer => availablePrinterIds.has(printer.id));
+  return candidates.find(printer =>
+    printer.enabled &&
+    availablePrinterIds.has(printer.id) &&
+    (!bridgeId || !printer.bridgeId || printer.bridgeId === bridgeId),
+  );
+}
+
+function printBridgeJob(entry: PrintQueueEntry, request: PrintRequest): PrintBridgeJob {
+  return {
+    id: entry.id,
+    printRequestId: request.id,
+    title: request.title,
+    printerId: entry.printerId,
+    requestedMaterial: request.requestedMaterial,
+    requestedColor: request.requestedColor,
+    quantity: request.quantity,
+    metadata: {
+      printRequestStatus: request.status,
+      priority: entry.priority,
+      queuePosition: entry.queuePosition,
+    },
+  };
 }

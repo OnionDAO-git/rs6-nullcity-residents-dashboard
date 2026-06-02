@@ -21,6 +21,9 @@ import {
   CityStoreError,
   type CityStore,
   type LedgerAppendInput,
+  type PrintBridgeJob,
+  type PrintQueueClaimInput,
+  type PrintQueueEnqueueInput,
   type PrinterUpsertInput,
   type PrintRequestCreateInput,
   type ResidentAttentionGrantInput,
@@ -377,6 +380,48 @@ export class InMemoryCityStore implements CityStore {
     return clone([...this.printQueue.values()].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt)));
   }
 
+  async enqueuePrintRequest(input: PrintQueueEnqueueInput): Promise<PrintQueueEntry> {
+    const request = this.printRequests.get(input.printRequestId);
+    if (!request) throw new CityStoreError('Print request not found', 404);
+    const now = this.now();
+    const entry: PrintQueueEntry = {
+      id: `queue_${this.id()}`,
+      printRequestId: request.id,
+      printerId: input.printerId,
+      status: 'queued',
+      priority: Number.isInteger(input.priority) ? Math.max(0, Number(input.priority)) : 100,
+      queuePosition: Number.isInteger(input.queuePosition) ? Math.max(0, Number(input.queuePosition)) : this.printQueue.size + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    request.status = 'queued';
+    request.assignedPrinterId = input.printerId ?? request.assignedPrinterId;
+    request.updatedAt = now;
+    this.printQueue.set(entry.id, entry);
+    return clone(entry);
+  }
+
+  async claimNextPrintQueueJob(input: PrintQueueClaimInput): Promise<PrintBridgeJob | undefined> {
+    const availablePrinterIds = new Set(input.printerIds.filter(Boolean));
+    const entries = [...this.printQueue.values()].sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
+    for (const entry of entries) {
+      if (entry.status !== 'queued') continue;
+      const request = this.printRequests.get(entry.printRequestId);
+      if (!request) continue;
+      const printer = this.eligiblePrinter(entry.printerId, availablePrinterIds, input.bridgeId);
+      if (!printer) continue;
+      const now = this.now();
+      entry.status = 'claimed';
+      entry.printerId = printer.id;
+      entry.startedAt = entry.startedAt || now;
+      entry.updatedAt = now;
+      request.assignedPrinterId = printer.id;
+      request.updatedAt = now;
+      return printBridgeJob(entry, request);
+    }
+    return undefined;
+  }
+
   async listResidents(): Promise<ResidentReadModel[]> {
     return clone([...this.residents.values()].sort((a, b) => a.displayName.localeCompare(b.displayName)));
   }
@@ -488,6 +533,17 @@ export class InMemoryCityStore implements CityStore {
     if (!user) throw new CityStoreError('City user not found', 404);
     return user;
   }
+
+  private eligiblePrinter(assignedPrinterId: string | undefined, availablePrinterIds: Set<string>, bridgeId: string | undefined): Printer | undefined {
+    const candidates = assignedPrinterId
+      ? [...this.printers.values()].filter(printer => printer.id === assignedPrinterId)
+      : [...this.printers.values()].filter(printer => availablePrinterIds.has(printer.id));
+    return candidates.find(printer =>
+      printer.enabled &&
+      availablePrinterIds.has(printer.id) &&
+      (!bridgeId || !printer.bridgeId || printer.bridgeId === bridgeId),
+    );
+  }
 }
 
 function accountKey(cityUserId: string, resource: PointResource): string {
@@ -517,6 +573,23 @@ function normalizeLevels(value: Record<string, number> | undefined): Record<stri
 
 function residentKey(value: string): string {
   return value.trim().toLowerCase().replace(/^res:/, '');
+}
+
+function printBridgeJob(entry: PrintQueueEntry, request: PrintRequest): PrintBridgeJob {
+  return {
+    id: entry.id,
+    printRequestId: request.id,
+    title: request.title,
+    printerId: entry.printerId,
+    requestedMaterial: request.requestedMaterial,
+    requestedColor: request.requestedColor,
+    quantity: request.quantity,
+    metadata: {
+      printRequestStatus: request.status,
+      priority: entry.priority,
+      queuePosition: entry.queuePosition,
+    },
+  };
 }
 
 function clone<T>(value: T): T {

@@ -476,7 +476,16 @@ export async function routeCityApi(
     if (method === 'POST' && pathname === '/api/admin/print-queue/claim') {
       const bridge = requirePrintBridge(request, context);
       if (bridge) return bridge;
-      return jsonResponse({ job: undefined });
+      const body = await readJsonBody(request);
+      const bridgeId = stringBody(body, 'bridgeId');
+      if (!bridgeId) return jsonResponse({ error: 'bridge_id_required' }, { status: 400 });
+      const printerIds = stringArrayBody(body, 'printerIds');
+      if (!printerIds.length) return jsonResponse({ error: 'printer_ids_required' }, { status: 400 });
+      const job = await context.store.claimNextPrintQueueJob({
+        bridgeId,
+        printerIds,
+      });
+      return jsonResponse(job ? { job } : {});
     }
 
     if (method === 'POST' && pathname === '/api/admin/print-queue/status') {
@@ -709,6 +718,12 @@ function numberRecordBody(body: Record<string, unknown>, key: string): Record<st
 
 function arrayBody(body: Record<string, unknown>, key: string): unknown[] | undefined {
   return Array.isArray(body[key]) ? body[key] : undefined;
+}
+
+function stringArrayBody(body: Record<string, unknown>, key: string): string[] {
+  return (arrayBody(body, key) || [])
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map(value => value.trim());
 }
 
 function isStateChanging(method: string): boolean {

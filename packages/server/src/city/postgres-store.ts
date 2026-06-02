@@ -5,6 +5,9 @@ import {
   CityStoreError,
   type CityStore,
   type LedgerAppendInput,
+  type PrintBridgeJob,
+  type PrintQueueClaimInput,
+  type PrintQueueEnqueueInput,
   type PrinterUpsertInput,
   type PrintRequestCreateInput,
   type ResidentAttentionGrantInput,
@@ -373,6 +376,65 @@ export class PostgresCityStore implements CityStore {
     return rows.map(mapPrintQueueEntry);
   }
 
+  async enqueuePrintRequest(input: PrintQueueEnqueueInput): Promise<PrintQueueEntry> {
+    const request = await this.getPrintRequest(input.printRequestId);
+    if (!request) throw new CityStoreError('Print request not found', 404);
+    const id = `queue_${crypto.randomUUID()}`;
+    const priority = Number.isInteger(input.priority) ? Math.max(0, Number(input.priority)) : 100;
+    const rows = await this.sql`
+      INSERT INTO print_queue (id, print_request_id, printer_id, status, priority, queue_position)
+      VALUES (${id}, ${request.id}, ${input.printerId || null}, 'queued', ${priority}, ${input.queuePosition ?? null})
+      RETURNING *
+    `;
+    await this.sql`
+      UPDATE print_requests
+      SET status = 'queued',
+        assigned_printer_id = COALESCE(${input.printerId || null}, assigned_printer_id),
+        updated_at = now()
+      WHERE id = ${request.id}
+    `;
+    return mapPrintQueueEntry(one(rows));
+  }
+
+  async claimNextPrintQueueJob(input: PrintQueueClaimInput): Promise<PrintBridgeJob | undefined> {
+    const printerIds = input.printerIds.map(id => id.trim()).filter(Boolean);
+    if (!printerIds.length) return undefined;
+    const rows = await this.sql.unsafe(`
+      WITH candidate AS (
+        SELECT pq.id, COALESCE(pq.printer_id, p.id) AS selected_printer_id
+        FROM print_queue pq
+        JOIN printers p ON (
+          (pq.printer_id IS NOT NULL AND p.id = pq.printer_id)
+          OR (pq.printer_id IS NULL AND p.id = ANY($2::text[]))
+        )
+        WHERE pq.status = 'queued'
+          AND p.enabled = true
+          AND p.id = ANY($2::text[])
+          AND ($1::text IS NULL OR p.bridge_id IS NULL OR p.bridge_id = $1::text)
+        ORDER BY pq.priority ASC, pq.created_at ASC, p.name ASC
+        LIMIT 1
+        FOR UPDATE OF pq SKIP LOCKED
+      )
+      UPDATE print_queue pq
+      SET status = 'claimed',
+        printer_id = candidate.selected_printer_id,
+        started_at = COALESCE(pq.started_at, now()),
+        updated_at = now()
+      FROM candidate
+      WHERE pq.id = candidate.id
+      RETURNING pq.*
+    `, [input.bridgeId || null, printerIds]);
+    const entry = rows[0] ? mapPrintQueueEntry(rows[0]) : undefined;
+    if (!entry) return undefined;
+    await this.sql`
+      UPDATE print_requests
+      SET assigned_printer_id = ${entry.printerId || null}, updated_at = now()
+      WHERE id = ${entry.printRequestId}
+    `;
+    const request = await this.getPrintRequest(entry.printRequestId);
+    return request ? printBridgeJob(entry, request) : undefined;
+  }
+
   async listResidents(): Promise<ResidentReadModel[]> {
     const rows = await this.sql`SELECT * FROM residents ORDER BY display_name ASC`;
     return rows.map(mapResident);
@@ -705,6 +767,23 @@ function mapPrintQueueEntry(row: Record<string, unknown>): PrintQueueEntry {
     error: nullableString(row, 'error'),
     createdAt: dateField(row, 'created_at'),
     updatedAt: dateField(row, 'updated_at'),
+  };
+}
+
+function printBridgeJob(entry: PrintQueueEntry, request: PrintRequest): PrintBridgeJob {
+  return {
+    id: entry.id,
+    printRequestId: request.id,
+    title: request.title,
+    printerId: entry.printerId,
+    requestedMaterial: request.requestedMaterial,
+    requestedColor: request.requestedColor,
+    quantity: request.quantity,
+    metadata: {
+      printRequestStatus: request.status,
+      priority: entry.priority,
+      queuePosition: entry.queuePosition,
+    },
   };
 }
 

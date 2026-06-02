@@ -864,6 +864,89 @@ describe('routeCityApi print and read model skeletons', () => {
     expect(await points.json()).toMatchObject({ balances: [{ resource: 'AP', balance: 0 }, { resource: 'GP', balance: 60 }] });
   });
 
+  test('print bridge claims the next eligible queued job and marks it claimed', async () => {
+    const services = testServices(adminUser, undefined, { printBridgeToken: 'bridge-token' });
+    const printer = await services.store.upsertPrinter({
+      id: 'printer-east',
+      name: 'Printer East',
+      kind: 'bambu-p2s',
+      adapter: 'bambu-lan',
+      bridgeId: 'bridge-east',
+    });
+    const print = await route(jsonRequest('/api/prints', {
+      title: 'Resident miniature',
+      requestedMaterial: 'PLA',
+      requestedColor: 'Onion purple',
+      quantity: 2,
+    }), services);
+    const requestModel = (await print.json() as { request: { id: string } }).request;
+    const queueEntry = await services.store.enqueuePrintRequest({
+      printRequestId: requestModel.id,
+      printerId: printer.id,
+      priority: 5,
+    });
+
+    const claim = await route(bridgeRequest('/api/admin/print-queue/claim', {
+      bridgeId: 'bridge-east',
+      printerIds: ['printer-east'],
+    }, 'bridge-token'), services);
+    const secondClaim = await route(bridgeRequest('/api/admin/print-queue/claim', {
+      bridgeId: 'bridge-east',
+      printerIds: ['printer-east'],
+    }, 'bridge-token'), services);
+    const queue = await route(authedRequest('/api/admin/print-queue'), services);
+
+    expect(claim.status).toBe(200);
+    expect(await claim.json()).toEqual({
+      job: {
+        id: queueEntry.id,
+        printRequestId: requestModel.id,
+        title: 'Resident miniature',
+        printerId: 'printer-east',
+        requestedMaterial: 'PLA',
+        requestedColor: 'Onion purple',
+        quantity: 2,
+        metadata: {
+          printRequestStatus: 'queued',
+          priority: 5,
+          queuePosition: 1,
+        },
+      },
+    });
+    expect(await secondClaim.json()).toEqual({});
+    expect(await queue.json()).toMatchObject({
+      queue: [{ id: queueEntry.id, printerId: 'printer-east', status: 'claimed' }],
+    });
+  });
+
+  test('print bridge claim is token-gated and rejects malformed claim bodies', async () => {
+    const withoutTokenConfig = await route(bridgeRequest('/api/admin/print-queue/claim', {
+      bridgeId: 'bridge-east',
+      printerIds: ['printer-east'],
+    }, 'bridge-token'), testServices(adminUser));
+    const services = testServices(adminUser, undefined, { printBridgeToken: 'bridge-token' });
+    const badToken = await route(bridgeRequest('/api/admin/print-queue/claim', {
+      bridgeId: 'bridge-east',
+      printerIds: ['printer-east'],
+    }, 'wrong-token'), services);
+    const missingBridge = await route(bridgeRequest('/api/admin/print-queue/claim', {
+      printerIds: ['printer-east'],
+    }, 'bridge-token'), services);
+    const malformed = await route(bridgeRequest('/api/admin/print-queue/claim', {
+      bridgeId: 'bridge-east',
+      printerIds: [],
+    }, 'bridge-token'), services);
+
+    expect(withoutTokenConfig.status).toBe(503);
+    expect(await withoutTokenConfig.json()).toEqual({ error: 'print_bridge_token_not_configured' });
+    expect(badToken.status).toBe(401);
+    expect(await badToken.json()).toEqual({ error: 'unauthorized_print_bridge' });
+    expect(missingBridge.status).toBe(400);
+    expect(await missingBridge.json()).toEqual({ error: 'bridge_id_required' });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ error: 'printer_ids_required' });
+  });
+
   test('exposes empty resident and library read models without requiring auth', async () => {
     const services = testServices(null);
 
@@ -883,13 +966,14 @@ function balanceOf(payload: unknown, resource: 'AP' | 'GP'): number | undefined 
 function testServices(
   user: LandingSessionUser | null,
   onToken?: (token: string) => LandingSessionUser | null,
-  options: { csrfEnabled?: boolean; landingCheckins?: LandingCheckinReader; nullcityControl?: CityServices['nullcityControl'] } = {},
+  options: { csrfEnabled?: boolean; landingCheckins?: LandingCheckinReader; nullcityControl?: CityServices['nullcityControl']; printBridgeToken?: string } = {},
 ): CityServices {
   const config = cityConfigFromEnv({
     LANDING_AUTH_BASE_URL: 'https://oniondao.dev',
     LANDING_DATABASE_URL: 'postgres://readonly@example.test/landing',
     CITY_DATABASE_URL: 'postgres://city@example.test/city',
     NODE_ENV: options.csrfEnabled ? 'production' : 'test',
+    CITY_PRINT_BRIDGE_TOKEN: options.printBridgeToken,
   });
   return {
     config,
@@ -920,6 +1004,17 @@ function jsonRequest(path: string, body: unknown, options: { csrfToken?: string 
       ...authHeaders(options.csrfToken),
       'content-type': 'application/json',
       ...(options.csrfToken ? { 'x-csrf-token': options.csrfToken } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function bridgeRequest(path: string, body: unknown, token: string): Request {
+  return new Request(`http://city.test${path}`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
     },
     body: JSON.stringify(body),
   });
