@@ -5,7 +5,7 @@ export function toPublicOverviewResident(row: ResidentDashboardRow): ResidentDas
     name: row.name,
     online: row.online,
     position: row.position ? publicPosition(row.position) : undefined,
-    hp: row.hp,
+    hp: row.hp ? publicHp(row.hp) : undefined,
     inCombat: row.inCombat,
     busy: row.busy,
     attention: row.attention,
@@ -15,7 +15,7 @@ export function toPublicOverviewResident(row: ResidentDashboardRow): ResidentDas
       ageMs: row.feed.ageMs,
       lastFeedAt: row.feed.lastFeedAt,
       position: row.feed.position ? publicPosition(row.feed.position) : undefined,
-      hp: row.feed.hp,
+      hp: row.feed.hp ? publicHp(row.feed.hp) : undefined,
       inCombat: row.feed.inCombat,
       busy: row.feed.busy,
       nearby: row.feed.nearby ? publicNearby(row.feed.nearby) : undefined,
@@ -62,6 +62,13 @@ function publicNearby(nearby: { players?: number; npcs?: number; objects?: numbe
     objects: nearby.objects,
     worldItems: nearby.worldItems,
   });
+}
+
+function publicHp(hp: { current: number; max: number }) {
+  return {
+    current: hp.current,
+    max: hp.max,
+  };
 }
 
 function withoutUndefined<T extends Record<string, unknown>>(input: T): T {

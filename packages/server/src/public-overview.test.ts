@@ -161,4 +161,30 @@ describe('public overview projection', () => {
     expect(JSON.stringify(projected)).not.toContain('secret');
     expect(JSON.stringify(projected)).not.toContain('9999');
   });
+
+  test('does not leak nested private fields through hp references', () => {
+    const row: ResidentDashboardRow = {
+      name: 'res:pip',
+      online: true,
+      hp: { current: 6, max: 10, privateStatus: 'secret-hp' } as unknown as ResidentDashboardRow['hp'],
+      feed: {
+        attached: true,
+        tick: 21,
+        hp: { current: 5, max: 10, privateFeedStatus: 'secret-feed-hp' } as unknown as NonNullable<ResidentDashboardRow['feed']>['hp'],
+        nearby: { players: 0, npcs: 0, objects: 0, worldItems: 0 },
+        events: 0,
+        availableActions: 0,
+      },
+    };
+
+    const projected = toPublicOverviewResident(row);
+
+    if (row.hp) (row.hp as unknown as Record<string, unknown>).current = 9999;
+    if (row.feed?.hp) (row.feed.hp as unknown as Record<string, unknown>).current = 9999;
+
+    expect(projected.hp).toEqual({ current: 6, max: 10 });
+    expect(projected.feed?.hp).toEqual({ current: 5, max: 10 });
+    expect(JSON.stringify(projected)).not.toContain('secret');
+    expect(JSON.stringify(projected)).not.toContain('9999');
+  });
 });
