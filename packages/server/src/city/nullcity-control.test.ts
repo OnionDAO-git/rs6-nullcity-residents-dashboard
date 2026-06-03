@@ -206,6 +206,83 @@ describe('createNullCityControlClient', () => {
     });
   });
 
+  test('fetches the public Storyteller projector frame from the controller', async () => {
+    const calls: Array<{ url: string; authorization: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          schemaVersion: 1,
+          frameId: 'projector:digest-1:2026-06-03T18:00:00.000Z',
+          digestId: 'digest-1',
+          generatedAt: '2026-06-03T18:00:00.000Z',
+          source: {
+            digestId: 'digest-1',
+            digestBuiltAt: '2026-06-03T17:59:00.000Z',
+            windowStart: '2026-06-03T17:29:00.000Z',
+            windowEnd: '2026-06-03T17:59:00.000Z',
+            freshnessMs: 60_000,
+            freshnessStatus: 'fresh',
+            dispatchId: 'dispatch-1',
+          },
+          narration: {
+            source: 'verified_dispatch',
+            title: 'Hans makes the courtyard noisy',
+            body: 'Hans found a real beat near the castle.',
+            bullets: ['Human attention is changing the route.'],
+            confidence: 'high',
+          },
+          leadEvent: {
+            ref: 'event-1',
+            label: 'Patron gift',
+            residentName: 'res:hans',
+            happenedAt: '2026-06-03T17:58:00.000Z',
+            importance: 'high',
+            note: 'Hans received attention.',
+            whyItMatters: 'human attention changed the resident trajectory',
+          },
+          events: [],
+          residents: [],
+          actions: [],
+          watchNext: ['Whether Hans answers the gift.'],
+          omitted: { events: 0, residents: 0 },
+          publicHealth: {
+            status: 'ok',
+            totalResidents: 23,
+            activeResidents: 10,
+            fadedResidents: 0,
+            lowApResidents: 0,
+            warnings: [],
+          },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({
+      baseUrl: 'http://controller.test/api/nullcity',
+      token: 'city-token',
+    });
+
+    const frame = await client.storytellerProjectorLatest!();
+
+    expect(calls).toEqual([
+      {
+        url: 'http://controller.test/api/nullcity/storyteller/projector/latest',
+        authorization: 'Bearer city-token',
+      },
+    ]);
+    expect(frame).toMatchObject({
+      frameId: 'projector:digest-1:2026-06-03T18:00:00.000Z',
+      narration: { source: 'verified_dispatch', title: 'Hans makes the courtyard noisy' },
+      publicHealth: { status: 'ok', activeResidents: 10 },
+    });
+  });
+
   test('uses normalized config base path when runtime env provides a bare City API host', async () => {
     const calls: string[] = [];
     globalThis.fetch = (async input => {

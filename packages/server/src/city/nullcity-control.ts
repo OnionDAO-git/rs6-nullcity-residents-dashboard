@@ -1,3 +1,4 @@
+import type { ProjectorStoryFrame } from '@nullcity-dashboard/shared';
 import type { CityConfig } from './config';
 
 export type NullCityProposalStatus = 'proposed' | 'funding' | 'threshold_crossed' | 'approved' | 'rejected' | 'born';
@@ -222,6 +223,7 @@ export interface NullCityControlClient {
   economyHeartbeat?(): Promise<NullCityEconomyHeartbeat>;
   economyStream?(query?: NullCityEconomyStreamQuery): Promise<Response>;
   economyListings?(): Promise<NullCityEconomyListingsResponse>;
+  storytellerProjectorLatest?(): Promise<ProjectorStoryFrame>;
   ncriPrintQueue?(query?: NullCityNcriPrintQueueQuery): Promise<NullCityNcriPrintQueueResponse>;
   exchangeApForGp?(resident: string, body: NullCityApGpExchangeRequest): Promise<NullCityApGpExchangeRecord>;
   creditAttention?(resident: string, body: NullCityCreditAttentionRequest): Promise<NullCityCreditAttentionResult>;
@@ -319,6 +321,7 @@ export function createNullCityControlClient(options: NullCityControlClientOption
     economyHeartbeat: async () => parseEconomyHeartbeat(await request<unknown>('/economy/heartbeat')),
     economyStream: async query => requestStream(`/economy/stream${economyStreamQueryString(query)}`),
     economyListings: async () => parseEconomyListings(await request<unknown>('/economy/listings')),
+    storytellerProjectorLatest: async () => parseProjectorStoryFrame(await request<unknown>('/storyteller/projector/latest')),
     ncriPrintQueue: async query => parseNcriPrintQueue(await request<unknown>(`/ncri/print-queue${ncriPrintQueueQueryString(query)}`)),
     exchangeApForGp: async (resident, body) =>
       parseApGpExchange(await request<unknown>(`/residents/${encodeURIComponent(resident)}/ap-gp-exchanges`, {
@@ -393,6 +396,13 @@ function parseEconomyHeartbeat(payload: unknown): NullCityEconomyHeartbeat {
 function parseEconomyListings(payload: unknown): NullCityEconomyListingsResponse {
   if (!isEconomyListingsResponse(payload)) {
     throw new NullCityControlError('invalid_economy_listings', 502);
+  }
+  return payload;
+}
+
+function parseProjectorStoryFrame(payload: unknown): ProjectorStoryFrame {
+  if (!isProjectorStoryFrame(payload)) {
+    throw new NullCityControlError('invalid_storyteller_projector_frame', 502);
   }
   return payload;
 }
@@ -534,6 +544,73 @@ function isEconomyListingsResponse(value: unknown): value is NullCityEconomyList
     record.listings.every(isEconomyListing);
 }
 
+function isProjectorStoryFrame(value: unknown): value is ProjectorStoryFrame {
+  const record = asRecord(value);
+  const source = asRecord(record.source);
+  const narration = asRecord(record.narration);
+  const omitted = asRecord(record.omitted);
+  const publicHealth = asRecord(record.publicHealth);
+  return record.ok === true &&
+    record.schemaVersion === 1 &&
+    typeof record.frameId === 'string' &&
+    typeof record.digestId === 'string' &&
+    typeof record.generatedAt === 'string' &&
+    typeof source.digestId === 'string' &&
+    (source.freshnessMs === null || typeof source.freshnessMs === 'number') &&
+    isProjectorFreshnessStatus(source.freshnessStatus) &&
+    isProjectorNarrationSource(narration.source) &&
+    typeof narration.title === 'string' &&
+    typeof narration.body === 'string' &&
+    Array.isArray(narration.bullets) &&
+    narration.bullets.every(bullet => typeof bullet === 'string') &&
+    (record.leadEvent === null || isProjectorStoryFrameEvent(record.leadEvent)) &&
+    Array.isArray(record.events) &&
+    record.events.every(isProjectorStoryFrameEvent) &&
+    Array.isArray(record.residents) &&
+    record.residents.every(isProjectorStoryFrameResident) &&
+    Array.isArray(record.actions) &&
+    record.actions.every(isProjectorStoryFrameAction) &&
+    Array.isArray(record.watchNext) &&
+    record.watchNext.every(item => typeof item === 'string') &&
+    typeof omitted.events === 'number' &&
+    typeof omitted.residents === 'number' &&
+    isProjectorHealthStatus(publicHealth.status) &&
+    typeof publicHealth.totalResidents === 'number' &&
+    typeof publicHealth.activeResidents === 'number' &&
+    typeof publicHealth.fadedResidents === 'number' &&
+    typeof publicHealth.lowApResidents === 'number' &&
+    Array.isArray(publicHealth.warnings) &&
+    publicHealth.warnings.every(warning => typeof warning === 'string');
+}
+
+function isProjectorStoryFrameEvent(value: unknown): value is ProjectorStoryFrame['events'][number] {
+  const record = asRecord(value);
+  return typeof record.ref === 'string' &&
+    typeof record.label === 'string' &&
+    typeof record.residentName === 'string' &&
+    typeof record.happenedAt === 'string' &&
+    typeof record.note === 'string' &&
+    typeof record.whyItMatters === 'string' &&
+    isProjectorImportance(record.importance);
+}
+
+function isProjectorStoryFrameResident(value: unknown): value is ProjectorStoryFrame['residents'][number] {
+  const record = asRecord(value);
+  return typeof record.residentName === 'string' &&
+    typeof record.displayName === 'string' &&
+    typeof record.attention === 'number' &&
+    isProjectorResidentStatus(record.status) &&
+    (record.gpObserved === null || typeof record.gpObserved === 'number');
+}
+
+function isProjectorStoryFrameAction(value: unknown): value is ProjectorStoryFrame['actions'][number] {
+  const record = asRecord(value);
+  return isProjectorActionKind(record.kind) &&
+    typeof record.label === 'string' &&
+    typeof record.detail === 'string' &&
+    (record.residentName === undefined || typeof record.residentName === 'string');
+}
+
 function isEconomyListing(value: unknown): value is NullCityEconomyListing {
   const record = asRecord(value);
   return typeof record.ncriId === 'string' &&
@@ -613,6 +690,30 @@ function isNcriRedemptionStatus(value: unknown): value is NullCityNcriRedemption
 
 function isNcriPrintQueueStatus(value: unknown): value is NullCityNcriPrintQueueEntry['status'] {
   return value === 'awaiting_redemption' || value === 'redeemed';
+}
+
+function isProjectorFreshnessStatus(value: unknown): value is ProjectorStoryFrame['source']['freshnessStatus'] {
+  return value === 'fresh' || value === 'stale' || value === 'unknown';
+}
+
+function isProjectorNarrationSource(value: unknown): value is ProjectorStoryFrame['narration']['source'] {
+  return value === 'verified_dispatch' || value === 'deterministic_fallback';
+}
+
+function isProjectorHealthStatus(value: unknown): value is ProjectorStoryFrame['publicHealth']['status'] {
+  return value === 'ok' || value === 'degraded' || value === 'stale';
+}
+
+function isProjectorImportance(value: unknown): value is ProjectorStoryFrame['events'][number]['importance'] {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'critical';
+}
+
+function isProjectorResidentStatus(value: unknown): value is ProjectorStoryFrame['residents'][number]['status'] {
+  return value === 'active' || value === 'low_attention' || value === 'faded';
+}
+
+function isProjectorActionKind(value: unknown): value is ProjectorStoryFrame['actions'][number]['kind'] {
+  return value === 'grant_attention' || value === 'watch_resident' || value === 'operator_check' || value === 'witness';
 }
 
 function queryString(query: NullCityLiveEconomyQuery | undefined): string {

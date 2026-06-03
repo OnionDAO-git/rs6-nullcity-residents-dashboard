@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { ProjectorStoryFrame, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import { buildStoryOverviewModel } from './story-overview';
 
@@ -28,6 +28,173 @@ describe('story overview projector model', () => {
     });
 
     expect(model.dispatch.statusLabel).toBe('live feed');
+  });
+
+  test('uses the server-owned public projector frame when it is available', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:digest-1:2026-06-03T18:00:00.000Z',
+      digestId: 'digest-1',
+      generatedAt: '2026-06-03T18:00:00.000Z',
+      source: {
+        digestId: 'digest-1',
+        digestBuiltAt: '2026-06-03T17:59:00.000Z',
+        windowStart: '2026-06-03T17:29:00.000Z',
+        windowEnd: '2026-06-03T17:59:00.000Z',
+        freshnessMs: 60_000,
+        freshnessStatus: 'fresh',
+        dispatchId: 'dispatch-1',
+        modelProfile: 'storyteller-smart',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: 'Hans turns attention into motion',
+        body: 'Hans took the crowd gift and moved through the courtyard. The city should watch whether the thank-you becomes a real route change.',
+        bullets: ['Human attention changed Hans today.', 'No private handles are exposed.'],
+        confidence: 'high',
+      },
+      leadEvent: {
+        ref: 'gift-1',
+        label: 'Patron gift',
+        residentName: 'res:hans',
+        happenedAt: '2026-06-03T17:58:00.000Z',
+        importance: 'high',
+        note: 'Hans received attention from the crowd.',
+        whyItMatters: 'human attention changed the resident trajectory',
+      },
+      events: [],
+      residents: [
+        {
+          residentName: 'res:hans',
+          displayName: 'Hans',
+          attention: 42,
+          status: 'active',
+          gpObserved: 25,
+          goal: 'Greet humans at Lumbridge Castle.',
+        },
+      ],
+      actions: [
+        {
+          kind: 'watch_resident',
+          label: 'Watch Hans',
+          detail: 'The lead event is a patron gift.',
+          residentName: 'res:hans',
+        },
+      ],
+      watchNext: ['Whether Hans answers the crowd instead of looping.'],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 23,
+        activeResidents: 10,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const model = buildStoryOverviewModel({
+      residents: [
+        resident({
+          name: 'res:hans',
+          position: { x: 3221, y: 3218, level: 0 },
+          feed: feed({ latestEventKind: 'chat' }),
+        }),
+      ],
+      digests: [],
+      projectorFrame: frame,
+      now: new Date('2026-06-03T18:00:30.000Z'),
+    });
+
+    expect(model.dispatch).toMatchObject({
+      title: 'Hans turns attention into motion',
+      statusLabel: 'verified story',
+      detail: 'fresh source · verified dispatch · updated just now',
+    });
+    expect(model.dispatch.bodyLead).toBe('Hans took the crowd gift and moved through the courtyard.');
+    expect(model.dispatch.bullets).toEqual(['Human attention changed Hans today.', 'No private handles are exposed.']);
+    expect(model.citySignals).toEqual([
+      { label: 'Residents Awake', detail: '10 / 23 active', tone: 'ok' },
+      { label: 'Story Freshness', detail: 'fresh source', tone: 'ok' },
+      { label: 'Public Health', detail: 'ok', tone: 'ok' },
+      { label: 'Narration', detail: 'verified dispatch', tone: 'ok' },
+    ]);
+    expect(model.dramaItems[0]).toMatchObject({
+      label: 'Patron gift',
+      detail: 'Hans received attention from the crowd.',
+      path: '/residents/hans',
+    });
+    expect(model.watchItems[0]).toMatchObject({
+      label: 'Whether Hans answers the crowd instead of looping.',
+      detail: 'Watch this next.',
+      tone: 'ok',
+    });
+  });
+
+  test('normalizes common Null City acronyms in public frame copy', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:digest-qa:2026-06-03T18:00:00.000Z',
+        digestId: 'digest-qa',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'digest-qa',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'deterministic_fallback',
+          title: 'Qa Guardian converted Gp into Ap',
+          body: 'Qa Guardian watched an Ncri trail form.',
+          bullets: ['Gp evidence and Ap evidence stayed separate.'],
+          confidence: 'fallback',
+        },
+        leadEvent: null,
+        events: [],
+        residents: [],
+        actions: [],
+        watchNext: ['Whether Qa Guardian spends Ap wisely.'],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'ok',
+          totalResidents: 1,
+          activeResidents: 1,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: [],
+        },
+      },
+    });
+
+    expect(model.dispatch.title).toBe('QA Guardian converted GP into AP');
+    expect(model.dispatch.body).toBe('QA Guardian watched an NCRI trail form.');
+    expect(model.dispatch.bullets).toEqual(['GP evidence and AP evidence stayed separate.']);
+    expect(model.watchItems[0]?.label).toBe('Whether QA Guardian spends AP wisely.');
+  });
+
+  test('describes live resident action locations with landmarks instead of raw coordinates', () => {
+    const model = buildStoryOverviewModel({
+      residents: [
+        resident({
+          name: 'res:hans',
+          position: { x: 3221, y: 3218, level: 0 },
+          feed: feed({ latestEventKind: 'chat' }),
+        }),
+      ],
+      digests: [],
+    });
+
+    expect(model.residentActions[0]).toMatchObject({
+      label: 'Hans',
+      detail: 'chat at Lumbridge Castle courtyard',
+    });
+    expect(model.atlas.pins[0]?.detail).toBe('chat at Lumbridge Castle courtyard');
+    expect(JSON.stringify(model)).not.toMatch(/\b\d{4},\d{4}\b/);
   });
 
   test('builds a useful Lumbridge atlas from live resident coordinates', () => {
@@ -62,7 +229,7 @@ describe('story overview projector model', () => {
         label: 'Varrock',
         detail: '1 resident beyond the current viewport',
         count: 1,
-        residents: ['Wren Calix 3230,3428'],
+        residents: ['Wren Calix at Varrock'],
       },
     ]);
   });
@@ -326,7 +493,7 @@ describe('story overview projector model', () => {
     });
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'ap gp exchange near 3162,3228',
+      detail: 'ap gp exchange at Lumbridge West Road',
     });
   });
 
@@ -417,12 +584,12 @@ describe('story overview projector model', () => {
 
     expect(model.dispatch.statusLabel).toBe('live feed');
     expect(model.dispatch.title).toBe('The Steward is moving the city forward');
-    expect(model.dispatch.body).toBe('The Steward is fire lit near 3162,3228. The map is live; the story follows the evidence.');
+    expect(model.dispatch.body).toBe('The Steward is fire lit at Lumbridge West Road. The map is live; the story follows the evidence.');
     expect(model.dispatch.bullets).toEqual([]);
     expect(JSON.stringify(model.dispatch)).not.toContain('Agent lit a fire on the west road');
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'fire lit near 3162,3228',
+      detail: 'fire lit at Lumbridge West Road',
       path: '/residents/agent',
     });
     expect(model.citySignals.map(signal => signal.label)).toContain('Visible AP');
@@ -477,7 +644,7 @@ describe('story overview projector model', () => {
     expect(model.citySignals.map(item => item.label)).toEqual(['Online Residents', 'Mapped Residents', 'Visible AP', 'Storyteller']);
     expect(model.leaderboardItems[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'chat | 33 nearby | 3224,3217',
+      detail: 'chat | 33 nearby | Lumbridge Castle courtyard',
     });
     expect(model.leaderboardItems.map(item => item.label)).not.toContain('Object Magnet');
     expect(model.dramaItems.length).toBeLessThanOrEqual(3);

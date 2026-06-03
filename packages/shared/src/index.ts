@@ -425,6 +425,90 @@ export interface DashboardOverview {
   readiness?: EventReadinessSummary;
 }
 
+export type ProjectorNarrationSource = 'verified_dispatch' | 'deterministic_fallback';
+export type ProjectorFreshnessStatus = 'fresh' | 'stale' | 'unknown';
+export type ProjectorHealthStatus = 'ok' | 'degraded' | 'stale';
+export type ProjectorEventImportance = 'low' | 'medium' | 'high' | 'critical';
+
+export interface ProjectorStoryFrameEvent {
+  ref: string;
+  label: string;
+  residentName: string;
+  happenedAt: string;
+  importance: ProjectorEventImportance;
+  note: string;
+  whyItMatters: string;
+}
+
+export interface ProjectorStoryFrameResident {
+  residentName: string;
+  displayName: string;
+  attention: number;
+  status: 'active' | 'low_attention' | 'faded';
+  gpObserved: number | null;
+  goal?: string;
+  latestSpeechSummary?: string;
+}
+
+export interface ProjectorStoryFrameAction {
+  kind: 'grant_attention' | 'watch_resident' | 'operator_check' | 'witness';
+  label: string;
+  detail: string;
+  residentName?: string;
+}
+
+export interface ProjectorStoryFrame {
+  ok: true;
+  schemaVersion: 1;
+  frameId: string;
+  digestId: string;
+  generatedAt: string;
+  source: {
+    digestId: string;
+    digestBuiltAt?: string;
+    windowStart?: string;
+    windowEnd?: string;
+    freshnessMs: number | null;
+    freshnessStatus: ProjectorFreshnessStatus;
+    dispatchId?: string;
+    dispatchGeneratedAt?: string;
+    modelProfile?: string;
+    excludedDispatchId?: string;
+    excludedDispatchReason?: string;
+  };
+  narration: {
+    source: ProjectorNarrationSource;
+    title: string;
+    body: string;
+    bullets: string[];
+    confidence?: 'high' | 'medium' | 'low' | 'fallback';
+  };
+  leadEvent: ProjectorStoryFrameEvent | null;
+  events: ProjectorStoryFrameEvent[];
+  residents: ProjectorStoryFrameResident[];
+  actions: ProjectorStoryFrameAction[];
+  watchNext: string[];
+  omitted: {
+    events: number;
+    residents: number;
+  };
+  publicHealth: {
+    status: ProjectorHealthStatus;
+    totalResidents: number;
+    activeResidents: number;
+    fadedResidents: number;
+    lowApResidents: number;
+    warnings: string[];
+  };
+}
+
+export interface ProjectorOverviewSnapshot {
+  generatedAt: string;
+  residents: ResidentDashboardRow[];
+  patronAp?: number;
+  projectorFrame?: ProjectorStoryFrame;
+}
+
 export type BenchmarkRunStatus = 'passed' | 'failed' | 'timeout' | 'error' | 'cancelled';
 export type BenchmarkRunMode = 'scripted' | 'autonomous';
 

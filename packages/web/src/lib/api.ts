@@ -7,6 +7,7 @@ import type {
   GatewayStatus,
   ObservableSubjectSummary,
   PatronActivitySummary,
+  ProjectorOverviewSnapshot,
   RelationshipActivitySummary,
   ResidentDashboardRow,
   RuntimeReadModel,
@@ -76,6 +77,7 @@ function formatErrorMessage(text: string): string {
 export const api = {
   overview: () => request<DashboardOverview>('/api/overview'),
   publicOverview: () => request<PublicOverviewSnapshot>('/api/public/overview'),
+  projectorOverview: () => request<ProjectorOverviewSnapshot>('/api/projector/overview'),
   gatewayStatus: () => request<GatewayStatus>('/api/gateway/status'),
   controllerStatus: () => request<ControllerStatus>('/api/controller/status'),
   residents: (filter = 'all') => request<ResidentDashboardRow[]>(`/api/residents?filter=${encodeURIComponent(filter)}`),
@@ -106,11 +108,7 @@ export const api = {
   storytellerDigests: (limit = 12) => request<StorytellerDigestFeed>(`/api/storyteller/digests?limit=${encodeURIComponent(limit)}`),
 };
 
-export interface PublicOverviewSnapshot {
-  generatedAt: string;
-  residents: ResidentDashboardRow[];
-  patronAp?: number;
-}
+export type PublicOverviewSnapshot = ProjectorOverviewSnapshot;
 
 export interface EconomyEvent {
   id: string;

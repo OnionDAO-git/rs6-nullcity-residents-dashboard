@@ -1,4 +1,4 @@
-import type { DashboardOverview, Position, ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { DashboardOverview, Position, ProjectorStoryFrame, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import { residentRouteSlug } from './resident-route';
 
@@ -75,6 +75,7 @@ export interface BuildStoryOverviewModelInput {
   digests: StorytellerDigestSummary[];
   overview?: DashboardOverview | undefined;
   patronAp?: number | undefined;
+  projectorFrame?: ProjectorStoryFrame | undefined;
   now?: Date | undefined;
 }
 
@@ -91,12 +92,13 @@ const FALLBACK_VIEWPORT = LUMBRIDGE_VIEWPORT;
 
 export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): StoryOverviewModel {
   const residents = input.residents;
+  const projectorFrame = input.projectorFrame;
   const positioned = residents
     .map(row => ({ row, position: residentPosition(row) }))
     .filter((entry): entry is { row: ResidentDashboardRow; position: Position } => Boolean(entry.position));
-  const digest = input.digests.find(hasProjectorDigestContent);
-  const storytellerEventKinds = storytellerEventKindByResident(digest);
-  const leadResident = findLeadResident(residents, digest);
+  const digest = projectorFrame ? undefined : input.digests.find(hasProjectorDigestContent);
+  const storytellerEventKinds = projectorFrame ? projectorEventLabelByResident(projectorFrame) : storytellerEventKindByResident(digest);
+  const leadResident = findLeadResident(residents, digest, projectorFrame);
   const viewport = chooseViewport(leadResident, positioned, storytellerEventKinds);
   const pins = positioned
     .filter(entry => pointInViewport(entry.position, viewport))
@@ -106,7 +108,7 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
   const offMapRegions = buildOffMapRegions(positioned, viewport);
 
   return {
-    dispatch: buildDispatch(digest, leadResident, input.now),
+    dispatch: projectorFrame ? buildProjectorFrameDispatch(projectorFrame, input.now) : buildDispatch(digest, leadResident, input.now),
     atlas: {
       viewport,
       pins,
@@ -115,9 +117,9 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
     },
     residentActions: buildResidentActions(residents, leadResident, storytellerEventKinds),
     leaderboardItems: buildLeaderboardItems(residents, leadResident, storytellerEventKinds),
-    citySignals: buildCitySignals(input, digest, positioned.length),
-    dramaItems: buildDramaItems(residents, digest, offMapRegions),
-    watchItems: buildWatchItems(residents, digest, offMapRegions, leadResident),
+    citySignals: projectorFrame ? buildProjectorFrameCitySignals(projectorFrame) : buildCitySignals(input, digest, positioned.length),
+    dramaItems: projectorFrame ? buildProjectorFrameDramaItems(projectorFrame) : buildDramaItems(residents, digest, offMapRegions),
+    watchItems: projectorFrame ? buildProjectorFrameWatchItems(projectorFrame) : buildWatchItems(residents, digest, offMapRegions, leadResident),
   };
 }
 
@@ -125,8 +127,12 @@ function residentPosition(row: ResidentDashboardRow): Position | undefined {
   return row.position || row.feed?.position || row.body?.position;
 }
 
-function findLeadResident(residents: ResidentDashboardRow[], digest: StorytellerDigestSummary | undefined): ResidentDashboardRow | undefined {
-  const eventResident = digest?.topEvents.find(event => event.residentName)?.residentName;
+function findLeadResident(
+  residents: ResidentDashboardRow[],
+  digest: StorytellerDigestSummary | undefined,
+  projectorFrame?: ProjectorStoryFrame,
+): ResidentDashboardRow | undefined {
+  const eventResident = projectorFrame?.leadEvent?.residentName || digest?.topEvents.find(event => event.residentName)?.residentName;
   if (eventResident) {
     const match = residents.find(row => namesMatch(row.name, eventResident));
     if (match) return match;
@@ -183,7 +189,7 @@ function residentPin(
     topPct: clamp((1 - ((position.y - viewport.minY) / (viewport.maxY - viewport.minY))) * 100, 4, 96),
     tone: eventLabel !== 'quiet' || (isLead && !needsWatch) ? 'event' : needsWatch ? 'watch' : row.online ? 'ok' : 'quiet',
     eventLabel,
-    detail: `${eventLabel} near ${position.x},${position.y}`,
+    detail: `${eventLabel} at ${locationLabel(position)}`,
     levelLabel: level > 0 ? `L${level}` : '',
   };
 }
@@ -193,7 +199,7 @@ function buildOffMapRegions(positioned: { row: ResidentDashboardRow; position: P
   for (const entry of positioned) {
     if (pointInViewport(entry.position, viewport)) continue;
     const region = regionForPosition(entry.position);
-    const label = `${displayName(entry.row.name)} ${entry.position.x},${entry.position.y}`;
+    const label = `${displayName(entry.row.name)} at ${locationLabel(entry.position)}`;
     regions.set(region, [...(regions.get(region) || []), label]);
   }
 
@@ -229,7 +235,7 @@ function buildDispatch(
   const fallbackTitle = leadResident ? `${displayName(leadResident.name)} is moving the city forward` : 'Null City is coming online';
   const fallbackEvent = leadResident ? eventKindLabel(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || '') : '';
   const fallbackBody = leadResident && leadPosition
-    ? `${displayName(leadResident.name)} is ${fallbackEvent === 'quiet' ? 'visible' : fallbackEvent} near ${leadPosition.x},${leadPosition.y}. The map is live; the story follows the evidence.`
+    ? `${displayName(leadResident.name)} is ${fallbackEvent === 'quiet' ? 'visible' : fallbackEvent} at ${locationLabel(leadPosition)}. The map is live; the story follows the evidence.`
     : 'Residents with live positions will appear here as soon as the dashboard feed reports them.';
   const generated = dispatch?.generatedAt || digest?.builtAt;
   const body = prettifyResidentRefs(dispatch?.publicBody || fallbackBody);
@@ -243,6 +249,26 @@ function buildDispatch(
     statusLabel: dispatch ? 'canon' : 'live feed',
     statusTone: 'ok',
     detail: generated ? `updated ${relativeTime(generated, now)}` : 'waiting for first dispatch',
+  };
+}
+
+function buildProjectorFrameDispatch(frame: ProjectorStoryFrame, now: Date | undefined): StoryOverviewDispatch {
+  const formattedBody = formatStoryBody(prettifyResidentRefs(frame.narration.body));
+  const freshness = frame.source.freshnessStatus === 'fresh'
+    ? 'fresh source'
+    : frame.source.freshnessStatus === 'stale'
+      ? 'stale source'
+      : 'source freshness unknown';
+  const source = frame.narration.source === 'verified_dispatch' ? 'verified dispatch' : 'fallback story';
+  return {
+    title: prettifyResidentRefs(frame.narration.title),
+    body: prettifyResidentRefs(frame.narration.body),
+    bodyLead: formattedBody.bodyLead,
+    bodyParagraphs: formattedBody.bodyParagraphs,
+    bullets: frame.narration.bullets.map(prettifyResidentRefs).slice(0, 4),
+    statusLabel: frame.narration.source === 'verified_dispatch' ? 'verified story' : 'grounded fallback',
+    statusTone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn',
+    detail: `${freshness} · ${source} · updated ${relativeTime(frame.generatedAt, now)}`,
   };
 }
 
@@ -300,7 +326,7 @@ function buildResidentActions(
       const eventLabel = eventKindLabel(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
       return {
         label: displayName(row.name),
-        detail: position ? `${eventLabel} near ${position.x},${position.y}` : row.thinking?.activePlan || eventLabel,
+        detail: position ? `${eventLabel} at ${locationLabel(position)}` : row.thinking?.activePlan || eventLabel,
         path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
         tone: row.inCombat || (row.attention ?? 999) <= 2 ? 'warn' : 'ok',
       };
@@ -317,9 +343,21 @@ function buildCitySignals(
   const visibleAp = input.patronAp ?? input.overview?.patrons?.totalShardBalance;
   return [
     { label: 'Online Residents', detail: `${online.toLocaleString()} / ${residents.length.toLocaleString()} visible`, tone: online > 0 ? 'ok' : 'warn' },
-    { label: 'Mapped Residents', detail: `${positionedCount.toLocaleString()} have live coordinates`, tone: positionedCount > 0 ? 'ok' : 'warn' },
+    { label: 'Mapped Residents', detail: `${positionedCount.toLocaleString()} have named locations`, tone: positionedCount > 0 ? 'ok' : 'warn' },
     { label: 'Visible AP', detail: visibleAp === undefined ? 'waiting for patron summary' : `${visibleAp.toLocaleString()} AP in the city pool`, tone: visibleAp ? 'ok' : 'warn' },
     { label: 'Storyteller', detail: digest ? `${digest.topEventCount.toLocaleString()} top events in latest run` : 'waiting for digest', tone: digest ? 'ok' : 'warn' },
+  ];
+}
+
+function buildProjectorFrameCitySignals(frame: ProjectorStoryFrame): StoryOverviewListItem[] {
+  const health = frame.publicHealth;
+  const freshnessTone = frame.source.freshnessStatus === 'fresh' ? 'ok' : 'warn';
+  const healthTone = health.status === 'ok' ? 'ok' : health.status === 'stale' ? 'warn' : 'warn';
+  return [
+    { label: 'Residents Awake', detail: `${health.activeResidents.toLocaleString()} / ${health.totalResidents.toLocaleString()} active`, tone: health.activeResidents > 0 ? 'ok' : 'warn' },
+    { label: 'Story Freshness', detail: `${frame.source.freshnessStatus} source`, tone: freshnessTone },
+    { label: 'Public Health', detail: health.status, tone: healthTone },
+    { label: 'Narration', detail: frame.narration.source === 'verified_dispatch' ? 'verified dispatch' : 'fallback story', tone: frame.narration.source === 'verified_dispatch' ? 'ok' : 'warn' },
   ];
 }
 
@@ -339,7 +377,7 @@ function buildLeaderboardItems(
       const detailParts = [
         eventLabel,
         nearby > 0 ? `${nearby.toLocaleString()} nearby` : '',
-        position ? `${position.x},${position.y}` : '',
+        position ? locationLabel(position) : '',
       ].filter(Boolean);
       return {
         label: displayName(row.name),
@@ -370,7 +408,7 @@ function buildDramaItems(
     const position = residentPosition(row);
     items.push({
       label: `${displayName(row.name)} in combat`,
-      detail: position ? `combat near ${position.x},${position.y}` : 'combat reported without a current coordinate',
+      detail: position ? `combat at ${locationLabel(position)}` : 'combat reported without a current place',
       path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
       tone: 'warn',
     });
@@ -392,6 +430,27 @@ function buildDramaItems(
   return items.slice(0, 3);
 }
 
+function buildProjectorFrameDramaItems(frame: ProjectorStoryFrame): StoryOverviewListItem[] {
+  const lead = frame.leadEvent ? [frame.leadEvent] : [];
+  const events = [...lead, ...frame.events.filter(event => event.ref !== frame.leadEvent?.ref)]
+    .slice(0, 3)
+    .map(event => ({
+      label: event.label,
+      detail: compactDetail(prettifyResidentRefs(event.note)),
+      path: `/residents/${encodeURIComponent(residentRouteSlug(event.residentName))}`,
+      tone: event.importance === 'critical' || event.importance === 'high' ? 'warn' as const : 'ok' as const,
+    }));
+  if (events.length) return events;
+  if (frame.publicHealth.warnings.length) {
+    return frame.publicHealth.warnings.slice(0, 3).map(warning => ({
+      label: 'Public health warning',
+      detail: warning,
+      tone: 'warn' as const,
+    }));
+  }
+  return [{ label: 'Stable Window', detail: 'No major alerts in the current public feed.', tone: 'ok' }];
+}
+
 function buildWatchItems(
   residents: ResidentDashboardRow[],
   digest: StorytellerDigestSummary | undefined,
@@ -405,7 +464,7 @@ function buildWatchItems(
     const eventLabel = eventKindLabel(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || leadResident.body?.lastAction?.kind || '');
     items.push({
       label: `Follow ${displayName(leadResident.name)}`,
-      detail: position ? `${eventLabel} near ${position.x},${position.y}` : eventLabel,
+      detail: position ? `${eventLabel} at ${locationLabel(position)}` : eventLabel,
       path: `/residents/${encodeURIComponent(residentRouteSlug(leadResident.name))}`,
       tone: leadResident.inCombat || (leadResident.attention ?? 999) <= 2 ? 'warn' : 'ok',
     });
@@ -420,6 +479,21 @@ function buildWatchItems(
     items.push({ label: 'AP Runway', detail: `${lowAp.length} residents are at or below the support floor`, tone: 'warn', path: '/residents?triage=attention' });
   }
   return items.slice(0, 2);
+}
+
+function buildProjectorFrameWatchItems(frame: ProjectorStoryFrame): StoryOverviewListItem[] {
+  const watch = frame.watchNext.map(item => ({
+    label: prettifyResidentRefs(item),
+    detail: 'Watch this next.',
+    tone: 'ok' as const,
+  }));
+  const actionItems = frame.actions.map(action => ({
+    label: action.label,
+    detail: action.detail,
+    ...(action.residentName ? { path: `/residents/${encodeURIComponent(residentRouteSlug(action.residentName))}` } : {}),
+    tone: action.kind === 'grant_attention' ? 'warn' as const : 'ok' as const,
+  }));
+  return [...watch, ...actionItems].slice(0, 2);
 }
 
 function hasPublicProjectorDispatch(item: StorytellerDigestSummary): boolean {
@@ -494,6 +568,16 @@ function storytellerEventKindByResident(digest: StorytellerDigestSummary | undef
   return eventKinds;
 }
 
+function projectorEventLabelByResident(frame: ProjectorStoryFrame): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const event of [frame.leadEvent, ...frame.events]) {
+    if (!event?.residentName) continue;
+    const slug = residentRouteSlug(event.residentName);
+    if (!labels.has(slug)) labels.set(slug, event.label);
+  }
+  return labels;
+}
+
 function displayName(name: string): string {
   if (residentRouteSlug(name) === 'agent') return 'The Steward';
   return residentRouteSlug(name)
@@ -504,12 +588,31 @@ function displayName(name: string): string {
 }
 
 function prettifyResidentRefs(text: string): string {
-  return text.replace(/\bres:([a-z0-9_-]+)/gi, (_match, slug: string) => displayName(`res:${slug}`));
+  return humanizeAcronyms(text.replace(/\bres:([a-z0-9_-]+)/gi, (_match, slug: string) => displayName(`res:${slug}`)));
+}
+
+function humanizeAcronyms(text: string): string {
+  return text
+    .replace(/\bQa\b/g, 'QA')
+    .replace(/\bGp\b/g, 'GP')
+    .replace(/\bAp\b/g, 'AP')
+    .replace(/\bNcri\b/g, 'NCRI');
 }
 
 function eventKindLabel(kind: string): string {
   const cleaned = kind.trim().replace(/_/g, ' ');
   return cleaned || 'quiet';
+}
+
+function locationLabel(position: Position): string {
+  if (position.level > 0 && position.x >= 3218 && position.x <= 3226 && position.y >= 3215 && position.y <= 3224) {
+    return 'Lumbridge Castle upstairs';
+  }
+  if (position.x >= 3218 && position.x <= 3226 && position.y >= 3215 && position.y <= 3224) return 'Lumbridge Castle courtyard';
+  if (position.x >= 3238 && position.x <= 3247 && position.y >= 3204 && position.y <= 3214) return 'Lumbridge church';
+  if (position.x >= 3198 && position.x <= 3220 && position.y >= 3200 && position.y <= 3222) return 'Lumbridge west road';
+  if (position.x >= 3150 && position.x <= 3198 && position.y >= 3215 && position.y <= 3250) return 'Lumbridge West Road';
+  return regionForPosition(position);
 }
 
 function namesMatch(a: string, b: string): boolean {

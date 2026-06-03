@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+  import type { BenchmarkArtifact, BenchmarkArtifactSummary, BenchmarkLeaderboardRow, DashboardOverview, EventReadinessSummary, GatewayStatus, ObservableSubjectSummary, PatronActivitySummary, PatronDashboardSummary, PatronStandingSummary, Position, ProjectorStoryFrame, ReadinessCheckSummary, ReadinessLevel, RecentLetterSummary, RelationshipActivitySummary, ResidentAppearance, ResidentDashboardRow, ResidentRelationshipSummary, RuntimeReadModel, SoulSummary, SpectatorMode, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
   import { NullCitySpectatorBridge, type SpectatorDisplayFilters } from '@nullcity-dashboard/observer';
   import { createDomCanvasAdapter, createForkedRuntimeLifecycleAdapter, createGameClient, createHttpSessionTicketAdapter, type GameClientController, type GameClientStatus } from '@nullcity-dashboard/game-client';
   import { api, routeTo, type PublicOverviewSnapshot, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
@@ -198,6 +198,7 @@
   let cityLibraryLives: LibrarySoulLife[] = [];
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityProjectorPatronAp: number | undefined;
+  let cityProjectorFrame: ProjectorStoryFrame | undefined;
   let cityStoryRunList: StorytellerDigestRunList = storytellerDigestRunList([]);
   let cityStoryRunId = '';
   let cityStoryDigest: StorytellerDigestSummary | undefined;
@@ -503,6 +504,7 @@
     digests: cityStoryDigests,
     overview,
     patronAp: cityProjectorPatronAp ?? overview?.patrons?.totalShardBalance,
+    projectorFrame: cityProjectorFrame,
     now: new Date(),
   });
   $: cityResidentTriageFocus = !isDebugRoute && route === '/residents' ? residentTriageFocusFromSearch(browserSearch) : '';
@@ -963,6 +965,7 @@
 
   async function loadCitySnapshot() {
     cityProjectorPatronAp = undefined;
+    cityProjectorFrame = undefined;
     const snapshot = await loadCitySnapshotWithLiveFallback({
       overview: api.overview,
       residents: () => api.residents('all'),
@@ -977,7 +980,7 @@
   async function loadCityProjectorSnapshot() {
     let snapshot: PublicOverviewSnapshot = { generatedAt: new Date().toISOString(), residents: [] };
     try {
-      snapshot = await api.publicOverview();
+      snapshot = await api.projectorOverview();
       cityDataError = '';
     } catch (err) {
       handleCityApiError(err);
@@ -986,6 +989,7 @@
     gatewayStatus = undefined;
     residents = snapshot.residents;
     cityProjectorPatronAp = snapshot.patronAp;
+    cityProjectorFrame = snapshot.projectorFrame;
   }
 
   async function loadResidentGoalContracts(rows: ResidentDashboardRow[]): Promise<Record<string, ResidentGoalContractSignal>> {
@@ -3470,7 +3474,7 @@
             <strong>{cityProjectorOverview.atlas.viewport.label}</strong>
           </div>
           <span class="projector-atlas-bounds">
-            x {cityProjectorOverview.atlas.viewport.minX}..{cityProjectorOverview.atlas.viewport.maxX} / y {cityProjectorOverview.atlas.viewport.minY}..{cityProjectorOverview.atlas.viewport.maxY}
+            {cityProjectorOverview.atlas.totalPositioned} residents with live places
           </span>
         </div>
         {@render ProjectorAtlas({ model: cityProjectorOverview })}
@@ -3491,11 +3495,11 @@
 {/snippet}
 
 {#snippet ProjectorAtlas({ model }: { model: StoryOverviewModel })}
-  <div class="projector-atlas" aria-label={`${model.atlas.viewport.label} resident coordinate atlas`}>
-    <div class="atlas-axis atlas-axis-y max">y {model.atlas.viewport.maxY}</div>
-    <div class="atlas-axis atlas-axis-y min">y {model.atlas.viewport.minY}</div>
-    <div class="atlas-axis atlas-axis-x min">x {model.atlas.viewport.minX}</div>
-    <div class="atlas-axis atlas-axis-x max">x {model.atlas.viewport.maxX}</div>
+  <div class="projector-atlas" aria-label={`${model.atlas.viewport.label} resident landmark atlas`}>
+    <div class="atlas-axis atlas-axis-y max">north</div>
+    <div class="atlas-axis atlas-axis-y min">south</div>
+    <div class="atlas-axis atlas-axis-x min">west</div>
+    <div class="atlas-axis atlas-axis-x max">east</div>
 
     <div class="atlas-road atlas-road-west" aria-hidden="true"></div>
     <div class="atlas-river" aria-hidden="true"></div>
@@ -3519,14 +3523,14 @@
         {#if index <= 4}
           <span class="atlas-pin-label">
             <strong>{pin.label}{pin.levelLabel ? ` ${pin.levelLabel}` : ''}</strong>
-            <small>{pin.eventLabel} · {pin.x},{pin.y}</small>
+            <small>{pin.detail}</small>
           </span>
         {/if}
       </a>
     {:else}
       <div class="atlas-empty">
-        <strong>No live coordinates yet</strong>
-        <span>Residents will appear when the overview feed reports positions.</span>
+        <strong>No live locations yet</strong>
+        <span>Residents will appear when the overview feed reports where they are.</span>
       </div>
     {/each}
   </div>
