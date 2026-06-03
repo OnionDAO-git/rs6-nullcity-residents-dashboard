@@ -262,4 +262,17 @@ CREATE INDEX IF NOT EXISTS idx_print_queue_status_priority ON print_queue(status
 CREATE INDEX IF NOT EXISTS idx_city_events_aggregate ON city_events(aggregate_type, aggregate_id, created_at DESC);
 `.trim(),
   },
+  {
+    id: '002_city_identity_aliases',
+    sql: `
+CREATE TABLE IF NOT EXISTS city_identity_aliases (
+  person_id TEXT PRIMARY KEY,
+  patron_handle TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_city_identity_aliases_handle ON city_identity_aliases(patron_handle);
+`.trim(),
+  },
 ];

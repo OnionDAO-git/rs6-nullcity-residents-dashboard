@@ -567,6 +567,25 @@ export class PostgresCityStore implements CityStore {
       ON CONFLICT (city_user_id, resource) DO NOTHING
     `;
   }
+
+  async resolveOnionId(cityUserId: string): Promise<string> {
+    const rows = await this.sql`SELECT landing_user_id FROM city_users WHERE id = ${cityUserId}`;
+    if (!rows[0]) throw new CityStoreError('City user not found', 404);
+    return stringField(rows[0], 'landing_user_id');
+  }
+
+  async setIdentityAlias(personId: string, patronHandle: string): Promise<void> {
+    await this.sql`
+      INSERT INTO city_identity_aliases (person_id, patron_handle)
+      VALUES (${personId}, ${patronHandle})
+      ON CONFLICT (person_id) DO UPDATE SET patron_handle = EXCLUDED.patron_handle, updated_at = now()
+    `;
+  }
+
+  async resolvePatronHandle(personId: string): Promise<string | undefined> {
+    const rows = await this.sql`SELECT patron_handle FROM city_identity_aliases WHERE person_id = ${personId}`;
+    return rows[0] ? stringField(rows[0], 'patron_handle') : undefined;
+  }
 }
 
 export async function runCityMigrations(sql: BunSql): Promise<void> {

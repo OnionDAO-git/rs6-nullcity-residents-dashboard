@@ -149,6 +149,11 @@ export interface CityStore {
   listInboxThreads(cityUserId: string): Promise<InboxThread[]>;
   getInboxThread(cityUserId: string, threadId: string): Promise<{ thread: InboxThread; messages: InboxMessage[] } | undefined>;
   listLibrarySoulLives(): Promise<LibrarySoulLife[]>;
+
+  // Identity (personId === landing users.id === city_users.landing_user_id)
+  resolveOnionId(cityUserId: string): Promise<string>;
+  setIdentityAlias(personId: string, patronHandle: string): Promise<void>;
+  resolvePatronHandle(personId: string): Promise<string | undefined>;
 }
 
 export interface ResidentAttentionGrantInput {
@@ -200,6 +205,7 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
   const inboxThreads = new Map<string, InboxThread>();
   const inboxMessages = new Map<string, InboxMessage[]>();
   const libraryLives: LibrarySoulLife[] = [];
+  const identityAliases = new Map<string, string>(); // personId -> patronHandle
 
   function timestamp(): string {
     return now().toISOString();
@@ -645,6 +651,18 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
 
     async listLibrarySoulLives() {
       return [...libraryLives].sort((a, b) => (b.diedAt || b.updatedAt).localeCompare(a.diedAt || a.updatedAt));
+    },
+
+    async resolveOnionId(cityUserId) {
+      return requireUser(cityUserId).landingUserId;
+    },
+
+    async setIdentityAlias(personId, patronHandle) {
+      identityAliases.set(personId, patronHandle);
+    },
+
+    async resolvePatronHandle(personId) {
+      return identityAliases.get(personId);
     },
   };
 

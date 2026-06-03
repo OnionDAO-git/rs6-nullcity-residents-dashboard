@@ -65,6 +65,7 @@ export class InMemoryCityStore implements CityStore {
   private readonly inboxThreads = new Map<string, InboxThread>();
   private readonly inboxMessages = new Map<string, InboxMessage[]>();
   private readonly librarySoulLives = new Map<string, LibrarySoulLife>();
+  private readonly identityAliases = new Map<string, string>(); // personId -> patronHandle
 
   constructor(options: InMemoryCityStoreOptions = {}) {
     this.now = options.now || (() => new Date().toISOString());
@@ -517,6 +518,18 @@ export class InMemoryCityStore implements CityStore {
 
   async listLibrarySoulLives(): Promise<LibrarySoulLife[]> {
     return clone([...this.librarySoulLives.values()].sort((a, b) => (b.diedAt || b.createdAt).localeCompare(a.diedAt || a.createdAt)));
+  }
+
+  async resolveOnionId(cityUserId: string): Promise<string> {
+    return this.requireUser(cityUserId).landingUserId;
+  }
+
+  async setIdentityAlias(personId: string, patronHandle: string): Promise<void> {
+    this.identityAliases.set(personId, patronHandle);
+  }
+
+  async resolvePatronHandle(personId: string): Promise<string | undefined> {
+    return this.identityAliases.get(personId);
   }
 
   private ensureAccount(cityUserId: string, resource: PointResource): AccountState {
