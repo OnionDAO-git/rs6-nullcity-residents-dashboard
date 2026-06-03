@@ -94,7 +94,23 @@ export async function runAttentionGrant(deps: AttentionGrantDeps, input: Attenti
   }
 
   // 5. Debit the stand-in AFTER the credit is confirmed, then settle.
-  const ledger = await debitStandIn(deps.store, input, apAmount, idempotencyKey);
+  let ledger: PointLedgerEntry;
+  try {
+    ledger = await debitStandIn(deps.store, input, apAmount, idempotencyKey);
+  } catch (err) {
+    // The City credit already landed (it's idempotent), but the stand-in debit
+    // failed — e.g. a concurrent spend drained the balance between the pre-flight
+    // check and here. Mark `failed` so the intent is NOT left stuck in
+    // `sent_to_city`; a retry re-drives (credit replays idempotently, debit
+    // retries) and self-heals once funds recover.
+    // CAVEAT for the real consent-spend API: it must make credit+debit atomic —
+    // this window over-credits the resident until a successful retry.
+    await deps.store.updateAttentionGrantIntent(intent.id, {
+      state: 'failed',
+      failureReason: `city_credited_debit_failed: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    throw err;
+  }
   intent = await deps.store.updateAttentionGrantIntent(intent.id, {
     state: 'settled',
     standinLedgerEntryId: ledger.id,

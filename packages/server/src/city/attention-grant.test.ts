@@ -97,6 +97,32 @@ describe('runAttentionGrant', () => {
     expect(await apBalance(store, cityUserId)).toBe(750);
   });
 
+  test('debit-fails-after-credit marks the intent failed (not stuck in sent_to_city)', async () => {
+    const { store, cityUserId } = await seededStore();
+    const spy = { calls: [] as Array<{ resident: string; body: Record<string, unknown> }> };
+    // Wrap the store so the stand-in debit throws AFTER the (idempotent) City credit.
+    const failingStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'appendPointLedger') {
+          return async (input: { sourceType: string }) => {
+            if (input.sourceType === 'attention_grant_standin') throw new Error('debit_blew_up');
+            return (target as InMemoryCityStore).appendPointLedger(input as never);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as InMemoryCityStore;
+
+    await expect(
+      runAttentionGrant({ store: failingStore, control: fakeControl(spy) }, { cityUserId, residentId: 'res:fern', apAmount: 50, idempotencyKey: 'debitfail-1' }),
+    ).rejects.toThrow('debit_blew_up');
+
+    expect(spy.calls).toHaveLength(1); // City WAS credited
+    const intent = await store.getAttentionGrantIntent(cityUserId, 'debitfail-1');
+    expect(intent?.state).toBe('failed'); // not stuck in sent_to_city
+    expect(intent?.failureReason).toContain('city_credited_debit_failed');
+  });
+
   test('rejects insufficient funds (409) before crediting City or debiting', async () => {
     const store = new InMemoryCityStore();
     const cityUser = await store.upsertUserFromLanding(landingUser);
