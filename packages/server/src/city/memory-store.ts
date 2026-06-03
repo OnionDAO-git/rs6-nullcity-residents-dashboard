@@ -19,6 +19,9 @@ import type {
 } from './types';
 import {
   CityStoreError,
+  type AttentionGrantIntent,
+  type AttentionGrantIntentCreateInput,
+  type AttentionGrantIntentPatch,
   type CityStore,
   type LedgerAppendInput,
   type PrintBridgeJob,
@@ -66,6 +69,8 @@ export class InMemoryCityStore implements CityStore {
   private readonly inboxMessages = new Map<string, InboxMessage[]>();
   private readonly librarySoulLives = new Map<string, LibrarySoulLife>();
   private readonly identityAliases = new Map<string, string>(); // personId -> patronHandle
+  private readonly attentionGrantIntents = new Map<string, AttentionGrantIntent>();
+  private readonly attentionGrantIntentIdempotency = new Map<string, string>(); // `${cityUserId}:${idempotencyKey}` -> intent id
 
   constructor(options: InMemoryCityStoreOptions = {}) {
     this.now = options.now || (() => new Date().toISOString());
@@ -530,6 +535,47 @@ export class InMemoryCityStore implements CityStore {
 
   async resolvePatronHandle(personId: string): Promise<string | undefined> {
     return this.identityAliases.get(personId);
+  }
+
+  async createAttentionGrantIntent(input: AttentionGrantIntentCreateInput): Promise<AttentionGrantIntent> {
+    this.requireUser(input.cityUserId);
+    const key = `${input.cityUserId}:${input.idempotencyKey}`;
+    const existingId = this.attentionGrantIntentIdempotency.get(key);
+    if (existingId) return clone(this.attentionGrantIntents.get(existingId)!);
+    const now = this.now();
+    const intent: AttentionGrantIntent = {
+      id: this.id(),
+      cityUserId: input.cityUserId,
+      residentId: input.residentId,
+      apAmount: input.apAmount,
+      idempotencyKey: input.idempotencyKey,
+      state: 'created',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.attentionGrantIntents.set(intent.id, intent);
+    this.attentionGrantIntentIdempotency.set(key, intent.id);
+    return clone(intent);
+  }
+
+  async getAttentionGrantIntent(cityUserId: string, idempotencyKey: string): Promise<AttentionGrantIntent | undefined> {
+    const id = this.attentionGrantIntentIdempotency.get(`${cityUserId}:${idempotencyKey}`);
+    return id ? clone(this.attentionGrantIntents.get(id)!) : undefined;
+  }
+
+  async updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent> {
+    const existing = this.attentionGrantIntents.get(id);
+    if (!existing) throw new CityStoreError('Attention grant intent not found', 404);
+    const updated: AttentionGrantIntent = {
+      ...existing,
+      ...(patch.state !== undefined ? { state: patch.state } : {}),
+      ...(patch.standinLedgerEntryId !== undefined ? { standinLedgerEntryId: patch.standinLedgerEntryId } : {}),
+      ...(patch.cityResponse !== undefined ? { cityResponse: patch.cityResponse } : {}),
+      ...(patch.failureReason !== undefined ? { failureReason: patch.failureReason } : {}),
+      updatedAt: this.now(),
+    };
+    this.attentionGrantIntents.set(id, updated);
+    return clone(updated);
   }
 
   private ensureAccount(cityUserId: string, resource: PointResource): AccountState {

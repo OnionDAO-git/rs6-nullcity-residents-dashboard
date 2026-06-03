@@ -3,6 +3,10 @@ import { cityMigrations } from './migrations/schema';
 import type { LandingCheckinAwardSource } from './checkins';
 import {
   CityStoreError,
+  type AttentionGrantIntent,
+  type AttentionGrantIntentCreateInput,
+  type AttentionGrantIntentPatch,
+  type AttentionGrantIntentState,
   type CityStore,
   type LedgerAppendInput,
   type PrintBridgeJob,
@@ -586,6 +590,40 @@ export class PostgresCityStore implements CityStore {
     const rows = await this.sql`SELECT patron_handle FROM city_identity_aliases WHERE person_id = ${personId}`;
     return rows[0] ? stringField(rows[0], 'patron_handle') : undefined;
   }
+
+  async createAttentionGrantIntent(input: AttentionGrantIntentCreateInput): Promise<AttentionGrantIntent> {
+    const id = `agi_${crypto.randomUUID()}`;
+    await this.sql`
+      INSERT INTO attention_grant_intents (id, city_user_id, resident_id, ap_amount, idempotency_key, state)
+      VALUES (${id}, ${input.cityUserId}, ${input.residentId}, ${input.apAmount}, ${input.idempotencyKey}, 'created')
+      ON CONFLICT (city_user_id, idempotency_key) DO NOTHING
+    `;
+    const rows = await this.sql`
+      SELECT * FROM attention_grant_intents WHERE city_user_id = ${input.cityUserId} AND idempotency_key = ${input.idempotencyKey}
+    `;
+    return mapAttentionGrantIntent(one(rows));
+  }
+
+  async getAttentionGrantIntent(cityUserId: string, idempotencyKey: string): Promise<AttentionGrantIntent | undefined> {
+    const rows = await this.sql`
+      SELECT * FROM attention_grant_intents WHERE city_user_id = ${cityUserId} AND idempotency_key = ${idempotencyKey}
+    `;
+    return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
+  }
+
+  async updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent> {
+    const rows = await this.sql`
+      UPDATE attention_grant_intents SET
+        state = COALESCE(${patch.state ?? null}, state),
+        standin_ledger_entry_id = COALESCE(${patch.standinLedgerEntryId ?? null}, standin_ledger_entry_id),
+        city_response = COALESCE(${patch.cityResponse ? json(patch.cityResponse) : null}::jsonb, city_response),
+        failure_reason = COALESCE(${patch.failureReason ?? null}, failure_reason),
+        updated_at = now()
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    return mapAttentionGrantIntent(one(rows));
+  }
 }
 
 export async function runCityMigrations(sql: BunSql): Promise<void> {
@@ -654,6 +692,25 @@ function mapCityUser(row: Record<string, unknown>): CityUser {
     nameSnapshot: stringField(row, 'name_snapshot'),
     handleSnapshot: nullableString(row, 'handle_snapshot'),
     avatarUrlSnapshot: nullableString(row, 'avatar_url_snapshot'),
+    createdAt: dateField(row, 'created_at'),
+    updatedAt: dateField(row, 'updated_at'),
+  };
+}
+
+function mapAttentionGrantIntent(row: Record<string, unknown>): AttentionGrantIntent {
+  const standin = nullableString(row, 'standin_ledger_entry_id');
+  const failure = nullableString(row, 'failure_reason');
+  const cityResponse = row.city_response;
+  return {
+    id: stringField(row, 'id'),
+    cityUserId: stringField(row, 'city_user_id'),
+    residentId: stringField(row, 'resident_id'),
+    apAmount: Number(row.ap_amount),
+    idempotencyKey: stringField(row, 'idempotency_key'),
+    state: stringField(row, 'state') as AttentionGrantIntentState,
+    ...(standin ? { standinLedgerEntryId: standin } : {}),
+    ...(cityResponse && typeof cityResponse === 'object' ? { cityResponse: cityResponse as Record<string, unknown> } : {}),
+    ...(failure ? { failureReason: failure } : {}),
     createdAt: dateField(row, 'created_at'),
     updatedAt: dateField(row, 'updated_at'),
   };

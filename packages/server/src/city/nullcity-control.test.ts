@@ -583,4 +583,43 @@ describe('createNullCityControlClient', () => {
       message: 'controller_timeout',
     });
   });
+
+  test('credits resident attention with bearer auth and amount field', async () => {
+    const calls: Array<{ url: string; method: string; authorization: string | null; body: unknown }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        method: init?.method || 'GET',
+        authorization: new Headers(init?.headers).get('authorization'),
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return new Response(
+        JSON.stringify({ ok: true, resident: 'res:fern', attentionBefore: 10, attentionAfter: 35, creditedAmount: 25 }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const client = createNullCityControlClient({ baseUrl: 'http://controller.test/api/nullcity', token: 'city-token' });
+    const result = await client.creditAttention!('res:fern', {
+      idempotencyKey: 'att-1',
+      amount: 25,
+      cityUserId: 'city-user-1',
+      sourceType: 'resident_attention_grant',
+      sourceId: 'att-1',
+    });
+
+    expect(calls[0]).toEqual({
+      url: 'http://controller.test/api/nullcity/residents/res%3Afern/attention-grants',
+      method: 'POST',
+      authorization: 'Bearer city-token',
+      body: {
+        idempotencyKey: 'att-1',
+        amount: 25,
+        cityUserId: 'city-user-1',
+        sourceType: 'resident_attention_grant',
+        sourceId: 'att-1',
+      },
+    });
+    expect(result).toMatchObject({ ok: true, attentionAfter: 35, creditedAmount: 25 });
+  });
 });

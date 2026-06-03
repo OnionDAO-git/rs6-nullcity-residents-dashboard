@@ -275,4 +275,29 @@ CREATE TABLE IF NOT EXISTS city_identity_aliases (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_city_identity_aliases_handle ON city_identity_aliases(patron_handle);
 `.trim(),
   },
+  {
+    id: '003_attention_grant_intents',
+    sql: `
+CREATE TABLE IF NOT EXISTS attention_grant_intents (
+  id TEXT PRIMARY KEY,
+  city_user_id TEXT NOT NULL REFERENCES city_users(id) ON DELETE CASCADE,
+  resident_id TEXT NOT NULL,
+  ap_amount INTEGER NOT NULL CHECK (ap_amount > 0),
+  idempotency_key TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'created'
+    CHECK (state IN ('created', 'debited', 'sent_to_city', 'settled', 'failed')),
+  standin_ledger_entry_id TEXT REFERENCES point_ledger_entries(id) ON DELETE RESTRICT,
+  city_response JSONB,
+  failure_reason TEXT,
+  -- NON-PRODUCTION: standin_ledger_entry_id debits the BFF projection point_accounts,
+  -- a labelled stand-in for Dev's real consent-spend API (not yet available).
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (city_user_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attention_grant_intents_city_user_created ON attention_grant_intents(city_user_id, created_at DESC);
+`.trim(),
+  },
 ];

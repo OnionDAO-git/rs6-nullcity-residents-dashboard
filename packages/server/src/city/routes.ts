@@ -12,6 +12,7 @@ import {
 import type { LandingSessionAuthenticator } from './landing-session';
 import { NullCityControlError, type NullCityControlClient, type NullCityEconomyStreamQuery, type NullCityNcriPrintQueueStatus } from './nullcity-control';
 import { quoteSoulProposal } from './quote';
+import { runAttentionGrant } from './attention-grant';
 import { CityStoreError, type CityStore } from './store';
 import type { CityUser, LandingSessionUser, PointResource } from './types';
 import { jsonResponse, notFound } from '../util';
@@ -525,13 +526,22 @@ export async function routeCityApi(
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
       const body = await readJsonBody(request);
-      return jsonResponse(await context.store.grantResidentAttention({
-        cityUserId: auth.cityUser.id,
-        residentId: decodeURIComponent(residentAttention[1] || ''),
-        apAmount: numberBody(body, 'apAmount'),
-        idempotencyKey: stringBody(body, 'idempotencyKey'),
-        memo: stringBody(body, 'memo'),
-      }), { status: 202 });
+      const outcome = await runAttentionGrant(
+        { store: context.store, control: context.nullcityControl },
+        {
+          cityUserId: auth.cityUser.id,
+          residentId: decodeURIComponent(residentAttention[1] || ''),
+          apAmount: numberBody(body, 'apAmount'),
+          idempotencyKey: stringBody(body, 'idempotencyKey'),
+          memo: stringBody(body, 'memo'),
+        },
+      );
+      return jsonResponse({
+        intent: { id: outcome.intent.id, state: outcome.intent.state, residentId: outcome.intent.residentId },
+        ledger: outcome.ledger,
+        residentId: outcome.intent.residentId,
+        city: outcome.cityResponse,
+      }, { status: 202 });
     }
 
     if (method === 'GET' && pathname === '/api/city/trades') {

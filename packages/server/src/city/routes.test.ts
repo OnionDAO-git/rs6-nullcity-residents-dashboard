@@ -165,11 +165,24 @@ describe('routeCityApi points and souls', () => {
     expect(await contribution.json()).toEqual({ error: 'Insufficient AP balance' });
   });
 
-  test('ledger entries reconstruct the current AP balance', async () => {
-    const services = testServices(adminUser);
+  test('ledger entries reconstruct the current AP balance (attention-grant saga, idempotent)', async () => {
+    const creditCalls: Array<{ resident: string; amount: number }> = [];
+    const services = testServices(adminUser, undefined, {
+      nullcityControl: {
+        creditAttention: async (resident: string, body: { amount: number }) => {
+          creditCalls.push({ resident, amount: body.amount });
+          return { ok: true as const, resident, attentionBefore: 0, attentionAfter: body.amount, creditedAmount: body.amount };
+        },
+      } as never,
+    });
     await route(jsonRequest('/api/admin/points/grant', { resource: 'AP', amount: 750, sourceId: 'seed-ap' }), services);
+    const first = await route(jsonRequest('/api/city/residents/res:fern/attention-grants', { apAmount: 125, idempotencyKey: 'attention-1' }), services);
     await route(jsonRequest('/api/city/residents/res:fern/attention-grants', { apAmount: 125, idempotencyKey: 'attention-1' }), services);
-    await route(jsonRequest('/api/city/residents/res:fern/attention-grants', { apAmount: 125, idempotencyKey: 'attention-1' }), services);
+
+    const firstBody = await first.json() as { mocked?: boolean; intent?: { state: string } };
+    expect(firstBody.mocked).toBeUndefined();
+    expect(firstBody.intent?.state).toBe('settled');
+    expect(creditCalls).toHaveLength(1); // idempotent: City credited once
 
     const points = await route(authedRequest('/api/profile/points'), services);
     const ledger = await route(authedRequest('/api/profile/ledger?resource=AP'), services);

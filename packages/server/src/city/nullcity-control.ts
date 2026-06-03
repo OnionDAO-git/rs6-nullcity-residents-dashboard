@@ -196,6 +196,25 @@ export interface NullCityApGpExchangeRecord {
   completedAt?: string;
 }
 
+export interface NullCityCreditAttentionRequest {
+  idempotencyKey: string;
+  amount: number;
+  cityUserId?: string;
+  personId?: string;
+  patronHandle?: string;
+  sourceType?: string;
+  sourceId?: string;
+  note?: string;
+}
+
+export interface NullCityCreditAttentionResult {
+  ok: true;
+  resident: string;
+  attentionBefore: number;
+  attentionAfter: number;
+  creditedAmount: number;
+}
+
 export interface NullCityControlClient {
   listProposals(): Promise<NullCitySoulProposal[]>;
   listNcri(): Promise<NullCityNcriRecord[]>;
@@ -205,6 +224,7 @@ export interface NullCityControlClient {
   economyListings?(): Promise<NullCityEconomyListingsResponse>;
   ncriPrintQueue?(query?: NullCityNcriPrintQueueQuery): Promise<NullCityNcriPrintQueueResponse>;
   exchangeApForGp?(resident: string, body: NullCityApGpExchangeRequest): Promise<NullCityApGpExchangeRecord>;
+  creditAttention?(resident: string, body: NullCityCreditAttentionRequest): Promise<NullCityCreditAttentionResult>;
   approveProposal(id: string, adminNotes?: string): Promise<unknown>;
   rejectProposal(id: string, adminNotes?: string): Promise<unknown>;
   birthProposal(id: string): Promise<unknown>;
@@ -305,6 +325,11 @@ export function createNullCityControlClient(options: NullCityControlClientOption
         method: 'POST',
         body: JSON.stringify(body),
       }, { okStatuses: [409] })),
+    creditAttention: async (resident, body) =>
+      parseCreditAttention(await request<unknown>(`/residents/${encodeURIComponent(resident)}/attention-grants`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })),
     approveProposal: (id, adminNotes) =>
       request(`/proposals/${encodeURIComponent(id)}/approve`, {
         method: 'POST',
@@ -384,6 +409,20 @@ function parseApGpExchange(payload: unknown): NullCityApGpExchangeRecord {
     throw new NullCityControlError('invalid_ap_gp_exchange', 502);
   }
   return payload;
+}
+
+function parseCreditAttention(payload: unknown): NullCityCreditAttentionResult {
+  const record = asRecord(payload);
+  if (
+    record.ok !== true ||
+    typeof record.resident !== 'string' ||
+    typeof record.attentionBefore !== 'number' ||
+    typeof record.attentionAfter !== 'number' ||
+    typeof record.creditedAmount !== 'number'
+  ) {
+    throw new NullCityControlError('invalid_credit_attention', 502);
+  }
+  return record as unknown as NullCityCreditAttentionResult;
 }
 
 function asProposalEnvelope(payload: unknown): unknown[] | undefined {

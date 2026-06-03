@@ -154,6 +154,41 @@ export interface CityStore {
   resolveOnionId(cityUserId: string): Promise<string>;
   setIdentityAlias(personId: string, patronHandle: string): Promise<void>;
   resolvePatronHandle(personId: string): Promise<string | undefined>;
+
+  // Attention-grant saga (T0.0a)
+  createAttentionGrantIntent(input: AttentionGrantIntentCreateInput): Promise<AttentionGrantIntent>;
+  getAttentionGrantIntent(cityUserId: string, idempotencyKey: string): Promise<AttentionGrantIntent | undefined>;
+  updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent>;
+}
+
+export type AttentionGrantIntentState = 'created' | 'debited' | 'sent_to_city' | 'settled' | 'failed';
+
+export interface AttentionGrantIntent {
+  id: string;
+  cityUserId: string;
+  residentId: string;
+  apAmount: number;
+  idempotencyKey: string;
+  state: AttentionGrantIntentState;
+  standinLedgerEntryId?: string;
+  cityResponse?: Record<string, unknown>;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttentionGrantIntentCreateInput {
+  cityUserId: string;
+  residentId: string;
+  apAmount: number;
+  idempotencyKey: string;
+}
+
+export interface AttentionGrantIntentPatch {
+  state?: AttentionGrantIntentState;
+  standinLedgerEntryId?: string;
+  cityResponse?: Record<string, unknown>;
+  failureReason?: string;
 }
 
 export interface ResidentAttentionGrantInput {
@@ -206,6 +241,8 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
   const inboxMessages = new Map<string, InboxMessage[]>();
   const libraryLives: LibrarySoulLife[] = [];
   const identityAliases = new Map<string, string>(); // personId -> patronHandle
+  const attentionGrantIntents = new Map<string, AttentionGrantIntent>();
+  const attentionGrantIntentIdempotency = new Map<string, string>();
 
   function timestamp(): string {
     return now().toISOString();
@@ -663,6 +700,47 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
 
     async resolvePatronHandle(personId) {
       return identityAliases.get(personId);
+    },
+
+    async createAttentionGrantIntent(input) {
+      requireUser(input.cityUserId);
+      const key = `${input.cityUserId}:${input.idempotencyKey}`;
+      const existingId = attentionGrantIntentIdempotency.get(key);
+      if (existingId) return { ...attentionGrantIntents.get(existingId)! };
+      const ts = timestamp();
+      const intent: AttentionGrantIntent = {
+        id: makeId('agi'),
+        cityUserId: input.cityUserId,
+        residentId: input.residentId,
+        apAmount: input.apAmount,
+        idempotencyKey: input.idempotencyKey,
+        state: 'created',
+        createdAt: ts,
+        updatedAt: ts,
+      };
+      attentionGrantIntents.set(intent.id, intent);
+      attentionGrantIntentIdempotency.set(key, intent.id);
+      return { ...intent };
+    },
+
+    async getAttentionGrantIntent(cityUserId, idempotencyKey) {
+      const id = attentionGrantIntentIdempotency.get(`${cityUserId}:${idempotencyKey}`);
+      return id ? { ...attentionGrantIntents.get(id)! } : undefined;
+    },
+
+    async updateAttentionGrantIntent(id, patch) {
+      const existing = attentionGrantIntents.get(id);
+      if (!existing) throw new CityStoreError('attention_grant_intent_not_found', 404);
+      const updated: AttentionGrantIntent = {
+        ...existing,
+        ...(patch.state !== undefined ? { state: patch.state } : {}),
+        ...(patch.standinLedgerEntryId !== undefined ? { standinLedgerEntryId: patch.standinLedgerEntryId } : {}),
+        ...(patch.cityResponse !== undefined ? { cityResponse: patch.cityResponse } : {}),
+        ...(patch.failureReason !== undefined ? { failureReason: patch.failureReason } : {}),
+        updatedAt: timestamp(),
+      };
+      attentionGrantIntents.set(id, updated);
+      return { ...updated };
     },
   };
 
