@@ -75,6 +75,9 @@ export class PostgresCityStore implements CityStore {
     await this.ensureProfile(cityUser);
     await this.ensureAccount(cityUser.id, 'AP');
     await this.ensureAccount(cityUser.id, 'GP');
+    if (user.handle) {
+      await this.setIdentityAlias(user.id, user.handle); // T0.ID: personId -> patronHandle
+    }
     return cityUser;
   }
 

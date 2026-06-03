@@ -53,7 +53,10 @@ describe('runAttentionGrant', () => {
     expect(result.ledger.metadata).toMatchObject({ standin: true, nonProduction: true });
     expect(await apBalance(store, cityUserId)).toBe(625);
     expect(spy.calls).toHaveLength(1);
-    expect(spy.calls[0]).toMatchObject({ resident: 'res:fern', body: { amount: 125, idempotencyKey: 'att-1', cityUserId } });
+    expect(spy.calls[0]).toMatchObject({
+      resident: 'res:fern',
+      body: { amount: 125, idempotencyKey: 'att-1', cityUserId, personId: 'landing-1', patronHandle: 'a' },
+    });
   });
 
   test('idempotent under repeated key: debit once, one intent, one city call', async () => {

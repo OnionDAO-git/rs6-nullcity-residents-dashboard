@@ -58,6 +58,24 @@ describe('identity aliases (personId -> patronHandle)', () => {
     await store.setIdentityAlias('landing-user-1', 'alice');
     expect(await store.resolvePatronHandle('landing-user-1')).toBe('alice');
   });
+
+  test('upsertUserFromLanding auto-populates personId -> handle alias', async () => {
+    const store = new InMemoryCityStore({ now: () => '2026-06-03T00:00:00.000Z', id: () => 'city-user-1' });
+    await store.upsertUserFromLanding(landingUser);
+    expect(await store.resolvePatronHandle('landing-user-1')).toBe('alice');
+  });
+
+  test('upsert with no handle leaves the alias unset', async () => {
+    const store = new InMemoryCityStore({ now: () => '2026-06-03T00:00:00.000Z', id: () => 'city-user-2' });
+    await store.upsertUserFromLanding({ ...landingUser, id: 'landing-user-2', handle: null });
+    expect(await store.resolvePatronHandle('landing-user-2')).toBeUndefined();
+  });
+
+  test('factory upsert auto-populates the alias too', async () => {
+    const store = createInMemoryCityStore(() => new Date('2026-06-03T00:00:00.000Z'));
+    await store.upsertUserFromLanding(landingUser);
+    expect(await store.resolvePatronHandle('landing-user-1')).toBe('alice');
+  });
 });
 
 describe('city_identity_aliases migration', () => {

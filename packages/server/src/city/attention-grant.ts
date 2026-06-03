@@ -71,7 +71,12 @@ export async function runAttentionGrant(deps: AttentionGrantDeps, input: Attenti
     throw new CityStoreError('attention_credit_unconfigured', 503);
   }
 
-  // 3. Credit City attention (idempotent server-side via the same key).
+  // 3. Resolve canonical identity so City can route standing/letters by it (T0.ID).
+  //    personId === landing users.id; patronHandle is the display alias when set.
+  const personId = await deps.store.resolveOnionId(input.cityUserId);
+  const patronHandle = await deps.store.resolvePatronHandle(personId);
+
+  // 4. Credit City attention (idempotent server-side via the same key).
   intent = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'sent_to_city' });
   let cityResponse: Record<string, unknown>;
   try {
@@ -79,6 +84,8 @@ export async function runAttentionGrant(deps: AttentionGrantDeps, input: Attenti
       idempotencyKey,
       amount: apAmount,
       cityUserId: input.cityUserId,
+      personId,
+      ...(patronHandle ? { patronHandle } : {}),
       sourceType: 'resident_attention_grant',
       sourceId: idempotencyKey,
     })) as unknown as Record<string, unknown>;

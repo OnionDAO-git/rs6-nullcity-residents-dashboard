@@ -329,6 +329,9 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
       ensureProfile(cityUser);
       ensureBalance(cityUser.id, 'AP');
       ensureBalance(cityUser.id, 'GP');
+      if (user.handle) {
+        identityAliases.set(user.id, user.handle); // T0.ID: personId -> patronHandle
+      }
       return cityUser;
     },
 

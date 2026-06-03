@@ -108,6 +108,12 @@ export class InMemoryCityStore implements CityStore {
 
     this.ensureAccount(cityUser.id, 'AP');
     this.ensureAccount(cityUser.id, 'GP');
+
+    // T0.ID: keep the personId (=== landingUserId) -> patronHandle alias current
+    // so the settled-support seam can address letters by the canonical identity.
+    if (user.handle) {
+      this.identityAliases.set(user.id, user.handle);
+    }
     return clone(cityUser);
   }
 
