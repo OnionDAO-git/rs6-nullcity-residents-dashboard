@@ -502,6 +502,54 @@ export interface ProjectorStoryFrame {
   };
 }
 
+export const PROJECTOR_FRAME_STALE_AFTER_MS = 30 * 60_000;
+
+export interface RefreshProjectorFrameFreshnessOptions {
+  staleAfterMs?: number;
+}
+
+export function refreshProjectorFrameFreshness(
+  frame: ProjectorStoryFrame,
+  now: string | Date,
+  options: RefreshProjectorFrameFreshnessOptions = {},
+): ProjectorStoryFrame {
+  const staleAfterMs = options.staleAfterMs ?? PROJECTOR_FRAME_STALE_AFTER_MS;
+  const referenceTs = frame.source.digestBuiltAt || frame.generatedAt;
+  const referenceMs = Date.parse(referenceTs);
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  if (!Number.isFinite(referenceMs) || !Number.isFinite(nowMs)) {
+    return {
+      ...frame,
+      source: { ...frame.source, freshnessMs: null, freshnessStatus: 'unknown' },
+      publicHealth: {
+        ...frame.publicHealth,
+        status: frame.publicHealth.status === 'ok' ? 'degraded' : frame.publicHealth.status,
+      },
+    };
+  }
+
+  const freshnessMs = Math.max(0, nowMs - referenceMs);
+  const freshnessStatus: ProjectorFreshnessStatus = freshnessMs > staleAfterMs ? 'stale' : 'fresh';
+  const warnings = frame.publicHealth.warnings.filter(warning => !warning.toLowerCase().startsWith('storyteller frame is stale'));
+  if (freshnessStatus === 'stale') {
+    warnings.push(`storyteller frame is stale (${Math.round(freshnessMs / 60_000)}m old)`);
+  }
+
+  return {
+    ...frame,
+    source: {
+      ...frame.source,
+      freshnessMs,
+      freshnessStatus,
+    },
+    publicHealth: {
+      ...frame.publicHealth,
+      status: freshnessStatus === 'stale' ? 'stale' : frame.publicHealth.status,
+      warnings,
+    },
+  };
+}
+
 export interface ProjectorOverviewSnapshot {
   generatedAt: string;
   residents: ResidentDashboardRow[];

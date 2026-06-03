@@ -322,6 +322,52 @@ describe('story overview projector model', () => {
     expect(JSON.stringify(model)).not.toMatch(/\b(?:Public Health|Narration|fallback story|AP|GP|NCRI)\b/);
   });
 
+  test('marks old projector frames stale even when the written frame says fresh', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:stale:2026-06-03T18:00:00.000Z',
+        digestId: 'stale',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'stale',
+          digestBuiltAt: '2026-06-03T18:00:00.000Z',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'deterministic_fallback',
+          title: 'Hans escaped a dead loop',
+          body: 'Hans recovered from a stuck state.',
+          bullets: [],
+          confidence: 'fallback',
+        },
+        leadEvent: null,
+        events: [],
+        residents: [],
+        actions: [],
+        watchNext: [],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'ok',
+          totalResidents: 2,
+          activeResidents: 2,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: [],
+        },
+      },
+      now: new Date('2026-06-03T18:48:00.000Z'),
+    });
+
+    expect(model.dispatch.detail).toBe('city evidence needs refresh · live fallback narration · updated 48m ago');
+    expect(model.citySignals).toContainEqual({ label: 'Latest Story', detail: 'city evidence needs refresh', tone: 'warn' });
+    expect(model.citySignals).toContainEqual({ label: 'Projector Safety', detail: 'showing safe fallback copy', tone: 'warn' });
+  });
+
   test('rewrites legacy generic fallback frames before they reach the public projector', () => {
     const model = buildStoryOverviewModel({
       residents: [],
@@ -402,10 +448,11 @@ describe('story overview projector model', () => {
 
     expect(model.residentActions[0]).toMatchObject({
       label: 'Hans',
-      detail: 'chat at Lumbridge Castle courtyard',
+      detail: 'speaking at Lumbridge Castle courtyard',
     });
-    expect(model.atlas.pins[0]?.detail).toBe('chat at Lumbridge Castle courtyard');
+    expect(model.atlas.pins[0]?.detail).toBe('speaking at Lumbridge Castle courtyard');
     expect(JSON.stringify(model)).not.toMatch(/\b\d{4},\d{4}\b/);
+    expect(JSON.stringify(model)).not.toContain('chat at');
   });
 
   test('builds a useful Lumbridge atlas from live resident coordinates', () => {
@@ -432,7 +479,7 @@ describe('story overview projector model', () => {
     expect(model.atlas.pins.find(pin => pin.residentName === 'res:duke-horacio')?.levelLabel).toBe('L1');
     expect(model.atlas.pins.find(pin => pin.residentName === 'res:agent')).toMatchObject({
       label: 'The Steward',
-      eventLabel: 'fire lit',
+      eventLabel: 'lighting a fire',
       tone: 'event',
     });
     expect(model.atlas.offMapRegions).toEqual([
@@ -671,7 +718,7 @@ describe('story overview projector model', () => {
     expect(model.atlas.pins).toHaveLength(1);
     expect(model.atlas.pins[0]).toMatchObject({
       residentName: 'res:wren-calix',
-      eventLabel: 'chat',
+      eventLabel: 'speaking',
     });
     expect(model.atlas.offMapRegions).toEqual([]);
   });
@@ -699,12 +746,12 @@ describe('story overview projector model', () => {
 
     expect(model.atlas.pins[0]).toMatchObject({
       residentName: 'res:agent',
-      eventLabel: 'ap gp exchange',
+      eventLabel: 'trading gold for attention',
       tone: 'event',
     });
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'ap gp exchange at Lumbridge West Road',
+      detail: 'trading gold for attention at Lumbridge West Road',
     });
   });
 
@@ -795,12 +842,12 @@ describe('story overview projector model', () => {
 
     expect(model.dispatch.statusLabel).toBe('live feed');
     expect(model.dispatch.title).toBe('The Steward is moving the city forward');
-    expect(model.dispatch.body).toBe('The Steward is fire lit at Lumbridge West Road. The map is live; the story follows the evidence.');
+    expect(model.dispatch.body).toBe('The Steward is lighting a fire at Lumbridge West Road. The map is live; the story follows the evidence.');
     expect(model.dispatch.bullets).toEqual([]);
     expect(JSON.stringify(model.dispatch)).not.toContain('Agent lit a fire on the west road');
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'fire lit at Lumbridge West Road',
+      detail: 'lighting a fire at Lumbridge West Road',
       path: '/residents/agent',
     });
     expect(model.citySignals.map(signal => signal.label)).toContain('Visible AP');
@@ -855,8 +902,10 @@ describe('story overview projector model', () => {
     expect(model.citySignals.map(item => item.label)).toEqual(['Online Residents', 'Mapped Residents', 'Visible AP', 'Storyteller']);
     expect(model.leaderboardItems[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'chat | 33 nearby | Lumbridge Castle courtyard',
+      detail: 'speaking near 33 people and objects at Lumbridge Castle courtyard',
     });
+    expect(JSON.stringify(model.leaderboardItems)).not.toContain('|');
+    expect(JSON.stringify(model.leaderboardItems)).not.toContain('nearby');
     expect(model.leaderboardItems.map(item => item.label)).not.toContain('Object Magnet');
     expect(model.dramaItems.length).toBeLessThanOrEqual(3);
     expect(model.watchItems.length).toBeLessThanOrEqual(2);

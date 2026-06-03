@@ -1,4 +1,4 @@
-import type { ProjectorOverviewSnapshot, ProjectorStoryFrame, ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import { refreshProjectorFrameFreshness, type ProjectorOverviewSnapshot, type ProjectorStoryFrame, type ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import { toPublicOverviewResident } from './public-overview';
 
 export interface BuildProjectorOverviewSnapshotInput {
@@ -13,6 +13,6 @@ export function buildProjectorOverviewSnapshot(input: BuildProjectorOverviewSnap
     generatedAt: input.generatedAt,
     residents: input.residents.map(toPublicOverviewResident),
     ...(input.patronAp !== undefined ? { patronAp: input.patronAp } : {}),
-    ...(input.projectorFrame ? { projectorFrame: input.projectorFrame } : {}),
+    ...(input.projectorFrame ? { projectorFrame: refreshProjectorFrameFreshness(input.projectorFrame, input.generatedAt) } : {}),
   };
 }

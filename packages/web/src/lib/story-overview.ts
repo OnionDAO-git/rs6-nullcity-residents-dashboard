@@ -1,4 +1,4 @@
-import type { DashboardOverview, Position, ProjectorStoryFrame, ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import { refreshProjectorFrameFreshness, type DashboardOverview, type Position, type ProjectorStoryFrame, type ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { StorytellerDigestSummary } from './api';
 import { residentRouteSlug } from './resident-route';
 
@@ -91,7 +91,7 @@ const VIEWPORTS: StoryOverviewViewport[] = [
 const FALLBACK_VIEWPORT = LUMBRIDGE_VIEWPORT;
 
 export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): StoryOverviewModel {
-  const projectorFrame = input.projectorFrame;
+  const projectorFrame = input.projectorFrame ? refreshProjectorFrameFreshness(input.projectorFrame, input.now || new Date()) : undefined;
   const residents = projectorFrame ? publicProjectorResidentRows(input.residents, projectorFrame) : input.residents;
   const positioned = residents
     .map(row => ({ row, position: residentPosition(row) }))
@@ -181,7 +181,8 @@ function residentPin(
   leadResident: ResidentDashboardRow | undefined,
   storytellerEventKinds: Map<string, string>,
 ): StoryOverviewPin {
-  const eventLabel = eventKindLabel(row.feed?.latestEventKind || row.lastEvent?.kind || row.storyArc?.latestEventKind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
+  const eventKind = row.feed?.latestEventKind || row.lastEvent?.kind || row.storyArc?.latestEventKind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '';
+  const eventLabel = publicActionPhrase(eventKind);
   const isLead = Boolean(leadResident && namesMatch(row.name, leadResident.name));
   const needsWatch = row.inCombat || (row.attention ?? 999) <= 2;
   const level = position.level ?? 0;
@@ -240,7 +241,7 @@ function buildDispatch(
   const dispatch = digest && hasPublicProjectorDispatch(digest) ? digest.dispatch : undefined;
   const leadPosition = leadResident ? residentPosition(leadResident) : undefined;
   const fallbackTitle = leadResident ? `${displayName(leadResident.name)} is moving the city forward` : 'Null City is coming online';
-  const fallbackEvent = leadResident ? eventKindLabel(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || '') : '';
+  const fallbackEvent = leadResident ? publicActionPhrase(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || '') : '';
   const fallbackBody = leadResident && leadPosition
     ? `${displayName(leadResident.name)} is ${fallbackEvent === 'quiet' ? 'visible' : fallbackEvent} at ${locationLabel(leadPosition)}. The map is live; the story follows the evidence.`
     : 'Residents with live positions will appear here as soon as the dashboard feed reports them.';
@@ -266,7 +267,7 @@ function buildProjectorFrameDispatch(frame: ProjectorStoryFrame, now: Date | und
   const freshness = frame.source.freshnessStatus === 'fresh'
     ? 'fresh city evidence'
     : frame.source.freshnessStatus === 'stale'
-      ? 'stale city evidence'
+      ? 'city evidence needs refresh'
       : 'city evidence freshness unknown';
   const source = frame.narration.source === 'verified_dispatch' ? 'verified narration' : 'live fallback narration';
   return {
@@ -332,7 +333,7 @@ function buildResidentActions(
     .slice(0, 10)
     .map(row => {
       const position = residentPosition(row);
-      const eventLabel = eventKindLabel(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
+      const eventLabel = publicActionPhrase(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
       return {
         label: displayName(row.name),
         detail: position ? `${eventLabel} at ${locationLabel(position)}` : row.thinking?.activePlan || eventLabel,
@@ -387,15 +388,17 @@ function buildLeaderboardItems(
     .map(row => {
       const position = residentPosition(row);
       const nearby = nearbyActivityCount(row);
-      const eventLabel = eventKindLabel(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
+      const eventLabel = publicActionPhrase(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
       const detailParts = [
         eventLabel,
-        nearby > 0 ? `${nearby.toLocaleString()} nearby` : '',
         position ? locationLabel(position) : '',
       ].filter(Boolean);
+      const detail = position && nearby > 0
+        ? `${eventLabel} near ${nearbyProximityLabel(nearby)} at ${locationLabel(position)}`
+        : detailParts.join(' at ');
       return {
         label: displayName(row.name),
-        detail: detailParts.join(' | ') || 'waiting for live signal',
+        detail: detail || 'waiting for live signal',
         path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
         tone: row.inCombat || (row.attention ?? 999) <= 2 ? 'warn' : 'ok',
       };
@@ -475,7 +478,7 @@ function buildWatchItems(
   const items: StoryOverviewListItem[] = [];
   if (leadResident) {
     const position = residentPosition(leadResident);
-    const eventLabel = eventKindLabel(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || leadResident.body?.lastAction?.kind || '');
+    const eventLabel = publicActionPhrase(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || leadResident.body?.lastAction?.kind || '');
     items.push({
       label: `Follow ${displayName(leadResident.name)}`,
       detail: position ? `${eventLabel} at ${locationLabel(position)}` : eventLabel,
@@ -702,6 +705,35 @@ function humanizeAcronyms(text: string): string {
 function eventKindLabel(kind: string): string {
   const cleaned = kind.trim().replace(/_/g, ' ');
   return cleaned || 'quiet';
+}
+
+function publicActionPhrase(kind: string): string {
+  const cleaned = kind.trim().toLowerCase();
+  switch (cleaned) {
+    case 'chat':
+    case 'say':
+    case 'speech':
+      return 'speaking';
+    case 'arrived':
+    case 'position_changed':
+    case 'move':
+    case 'walk':
+      return 'moving';
+    case 'fire_lit':
+      return 'lighting a fire';
+    case 'stuck_recovered':
+      return 'recovering from being stuck';
+    case 'ap_gp_exchange':
+      return 'trading gold for attention';
+    case 'attention_low':
+      return 'running low on attention';
+    default:
+      return eventKindLabel(kind);
+  }
+}
+
+function nearbyProximityLabel(count: number): string {
+  return `${count.toLocaleString()} ${count === 1 ? 'person or object' : 'people and objects'}`;
 }
 
 function locationLabel(position: Position): string {

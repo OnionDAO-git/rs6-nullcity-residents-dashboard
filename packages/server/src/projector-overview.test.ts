@@ -64,4 +64,52 @@ describe('buildProjectorOverviewSnapshot', () => {
     expect(JSON.stringify(snapshot)).not.toContain('private internal plan');
     expect(JSON.stringify(snapshot)).not.toContain('debug stack');
   });
+
+  test('recomputes projector frame freshness when serving an old latest-frame', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:digest-old:2026-06-03T18:00:00.000Z',
+      digestId: 'digest-old',
+      generatedAt: '2026-06-03T18:00:00.000Z',
+      source: {
+        digestId: 'digest-old',
+        digestBuiltAt: '2026-06-03T18:00:00.000Z',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'deterministic_fallback',
+        title: 'Hans escaped a dead loop',
+        body: 'Hans recovered from a stuck state.',
+        bullets: [],
+      },
+      leadEvent: null,
+      events: [],
+      residents: [],
+      actions: [],
+      watchNext: [],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 2,
+        activeResidents: 2,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-03T18:48:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.source.freshnessMs).toBe(48 * 60_000);
+    expect(snapshot.projectorFrame?.source.freshnessStatus).toBe('stale');
+    expect(snapshot.projectorFrame?.publicHealth.status).toBe('stale');
+    expect(snapshot.projectorFrame?.publicHealth.warnings).toEqual(['storyteller frame is stale (48m old)']);
+    expect(frame.source.freshnessStatus).toBe('fresh');
+  });
 });
