@@ -3433,39 +3433,41 @@
     {/if}
 
     <section class="projector-broadcast-grid">
-      <article class="projector-dispatch">
-        <div class="row">
-          <div class="panel-title">Live Story</div>
-          <span class={`tag ${cityProjectorOverview.dispatch.statusTone}`}>{cityProjectorOverview.dispatch.statusLabel}</span>
-        </div>
-        <h2>{cityProjectorOverview.dispatch.title}</h2>
-        <div class="projector-story-copy">
-          {#if cityProjectorOverview.dispatch.bodyLead}
-            <p class="projector-story-lede">{cityProjectorOverview.dispatch.bodyLead}</p>
-          {/if}
-          {#if cityProjectorOverview.dispatch.bodyParagraphs.length}
-            <div class="projector-story-paragraphs">
-              {#each cityProjectorOverview.dispatch.bodyParagraphs as paragraph}
-                <p>{paragraph}</p>
+      {#key `${cityProjectorOverview.dispatch.title}|${cityProjectorOverview.dispatch.statusLabel}|${cityProjectorOverview.dispatch.detail}|${cityProjectorOverview.dispatch.bodyLead}`}
+        <article class="projector-dispatch">
+          <div class="row">
+            <div class="panel-title">Live Story</div>
+            <span class={`tag ${cityProjectorOverview.dispatch.statusTone}`}>{cityProjectorOverview.dispatch.statusLabel}</span>
+          </div>
+          <h2>{cityProjectorOverview.dispatch.title}</h2>
+          <div class="projector-story-copy">
+            {#if cityProjectorOverview.dispatch.bodyLead}
+              <p class="projector-story-lede">{cityProjectorOverview.dispatch.bodyLead}</p>
+            {/if}
+            {#if cityProjectorOverview.dispatch.bodyParagraphs.length}
+              <div class="projector-story-paragraphs">
+                {#each cityProjectorOverview.dispatch.bodyParagraphs as paragraph}
+                  <p>{paragraph}</p>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          {#if cityProjectorOverview.dispatch.bullets.length}
+            <div class="projector-story-beats-header">
+              <div class="panel-title">Key Facts</div>
+            </div>
+            <div class="projector-story-beats" aria-label="Story beats">
+              {#each cityProjectorOverview.dispatch.bullets as bullet, index}
+                <div class="projector-story-beat">
+                  <small>Fact {index + 1}</small>
+                  <span>{bullet}</span>
+                </div>
               {/each}
             </div>
           {/if}
-        </div>
-        {#if cityProjectorOverview.dispatch.bullets.length}
-          <div class="projector-story-beats-header">
-            <div class="panel-title">Key Facts</div>
-          </div>
-          <div class="projector-story-beats" aria-label="Story beats">
-            {#each cityProjectorOverview.dispatch.bullets as bullet, index}
-              <div class="projector-story-beat">
-                <small>Fact {index + 1}</small>
-                <span>{bullet}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        <small>{cityProjectorOverview.dispatch.detail}</small>
-      </article>
+          <small>{cityProjectorOverview.dispatch.detail}</small>
+        </article>
+      {/key}
 
       <article class="projector-atlas-panel">
         <div class="row">

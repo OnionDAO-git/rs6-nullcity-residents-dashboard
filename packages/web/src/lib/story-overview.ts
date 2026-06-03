@@ -253,20 +253,22 @@ function buildDispatch(
 }
 
 function buildProjectorFrameDispatch(frame: ProjectorStoryFrame, now: Date | undefined): StoryOverviewDispatch {
-  const formattedBody = formatStoryBody(prettifyResidentRefs(frame.narration.body));
+  const publicTitle = publicProjectorTitle(frame);
+  const publicBody = publicProjectorBody(frame);
+  const formattedBody = formatStoryBody(publicBody);
   const freshness = frame.source.freshnessStatus === 'fresh'
-    ? 'fresh source'
+    ? 'fresh city evidence'
     : frame.source.freshnessStatus === 'stale'
-      ? 'stale source'
-      : 'source freshness unknown';
-  const source = frame.narration.source === 'verified_dispatch' ? 'verified dispatch' : 'fallback story';
+      ? 'stale city evidence'
+      : 'city evidence freshness unknown';
+  const source = frame.narration.source === 'verified_dispatch' ? 'verified narration' : 'live fallback narration';
   return {
-    title: prettifyResidentRefs(frame.narration.title),
-    body: prettifyResidentRefs(frame.narration.body),
+    title: publicTitle,
+    body: publicBody,
     bodyLead: formattedBody.bodyLead,
     bodyParagraphs: formattedBody.bodyParagraphs,
-    bullets: frame.narration.bullets.map(prettifyResidentRefs).slice(0, 4),
-    statusLabel: frame.narration.source === 'verified_dispatch' ? 'verified story' : 'grounded fallback',
+    bullets: frame.narration.bullets.map(publicProjectorCopy).slice(0, 4),
+    statusLabel: frame.narration.source === 'verified_dispatch' ? 'verified story' : 'grounded live story',
     statusTone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn',
     detail: `${freshness} · ${source} · updated ${relativeTime(frame.generatedAt, now)}`,
   };
@@ -352,12 +354,17 @@ function buildCitySignals(
 function buildProjectorFrameCitySignals(frame: ProjectorStoryFrame): StoryOverviewListItem[] {
   const health = frame.publicHealth;
   const freshnessTone = frame.source.freshnessStatus === 'fresh' ? 'ok' : 'warn';
-  const healthTone = health.status === 'ok' ? 'ok' : health.status === 'stale' ? 'warn' : 'warn';
+  const safetyDetail = frame.narration.source === 'verified_dispatch'
+    ? 'verified narration is live'
+    : 'showing safe fallback copy';
+  const attentionDetail = health.lowApResidents > 0
+    ? `${health.lowApResidents.toLocaleString()} resident${health.lowApResidents === 1 ? '' : 's'} near the edge`
+    : 'no residents at the edge';
   return [
     { label: 'Residents Awake', detail: `${health.activeResidents.toLocaleString()} / ${health.totalResidents.toLocaleString()} active`, tone: health.activeResidents > 0 ? 'ok' : 'warn' },
-    { label: 'Story Freshness', detail: `${frame.source.freshnessStatus} source`, tone: freshnessTone },
-    { label: 'Public Health', detail: health.status, tone: healthTone },
-    { label: 'Narration', detail: frame.narration.source === 'verified_dispatch' ? 'verified dispatch' : 'fallback story', tone: frame.narration.source === 'verified_dispatch' ? 'ok' : 'warn' },
+    { label: 'Latest Story', detail: frame.source.freshnessStatus === 'fresh' ? 'fresh city evidence' : 'city evidence needs refresh', tone: freshnessTone },
+    { label: 'Projector Safety', detail: safetyDetail, tone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn' },
+    { label: 'Attention Pressure', detail: attentionDetail, tone: health.lowApResidents > 0 ? 'warn' : 'ok' },
   ];
 }
 
@@ -483,7 +490,7 @@ function buildWatchItems(
 
 function buildProjectorFrameWatchItems(frame: ProjectorStoryFrame): StoryOverviewListItem[] {
   const watch = frame.watchNext.map(item => ({
-    label: prettifyResidentRefs(item),
+    label: publicProjectorWatchLine(item, frame.leadEvent),
     detail: 'Watch this next.',
     tone: 'ok' as const,
   }));
@@ -589,6 +596,92 @@ function displayName(name: string): string {
 
 function prettifyResidentRefs(text: string): string {
   return humanizeAcronyms(text.replace(/\bres:([a-z0-9_-]+)/gi, (_match, slug: string) => displayName(`res:${slug}`)));
+}
+
+function publicProjectorCopy(text: string): string {
+  return prettifyResidentRefs(text)
+    .replace(/\bAn NCRI\b/g, 'A special item')
+    .replace(/\ban NCRI\b/g, 'a special item')
+    .replace(/\bAttention-for-gold\b/g, 'Gold-for-attention')
+    .replace(/\battention-for-gold\b/g, 'gold-for-attention')
+    .replace(/\bRuneScape GP\b/g, 'RuneScape gold')
+    .replace(/\bAP\b/g, 'attention')
+    .replace(/\bGP\b/g, 'RuneScape gold')
+    .replace(/\bNCRI\b/g, 'special item');
+}
+
+function publicProjectorTitle(frame: ProjectorStoryFrame): string {
+  const title = publicProjectorCopy(frame.narration.title);
+  if (!frame.leadEvent || !/\bis where the city is pointing\b/i.test(title)) return title;
+  return titleForLeadEvent(frame.leadEvent);
+}
+
+function publicProjectorBody(frame: ProjectorStoryFrame): string {
+  const body = publicProjectorCopy(frame.narration.body);
+  if (!frame.leadEvent || !/\bis the current focus:/i.test(body)) return body;
+  return bodyForLeadEvent(frame.leadEvent, frame.publicHealth.activeResidents);
+}
+
+function publicProjectorWatchLine(item: string, leadEvent: ProjectorStoryFrame['leadEvent']): string {
+  const line = publicProjectorCopy(item);
+  if (!leadEvent) return line;
+  if (/\bafter attention-for-gold exchange\b/i.test(item) || /\battention-for-GP\b/i.test(item)) {
+    return watchLineForLeadEvent(leadEvent);
+  }
+  return line;
+}
+
+function titleForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent']>): string {
+  const name = displayName(event.residentName);
+  switch (event.label) {
+    case 'Attention-for-gold exchange':
+      return `${name} traded gold for more time`;
+    case 'Recovered from being stuck':
+      return `${name} escaped a dead loop`;
+    case 'Attention running low':
+      return `${name} is running out of attention`;
+    case 'Gold observed':
+    case 'Gold earned':
+      return `${name} put RuneScape gold on the board`;
+    case 'Special item created':
+    case 'Special item redeemed':
+      return `${name} moved a special item forward`;
+    case 'Goal completed':
+      return `${name} finished a bounded goal`;
+    default:
+      return `${name} has the lead story`;
+  }
+}
+
+function bodyForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent']>, activeResidents: number): string {
+  const name = displayName(event.residentName);
+  const active = activeResidents > 0
+    ? ` ${activeResidents.toLocaleString()} resident${activeResidents === 1 ? '' : 's'} are still active.`
+    : '';
+  switch (event.label) {
+    case 'Attention-for-gold exchange':
+      return `${name} converted RuneScape gold into attention.${active}`;
+    case 'Recovered from being stuck':
+      return `${name} recovered from a stuck state.${active}`;
+    case 'Attention running low':
+      return `${name} is near the edge, and human support can still change the outcome.${active}`;
+    default:
+      return `${name} has the strongest verified beat in the current window.${active}`;
+  }
+}
+
+function watchLineForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent']>): string {
+  const name = displayName(event.residentName);
+  switch (event.label) {
+    case 'Attention-for-gold exchange':
+      return `Whether ${name}'s gold-for-attention exchange buys real progress.`;
+    case 'Recovered from being stuck':
+      return `Whether ${name} keeps moving after the recovery.`;
+    case 'Attention running low':
+      return `Whether ${name} gets attention before the window closes.`;
+    default:
+      return `${name}'s next move after the lead event.`;
+  }
 }
 
 function humanizeAcronyms(text: string): string {

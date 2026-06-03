@@ -110,15 +110,15 @@ describe('story overview projector model', () => {
     expect(model.dispatch).toMatchObject({
       title: 'Hans turns attention into motion',
       statusLabel: 'verified story',
-      detail: 'fresh source · verified dispatch · updated just now',
+      detail: 'fresh city evidence · verified narration · updated just now',
     });
     expect(model.dispatch.bodyLead).toBe('Hans took the crowd gift and moved through the courtyard.');
     expect(model.dispatch.bullets).toEqual(['Human attention changed Hans today.', 'No private handles are exposed.']);
     expect(model.citySignals).toEqual([
       { label: 'Residents Awake', detail: '10 / 23 active', tone: 'ok' },
-      { label: 'Story Freshness', detail: 'fresh source', tone: 'ok' },
-      { label: 'Public Health', detail: 'ok', tone: 'ok' },
-      { label: 'Narration', detail: 'verified dispatch', tone: 'ok' },
+      { label: 'Latest Story', detail: 'fresh city evidence', tone: 'ok' },
+      { label: 'Projector Safety', detail: 'verified narration is live', tone: 'ok' },
+      { label: 'Attention Pressure', detail: 'no residents at the edge', tone: 'ok' },
     ]);
     expect(model.dramaItems[0]).toMatchObject({
       label: 'Patron gift',
@@ -171,10 +171,135 @@ describe('story overview projector model', () => {
       },
     });
 
-    expect(model.dispatch.title).toBe('QA Guardian converted GP into AP');
-    expect(model.dispatch.body).toBe('QA Guardian watched an NCRI trail form.');
-    expect(model.dispatch.bullets).toEqual(['GP evidence and AP evidence stayed separate.']);
-    expect(model.watchItems[0]?.label).toBe('Whether QA Guardian spends AP wisely.');
+    expect(model.dispatch.title).toBe('QA Guardian converted RuneScape gold into attention');
+    expect(model.dispatch.body).toBe('QA Guardian watched a special item trail form.');
+    expect(model.dispatch.bullets).toEqual(['RuneScape gold evidence and attention evidence stayed separate.']);
+    expect(model.watchItems[0]?.label).toBe('Whether QA Guardian spends attention wisely.');
+  });
+
+  test('keeps public frame projector signals human-facing instead of operator-facing', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:digest-fallback:2026-06-03T18:00:00.000Z',
+        digestId: 'digest-fallback',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'digest-fallback',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'deterministic_fallback',
+          title: 'Agent escaped a dead loop',
+          body: 'Agent recovered from a stuck state. Two residents are still active.',
+          bullets: ['What happened: Agent recovered from being stuck.'],
+          confidence: 'fallback',
+        },
+        leadEvent: {
+          ref: 'stuck-1',
+          label: 'Recovered from being stuck',
+          residentName: 'res:agent',
+          happenedAt: '2026-06-03T17:59:00.000Z',
+          importance: 'medium',
+          note: 'res:agent recovered from being stuck.',
+          whyItMatters: 'pathing recovery is visible progress, not a dead loop',
+        },
+        events: [],
+        residents: [],
+        actions: [],
+        watchNext: ['Whether Agent keeps moving after the recovery.'],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'degraded',
+          totalResidents: 2,
+          activeResidents: 2,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: ['model call was nooped (unknown)'],
+        },
+      },
+      now: new Date('2026-06-03T18:00:30.000Z'),
+    });
+
+    expect(model.dispatch.statusLabel).toBe('grounded live story');
+    expect(model.dispatch.detail).toBe('fresh city evidence · live fallback narration · updated just now');
+    expect(model.citySignals).toEqual([
+      { label: 'Residents Awake', detail: '2 / 2 active', tone: 'ok' },
+      { label: 'Latest Story', detail: 'fresh city evidence', tone: 'ok' },
+      { label: 'Projector Safety', detail: 'showing safe fallback copy', tone: 'warn' },
+      { label: 'Attention Pressure', detail: 'no residents at the edge', tone: 'ok' },
+    ]);
+    expect(JSON.stringify(model)).not.toMatch(/\b(?:Public Health|Narration|fallback story|AP|GP|NCRI)\b/);
+  });
+
+  test('rewrites legacy generic fallback frames before they reach the public projector', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:legacy:2026-06-03T18:00:00.000Z',
+        digestId: 'legacy',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'legacy',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'deterministic_fallback',
+          title: 'Qa Guardian is where the city is pointing',
+          body: 'Qa Guardian is the current focus: exchanged 250 GP for 500 AP. 17 residents are still active.',
+          bullets: [
+            'Attention-for-gold exchange: RuneScape gold is now part of the Null City economy trail',
+            'RuneScape GP evidence is present and kept separate from attention.',
+          ],
+          confidence: 'fallback',
+        },
+        leadEvent: {
+          ref: 'exchange-1',
+          label: 'Attention-for-gold exchange',
+          residentName: 'res:qa-guardian',
+          happenedAt: '2026-06-03T17:59:00.000Z',
+          importance: 'high',
+          note: 'exchanged 250 GP for 500 AP',
+          whyItMatters: 'RuneScape gold is now part of the Null City economy trail',
+        },
+        events: [],
+        residents: [],
+        actions: [],
+        watchNext: [
+          'Qa Guardian after attention-for-gold exchange.',
+          'Whether attention-for-GP turns into a useful human trade.',
+        ],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'degraded',
+          totalResidents: 17,
+          activeResidents: 17,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: ['model call was nooped (unknown)'],
+        },
+      },
+    });
+
+    expect(model.dispatch.title).toBe('QA Guardian traded gold for more time');
+    expect(model.dispatch.bodyLead).toBe('QA Guardian converted RuneScape gold into attention.');
+    expect(model.dispatch.bullets).toEqual([
+      'Gold-for-attention exchange: RuneScape gold is now part of the Null City economy trail',
+      'RuneScape gold evidence is present and kept separate from attention.',
+    ]);
+    expect(model.watchItems[0]?.label).toBe("Whether QA Guardian's gold-for-attention exchange buys real progress.");
+    expect(JSON.stringify(model)).not.toContain('where the city is pointing');
+    expect(JSON.stringify(model)).not.toContain('current focus');
+    expect(JSON.stringify(model)).not.toContain('attention-for-RuneScape gold');
+    expect(JSON.stringify(model)).not.toContain('RuneScape RuneScape gold');
   });
 
   test('describes live resident action locations with landmarks instead of raw coordinates', () => {
