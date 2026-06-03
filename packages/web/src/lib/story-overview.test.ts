@@ -177,6 +177,92 @@ describe('story overview projector model', () => {
     expect(model.watchItems[0]?.label).toBe('Whether QA Guardian spends attention wisely.');
   });
 
+  test('uses public frame residents as the projector allowlist', () => {
+    const model = buildStoryOverviewModel({
+      residents: [
+        resident({
+          name: 'res:hans',
+          position: { x: 3221, y: 3218, level: 0 },
+          feed: feed({ latestEventKind: 'chat', nearby: { players: 1, npcs: 0, objects: 0, worldItems: 0 } }),
+        }),
+        resident({
+          name: 'res:agent',
+          position: { x: 3231, y: 3202, level: 0 },
+          feed: feed({ latestEventKind: 'move_to' }),
+        }),
+        resident({
+          name: 'res:qa-guardian',
+          position: { x: 3224, y: 3219, level: 0 },
+          feed: feed({ latestEventKind: 'chat' }),
+        }),
+      ],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:public-only:2026-06-03T18:00:00.000Z',
+        digestId: 'public-only',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'public-only',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'deterministic_fallback',
+          title: 'Hans escaped a dead loop',
+          body: 'Hans recovered from a stuck state. Two residents are still active.',
+          bullets: ['What happened: Hans recovered from being stuck.'],
+          confidence: 'fallback',
+        },
+        leadEvent: {
+          ref: 'stuck-hans',
+          label: 'Recovered from being stuck',
+          residentName: 'res:hans',
+          happenedAt: '2026-06-03T17:59:00.000Z',
+          importance: 'medium',
+          note: 'res:hans recovered from being stuck.',
+          whyItMatters: 'pathing recovery is visible progress, not a dead loop',
+        },
+        events: [],
+        residents: [
+          {
+            residentName: 'res:hans',
+            displayName: 'Hans',
+            attention: 5_000,
+            status: 'active',
+            gpObserved: null,
+          },
+          {
+            residentName: 'res:agent',
+            displayName: 'The Steward',
+            attention: 30_000,
+            status: 'active',
+            gpObserved: null,
+          },
+        ],
+        actions: [],
+        watchNext: ['Whether Hans keeps moving after the recovery.'],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'degraded',
+          totalResidents: 2,
+          activeResidents: 2,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: ['model call was nooped (unknown)'],
+        },
+      },
+    });
+
+    const serialized = JSON.stringify(model);
+    expect(model.atlas.pins.map(pin => pin.residentName).sort()).toEqual(['res:agent', 'res:hans']);
+    expect(model.leaderboardItems.map(item => item.label)).toEqual(['Hans', 'The Steward']);
+    expect(model.residentActions.map(item => item.label)).toEqual(['Hans', 'The Steward']);
+    expect(serialized).not.toContain('qa-guardian');
+    expect(serialized).not.toContain('QA Guardian');
+  });
+
   test('keeps public frame projector signals human-facing instead of operator-facing', () => {
     const model = buildStoryOverviewModel({
       residents: [],

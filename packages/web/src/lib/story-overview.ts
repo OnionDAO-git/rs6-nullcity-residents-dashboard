@@ -91,8 +91,8 @@ const VIEWPORTS: StoryOverviewViewport[] = [
 const FALLBACK_VIEWPORT = LUMBRIDGE_VIEWPORT;
 
 export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): StoryOverviewModel {
-  const residents = input.residents;
   const projectorFrame = input.projectorFrame;
+  const residents = projectorFrame ? publicProjectorResidentRows(input.residents, projectorFrame) : input.residents;
   const positioned = residents
     .map(row => ({ row, position: residentPosition(row) }))
     .filter((entry): entry is { row: ResidentDashboardRow; position: Position } => Boolean(entry.position));
@@ -121,6 +121,13 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
     dramaItems: projectorFrame ? buildProjectorFrameDramaItems(projectorFrame) : buildDramaItems(residents, digest, offMapRegions),
     watchItems: projectorFrame ? buildProjectorFrameWatchItems(projectorFrame) : buildWatchItems(residents, digest, offMapRegions, leadResident),
   };
+}
+
+function publicProjectorResidentRows(rows: ResidentDashboardRow[], frame: ProjectorStoryFrame): ResidentDashboardRow[] {
+  const publicSlugs = new Set(frame.residents.map(resident => residentRouteSlug(resident.residentName)));
+  if (frame.leadEvent?.residentName) publicSlugs.add(residentRouteSlug(frame.leadEvent.residentName));
+  if (!publicSlugs.size) return [];
+  return rows.filter(row => publicSlugs.has(residentRouteSlug(row.name)));
 }
 
 function residentPosition(row: ResidentDashboardRow): Position | undefined {
