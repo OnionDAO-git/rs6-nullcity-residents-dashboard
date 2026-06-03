@@ -1,12 +1,17 @@
 import { CityStoreError, type AttentionGrantIntent, type CityStore } from './store';
 import type { NullCityControlClient } from './nullcity-control';
-import type { PointLedgerEntry } from './types';
+import type { PointLedgerEntry, PointResource } from './types';
 
 /**
- * T0.0a — Support skeleton saga. Replaces the old mocked grantResidentAttention:
- * records an intent, debits a LABELLED NON-PRODUCTION stand-in ledger (swap the
- * one block below for Dev's real consent-spend API), then calls the real City
- * creditAttention. Idempotent on the caller's idempotencyKey end-to-end.
+ * T0.0a — Support skeleton saga. Replaces the old mocked grantResidentAttention.
+ *
+ * Ordering matters: we **pre-flight the balance**, then **credit City**, then
+ * **debit the stand-in** — i.e. debit-after-confirm. That way a City failure
+ * never strands the user's AP (no debit happened), and a retry can never grant
+ * free attention (both the City credit and the stand-in debit are idempotent on
+ * the caller's idempotencyKey). The stand-in is a LABELLED NON-PRODUCTION debit
+ * of the BFF point_accounts projection — swap `debitStandIn` for Dev's real
+ * user-consent spend API when it lands.
  */
 export interface AttentionGrantDeps {
   store: CityStore;
@@ -42,41 +47,32 @@ export async function runAttentionGrant(deps: AttentionGrantDeps, input: Attenti
     idempotencyKey,
   });
 
-  // 2. Debit the LABELLED NON-PRODUCTION stand-in (BFF point_accounts projection).
-  //    >>> SWAP THIS BLOCK for Dev's real user-consent spend API when available. <<<
-  //    Idempotent on (cityUserId, resource, sourceType, sourceId): replay returns the same entry.
-  const ledger = await deps.store.appendPointLedger({
-    cityUserId: input.cityUserId,
-    resource: 'AP',
-    delta: -apAmount,
-    sourceType: 'attention_grant_standin',
-    sourceId: idempotencyKey,
-    memo: input.memo || `Attention grant stand-in: ${input.residentId}`,
-    metadata: {
-      residentId: input.residentId,
-      standin: true,
-      nonProduction: true,
-      note: 'NON-PRODUCTION stand-in for Dev consent-spend API',
-    },
-  });
-
-  // Replay short-circuit: already settled → return without re-crediting City.
+  // Replay short-circuit: an already-settled grant returns its cached result.
+  // The stand-in debit is idempotent, so re-running it just re-fetches the entry.
   if (intent.state === 'settled') {
+    const ledger = await debitStandIn(deps.store, input, apAmount, idempotencyKey);
     return { intent, ledger, cityResponse: intent.cityResponse };
   }
-
-  intent = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'debited', standinLedgerEntryId: ledger.id });
 
   if (!deps.control?.creditAttention) {
     throw new CityStoreError('attention_credit_unconfigured', 503);
   }
 
-  // 3. Resolve canonical identity so City can route standing/letters by it (T0.ID).
-  //    personId === landing users.id; patronHandle is the display alias when set.
+  // 2. Pre-flight: confirm the stand-in can cover the spend BEFORE crediting City,
+  //    so we never credit a resident and then fail to debit. (The debit itself is
+  //    still guarded by the ledger's balance>=0 check; this just fails fast + clean.)
+  const balance = await apBalance(deps.store, input.cityUserId);
+  if (balance < apAmount) {
+    await deps.store.updateAttentionGrantIntent(intent.id, { state: 'failed', failureReason: 'insufficient_points' });
+    throw new CityStoreError('insufficient_points', 409);
+  }
+
+  // 3. Resolve canonical identity so City routes standing/letters by it (T0.ID).
   const personId = await deps.store.resolveOnionId(input.cityUserId);
   const patronHandle = await deps.store.resolvePatronHandle(personId);
 
-  // 4. Credit City attention (idempotent server-side via the same key).
+  // 4. Credit City attention FIRST (idempotent server-side on the same key).
+  //    On failure: no debit has happened yet → the user's AP is untouched.
   intent = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'sent_to_city' });
   let cityResponse: Record<string, unknown>;
   try {
@@ -97,7 +93,40 @@ export async function runAttentionGrant(deps: AttentionGrantDeps, input: Attenti
     throw err;
   }
 
-  // 4. Settle.
-  intent = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'settled', cityResponse });
+  // 5. Debit the stand-in AFTER the credit is confirmed, then settle.
+  const ledger = await debitStandIn(deps.store, input, apAmount, idempotencyKey);
+  intent = await deps.store.updateAttentionGrantIntent(intent.id, {
+    state: 'settled',
+    standinLedgerEntryId: ledger.id,
+    cityResponse,
+  });
   return { intent, ledger, cityResponse };
+}
+
+async function apBalance(store: CityStore, cityUserId: string): Promise<number> {
+  const balances = await store.getPointBalances(cityUserId);
+  return balances.find((b: { resource: PointResource; balance: number }) => b.resource === 'AP')?.balance ?? 0;
+}
+
+/**
+ * LABELLED NON-PRODUCTION stand-in debit of the BFF point_accounts projection.
+ * >>> SWAP THIS for Dev's real user-consent spend API when available. <<<
+ * Idempotent on (cityUserId, resource, sourceType, sourceId): replay returns the
+ * same entry without moving the balance.
+ */
+async function debitStandIn(store: CityStore, input: AttentionGrantInput, apAmount: number, idempotencyKey: string): Promise<PointLedgerEntry> {
+  return store.appendPointLedger({
+    cityUserId: input.cityUserId,
+    resource: 'AP',
+    delta: -apAmount,
+    sourceType: 'attention_grant_standin',
+    sourceId: idempotencyKey,
+    memo: input.memo || `Attention grant stand-in: ${input.residentId}`,
+    metadata: {
+      residentId: input.residentId,
+      standin: true,
+      nonProduction: true,
+      note: 'NON-PRODUCTION stand-in for Dev consent-spend API',
+    },
+  });
 }

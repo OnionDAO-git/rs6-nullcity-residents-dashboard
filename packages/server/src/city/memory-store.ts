@@ -29,7 +29,6 @@ import {
   type PrintQueueEnqueueInput,
   type PrinterUpsertInput,
   type PrintRequestCreateInput,
-  type ResidentAttentionGrantInput,
   type ResidentTradeCreateInput,
   type SoulContributionInput,
   type SoulProposalCreateInput,
@@ -446,22 +445,6 @@ export class InMemoryCityStore implements CityStore {
 
   async listResidentPosts(residentId: string): Promise<ResidentPost[]> {
     return clone((this.residentPosts.get(residentId) || []).filter(post => post.visibility === 'public').sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-  }
-
-  async grantResidentAttention(input: ResidentAttentionGrantInput): Promise<{ ledger: PointLedgerEntry; status: string; residentId: string; mocked: boolean }> {
-    this.requireUser(input.cityUserId);
-    const apAmount = Number(input.apAmount);
-    if (!Number.isInteger(apAmount) || apAmount <= 0) throw new CityStoreError('AP attention grant must be a positive integer');
-    const ledger = await this.appendPointLedger({
-      cityUserId: input.cityUserId,
-      resource: 'AP',
-      delta: -apAmount,
-      sourceType: 'resident_attention_grant',
-      sourceId: input.idempotencyKey || `${input.residentId}:${apAmount}`,
-      memo: input.memo || `Resident attention grant: ${input.residentId}`,
-      metadata: { residentId: input.residentId, mocked: true },
-    });
-    return { ledger, status: 'pending_nullcity', residentId: input.residentId, mocked: true };
   }
 
   async listResidentTrades(cityUserId: string): Promise<ResidentTrade[]> {

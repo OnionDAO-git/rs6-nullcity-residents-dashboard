@@ -143,7 +143,6 @@ export interface CityStore {
   listResidents(): Promise<ResidentReadModel[]>;
   getResident(id: string): Promise<ResidentReadModel | undefined>;
   listResidentPosts(residentId: string): Promise<ResidentPost[]>;
-  grantResidentAttention(input: ResidentAttentionGrantInput): Promise<{ ledger: PointLedgerEntry; status: string; residentId: string; mocked: boolean }>;
   listResidentTrades(cityUserId: string): Promise<ResidentTrade[]>;
   createResidentTrade(input: ResidentTradeCreateInput): Promise<{ trade: ResidentTrade; ledger: PointLedgerEntry; mocked: boolean }>;
   listInboxThreads(cityUserId: string): Promise<InboxThread[]>;
@@ -189,14 +188,6 @@ export interface AttentionGrantIntentPatch {
   standinLedgerEntryId?: string;
   cityResponse?: Record<string, unknown>;
   failureReason?: string;
-}
-
-export interface ResidentAttentionGrantInput {
-  cityUserId: string;
-  residentId: string;
-  apAmount: number;
-  idempotencyKey?: string;
-  memo?: string;
 }
 
 export interface ResidentTradeCreateInput {
@@ -614,20 +605,6 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
       return residentPosts
         .filter(post => post.residentId === residentId && post.visibility === 'public')
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    },
-
-    async grantResidentAttention(input) {
-      const apAmount = Math.max(1, Math.floor(Number(input.apAmount)));
-      const ledgerEntry = await store.appendPointLedger({
-        cityUserId: input.cityUserId,
-        resource: 'AP',
-        delta: -apAmount,
-        sourceType: 'resident_attention_grant',
-        sourceId: input.idempotencyKey || `${input.residentId}:${apAmount}`,
-        memo: input.memo || `Resident attention grant: ${input.residentId}`,
-        metadata: { residentId: input.residentId, mocked: true },
-      });
-      return { ledger: ledgerEntry, status: 'pending_nullcity', residentId: input.residentId, mocked: true };
     },
 
     async listResidentTrades(cityUserId) {

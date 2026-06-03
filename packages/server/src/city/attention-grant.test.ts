@@ -80,7 +80,7 @@ describe('runAttentionGrant', () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  test('marks intent failed when the City call throws (and rethrows)', async () => {
+  test('marks intent failed when the City call throws — and does NOT strand AP (debit-after-credit)', async () => {
     const { store, cityUserId } = await seededStore();
     const control: Pick<NullCityControlClient, 'creditAttention'> = {
       creditAttention: async () => {
@@ -93,6 +93,24 @@ describe('runAttentionGrant', () => {
     const intent = await store.getAttentionGrantIntent(cityUserId, 'fail-1');
     expect(intent?.state).toBe('failed');
     expect(intent?.failureReason).toContain('controller_unreachable');
+    // The whole point of debit-after-credit: a failed City call leaves AP untouched.
+    expect(await apBalance(store, cityUserId)).toBe(750);
+  });
+
+  test('rejects insufficient funds (409) before crediting City or debiting', async () => {
+    const store = new InMemoryCityStore();
+    const cityUser = await store.upsertUserFromLanding(landingUser);
+    await store.appendPointLedger({ cityUserId: cityUser.id, resource: 'AP', delta: 30, sourceType: 'seed', sourceId: 's1' });
+    const spy = { calls: [] as Array<{ resident: string; body: Record<string, unknown> }> };
+
+    await expect(
+      runAttentionGrant({ store, control: fakeControl(spy) }, { cityUserId: cityUser.id, residentId: 'res:fern', apAmount: 125, idempotencyKey: 'poor-1' }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(spy.calls).toHaveLength(0); // City never credited
+    expect(await apBalance(store, cityUser.id)).toBe(30); // nothing debited
+    const intent = await store.getAttentionGrantIntent(cityUser.id, 'poor-1');
+    expect(intent?.state).toBe('failed');
   });
 });
 
