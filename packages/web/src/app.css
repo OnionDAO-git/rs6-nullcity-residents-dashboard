@@ -2003,15 +2003,26 @@ pre {
 .projector-title-block {
   display: grid;
   justify-items: start;
-  gap: 8px;
+  gap: 9px;
 }
 
 .projector-header h1 {
+  max-width: 15ch;
   color: var(--text-0);
   font-family: var(--serif);
-  font-size: 56px;
+  font-size: clamp(38px, 4.3vw, 64px);
   font-weight: 500;
-  line-height: 1;
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+}
+
+.projector-headline-copy {
+  max-width: 54ch;
+  margin: 0;
+  color: var(--text-1);
+  font-size: clamp(15px, 1.1vw, 18px);
+  font-weight: 600;
+  line-height: 1.38;
 }
 
 .projector-dashboard-link {

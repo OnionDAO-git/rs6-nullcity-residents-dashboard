@@ -3411,8 +3411,11 @@
   <main class="projector-overview" aria-label="Null City public overview">
     <header class="projector-header">
       <div class="projector-title-block">
-        <p class="kicker">Projector Feed</p>
-        <h1>Null City Live</h1>
+        <p class="kicker">Null City Live</p>
+        <h1>{cityProjectorOverview.dispatch.title}</h1>
+        {#if cityProjectorOverview.dispatch.bodyLead}
+          <p class="projector-headline-copy">{cityProjectorOverview.dispatch.bodyLead}</p>
+        {/if}
         <button type="button" class="projector-dashboard-link" onclick={() => cityNav('/')}>Dashboard</button>
       </div>
       <div class="projector-status-strip" aria-label="Live city counters">
@@ -3436,10 +3439,9 @@
       {#key `${cityProjectorOverview.dispatch.title}|${cityProjectorOverview.dispatch.statusLabel}|${cityProjectorOverview.dispatch.detail}|${cityProjectorOverview.dispatch.bodyLead}`}
         <article class="projector-dispatch">
           <div class="row">
-            <div class="panel-title">Live Story</div>
+            <div class="panel-title">What happened</div>
             <span class={`tag ${cityProjectorOverview.dispatch.statusTone}`}>{cityProjectorOverview.dispatch.statusLabel}</span>
           </div>
-          <h2>{cityProjectorOverview.dispatch.title}</h2>
           <div class="projector-story-copy">
             {#if cityProjectorOverview.dispatch.bodyLead}
               <p class="projector-story-lede">{cityProjectorOverview.dispatch.bodyLead}</p>
