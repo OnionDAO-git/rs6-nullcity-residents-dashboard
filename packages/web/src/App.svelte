@@ -3456,12 +3456,12 @@
           </div>
           {#if cityProjectorOverview.dispatch.bullets.length}
             <div class="projector-story-beats-header">
-              <div class="panel-title">Key Facts</div>
+              <div class="panel-title">Why it matters</div>
             </div>
             <div class="projector-story-beats" aria-label="Story beats">
               {#each cityProjectorOverview.dispatch.bullets as bullet, index}
                 <div class="projector-story-beat">
-                  <small>Fact {index + 1}</small>
+                  <small>Point {index + 1}</small>
                   <span>{bullet}</span>
                 </div>
               {/each}
@@ -3474,26 +3474,26 @@
       <article class="projector-atlas-panel">
         <div class="row">
           <div>
-            <div class="panel-title">Live Atlas</div>
+            <div class="panel-title">Where residents are now</div>
             <strong>{cityProjectorOverview.atlas.viewport.label}</strong>
           </div>
           <span class="projector-atlas-bounds">
-            {cityProjectorOverview.atlas.totalPositioned} residents with live places
+            {cityProjectorOverview.atlas.totalPositioned} residents currently located
           </span>
         </div>
         {@render ProjectorAtlas({ model: cityProjectorOverview })}
       </article>
 
-      <aside class="projector-stakes-rail" aria-label="Null City leaderboards and drama">
-        {@render ProjectorListPanel({ title: 'Leaderboard', items: cityProjectorOverview.leaderboardItems })}
-        {@render ProjectorListPanel({ title: 'Drama Radar', items: cityProjectorOverview.dramaItems })}
-        {@render ProjectorListPanel({ title: 'Watch Next', items: cityProjectorOverview.watchItems })}
+      <aside class="projector-stakes-rail" aria-label="Null City public story rails">
+        {@render ProjectorListPanel({ title: 'Who to Watch Now', items: cityProjectorOverview.leaderboardItems })}
+        {@render ProjectorListPanel({ title: 'Important Moments', items: cityProjectorOverview.dramaItems })}
+        {@render ProjectorListPanel({ title: 'What to Watch Next', items: cityProjectorOverview.watchItems })}
       </aside>
     </section>
 
     <section class="projector-rail-grid">
       {@render ProjectorRegionPanel()}
-      {@render ProjectorListPanel({ title: 'Resident Action Feed', items: cityProjectorOverview.residentActions })}
+      {@render ProjectorListPanel({ title: 'What Residents Are Doing', items: cityProjectorOverview.residentActions })}
     </section>
   </main>
 {/snippet}
@@ -3579,7 +3579,7 @@
       {:else}
         <div class="projector-list-item">
           <strong>Everyone mapped here</strong>
-          <small>No positioned residents outside this viewport.</small>
+          <small>No residents outside this map area right now.</small>
         </div>
       {/each}
     </div>

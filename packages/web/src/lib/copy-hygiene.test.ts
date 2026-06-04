@@ -91,4 +91,22 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Public AP, Embassy standing, resident relationships, and inbox readiness.');
     expect(appSource).toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
   });
+
+  test('keeps the projector overview rails public-readable instead of dashboard-internal', () => {
+    expect(appSource).not.toContain("title: 'Leaderboard'");
+    expect(appSource).not.toContain("title: 'Drama Radar'");
+    expect(appSource).not.toContain("title: 'Resident Action Feed'");
+    expect(appSource).not.toContain('<div class="panel-title">Key Facts</div>');
+    expect(appSource).not.toContain('<div class="panel-title">Live Atlas</div>');
+    expect(appSource).not.toContain('residents with live places');
+    expect(appSource).not.toContain('aria-label="Null City leaderboards and drama"');
+    expect(appSource).toContain("title: 'Who to Watch Now'");
+    expect(appSource).toContain("title: 'Important Moments'");
+    expect(appSource).toContain("title: 'What to Watch Next'");
+    expect(appSource).toContain("title: 'What Residents Are Doing'");
+    expect(appSource).toContain('<div class="panel-title">Why it matters</div>');
+    expect(appSource).toContain('<div class="panel-title">Where residents are now</div>');
+    expect(appSource).toContain('residents currently located');
+    expect(appSource).toContain('aria-label="Null City public story rails"');
+  });
 });

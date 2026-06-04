@@ -27,7 +27,7 @@ describe('story overview projector model', () => {
       digests: [],
     });
 
-    expect(model.dispatch.statusLabel).toBe('live feed');
+    expect(model.dispatch.statusLabel).toBe('live city feed');
   });
 
   test('uses the server-owned public projector frame when it is available', () => {
@@ -78,7 +78,7 @@ describe('story overview projector model', () => {
         {
           kind: 'watch_resident',
           label: 'Watch Hans',
-          detail: 'The lead event is a patron gift.',
+          detail: 'The latest moment is a patron gift.',
           residentName: 'res:hans',
         },
       ],
@@ -110,15 +110,15 @@ describe('story overview projector model', () => {
     expect(model.dispatch).toMatchObject({
       title: 'Hans turns attention into motion',
       statusLabel: 'verified story',
-      detail: 'fresh city evidence · verified narration · updated just now',
+      detail: 'fresh city evidence · verified Storyteller · updated just now',
     });
     expect(model.dispatch.bodyLead).toBe('Hans took the crowd gift and moved through the courtyard.');
     expect(model.dispatch.bullets).toEqual(['Human attention changed Hans today.', 'No private handles are exposed.']);
     expect(model.citySignals).toEqual([
       { label: 'Residents Awake', detail: '10 / 23 active', tone: 'ok' },
       { label: 'Latest Story', detail: 'fresh city evidence', tone: 'ok' },
-      { label: 'Projector Safety', detail: 'verified narration is live', tone: 'ok' },
-      { label: 'Attention Pressure', detail: 'no residents at the edge', tone: 'ok' },
+      { label: 'Public Copy', detail: 'safe public story is live', tone: 'ok' },
+      { label: 'Residents Needing Support', detail: 'no residents need urgent support', tone: 'ok' },
     ]);
     expect(model.dramaItems[0]).toMatchObject({
       label: 'Patron gift',
@@ -127,7 +127,7 @@ describe('story overview projector model', () => {
     });
     expect(model.watchItems[0]).toMatchObject({
       label: 'Whether Hans answers the crowd instead of looping.',
-      detail: 'Watch this next.',
+      detail: 'Worth watching next.',
       tone: 'ok',
     });
   });
@@ -177,6 +177,50 @@ describe('story overview projector model', () => {
     expect(model.watchItems[0]?.label).toBe('Whether QA Guardian spends attention wisely.');
   });
 
+  test('rewrites raw actor-count phrasing in public narration', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:actor-count:2026-06-03T18:00:00.000Z',
+        digestId: 'actor-count',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'actor-count',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'verified_dispatch',
+          title: 'The Steward is watching the road',
+          body: 'The Steward noted seeing one character and one player nearby while gathering logs.',
+          bullets: ['The Steward saw 1 character and 1 player nearby.'],
+          confidence: 'high',
+        },
+        leadEvent: null,
+        events: [],
+        residents: [],
+        actions: [],
+        watchNext: [],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'ok',
+          totalResidents: 1,
+          activeResidents: 1,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: [],
+        },
+      },
+    });
+
+    expect(model.dispatch.body).toBe('The Steward noted seeing people nearby while gathering logs.');
+    expect(model.dispatch.bullets).toEqual(['The Steward saw people nearby.']);
+    expect(JSON.stringify(model)).not.toMatch(/\bone character and one player nearby|1 character and 1 player nearby/i);
+  });
+
   test('uses public frame residents as the projector allowlist', () => {
     const model = buildStoryOverviewModel({
       residents: [
@@ -210,8 +254,8 @@ describe('story overview projector model', () => {
         },
         narration: {
           source: 'deterministic_fallback',
-          title: 'Hans escaped a dead loop',
-          body: 'Hans recovered from a stuck state. Two residents are still active.',
+          title: 'Hans got unstuck',
+          body: 'Hans got unstuck. Two residents are still active.',
           bullets: ['What happened: Hans recovered from being stuck.'],
           confidence: 'fallback',
         },
@@ -222,7 +266,7 @@ describe('story overview projector model', () => {
           happenedAt: '2026-06-03T17:59:00.000Z',
           importance: 'medium',
           note: 'res:hans recovered from being stuck.',
-          whyItMatters: 'pathing recovery is visible progress, not a dead loop',
+          whyItMatters: 'pathing recovery is visible progress',
         },
         events: [],
         residents: [
@@ -280,8 +324,8 @@ describe('story overview projector model', () => {
         },
         narration: {
           source: 'deterministic_fallback',
-          title: 'Agent escaped a dead loop',
-          body: 'Agent recovered from a stuck state. Two residents are still active.',
+          title: 'Agent got unstuck',
+          body: 'Agent got unstuck. Two residents are still active.',
           bullets: ['What happened: Agent recovered from being stuck.'],
           confidence: 'fallback',
         },
@@ -292,7 +336,7 @@ describe('story overview projector model', () => {
           happenedAt: '2026-06-03T17:59:00.000Z',
           importance: 'medium',
           note: 'res:agent recovered from being stuck.',
-          whyItMatters: 'pathing recovery is visible progress, not a dead loop',
+          whyItMatters: 'pathing recovery is visible progress',
         },
         events: [],
         residents: [],
@@ -311,15 +355,19 @@ describe('story overview projector model', () => {
       now: new Date('2026-06-03T18:00:30.000Z'),
     });
 
-    expect(model.dispatch.statusLabel).toBe('grounded live story');
-    expect(model.dispatch.detail).toBe('fresh city evidence · live fallback narration · updated just now');
+    expect(model.dispatch.statusLabel).toBe('safe live story');
+    expect(model.dispatch.detail).toBe('fresh city evidence · safe public story · updated just now');
     expect(model.citySignals).toEqual([
       { label: 'Residents Awake', detail: '2 / 2 active', tone: 'ok' },
       { label: 'Latest Story', detail: 'fresh city evidence', tone: 'ok' },
-      { label: 'Projector Safety', detail: 'showing safe fallback copy', tone: 'warn' },
-      { label: 'Attention Pressure', detail: 'no residents at the edge', tone: 'ok' },
+      { label: 'Public Copy', detail: 'using safe public copy', tone: 'warn' },
+      { label: 'Residents Needing Support', detail: 'no residents need urgent support', tone: 'ok' },
     ]);
-    expect(JSON.stringify(model)).not.toMatch(/\b(?:Public Health|Narration|fallback story|AP|GP|NCRI)\b/);
+    expect(model.dramaItems[0]).toMatchObject({
+      label: 'Got unstuck',
+      detail: 'The Steward got unstuck.',
+    });
+    expect(JSON.stringify(model)).not.toMatch(/\b(?:Public Health|Narration|fallback story|AP|GP|NCRI|nooped|canon|support floor|runway|person or object|people and objects|dead loop|bounded goal|stuck state)\b/i);
   });
 
   test('marks old projector frames stale even when the written frame says fresh', () => {
@@ -340,8 +388,8 @@ describe('story overview projector model', () => {
         },
         narration: {
           source: 'deterministic_fallback',
-          title: 'Hans escaped a dead loop',
-          body: 'Hans recovered from a stuck state.',
+          title: 'Hans got unstuck',
+          body: 'Hans got unstuck.',
           bullets: [],
           confidence: 'fallback',
         },
@@ -363,9 +411,9 @@ describe('story overview projector model', () => {
       now: new Date('2026-06-03T18:48:00.000Z'),
     });
 
-    expect(model.dispatch.detail).toBe('city evidence needs refresh · live fallback narration · updated 48m ago');
+    expect(model.dispatch.detail).toBe('city evidence needs refresh · safe public story · updated 48m ago');
     expect(model.citySignals).toContainEqual({ label: 'Latest Story', detail: 'city evidence needs refresh', tone: 'warn' });
-    expect(model.citySignals).toContainEqual({ label: 'Projector Safety', detail: 'showing safe fallback copy', tone: 'warn' });
+    expect(model.citySignals).toContainEqual({ label: 'Public Copy', detail: 'using safe public copy', tone: 'warn' });
   });
 
   test('rewrites legacy generic fallback frames before they reach the public projector', () => {
@@ -448,9 +496,9 @@ describe('story overview projector model', () => {
 
     expect(model.residentActions[0]).toMatchObject({
       label: 'Hans',
-      detail: 'speaking at Lumbridge Castle courtyard',
+      detail: 'Talking at Lumbridge Castle courtyard',
     });
-    expect(model.atlas.pins[0]?.detail).toBe('speaking at Lumbridge Castle courtyard');
+    expect(model.atlas.pins[0]?.detail).toBe('talking at Lumbridge Castle courtyard');
     expect(JSON.stringify(model)).not.toMatch(/\b\d{4},\d{4}\b/);
     expect(JSON.stringify(model)).not.toContain('chat at');
   });
@@ -485,7 +533,7 @@ describe('story overview projector model', () => {
     expect(model.atlas.offMapRegions).toEqual([
       {
         label: 'Varrock',
-        detail: '1 resident beyond the current viewport',
+        detail: '1 resident active outside this map area',
         count: 1,
         residents: ['Wren Calix at Varrock'],
       },
@@ -517,7 +565,7 @@ describe('story overview projector model', () => {
       }],
     });
 
-    expect(model.dispatch.statusLabel).toBe('live feed');
+    expect(model.dispatch.statusLabel).toBe('live city feed');
     expect(model.dispatch.title).toBe('Null City is coming online');
     expect(model.dispatch.body).not.toContain('reviewed draft');
     expect(model.dispatch.body).not.toContain('reviewed queue material');
@@ -593,7 +641,7 @@ describe('story overview projector model', () => {
       ],
     });
 
-    expect(model.dispatch.statusLabel).toBe('canon');
+    expect(model.dispatch.statusLabel).toBe('verified story');
     expect(model.dispatch.title).toBe('Safe canon title');
     expect(model.dispatch.body).toBe('Safe canon body.');
     expect(model.dispatch.bullets).toEqual(['Safe canon bullet.']);
@@ -626,7 +674,7 @@ describe('story overview projector model', () => {
 
     expect(model.dispatch.body).toBe('Wren Calix found the noisy part of the city.');
     expect(model.dispatch.bullets).toEqual(['Wren Calix is now the headline.']);
-    expect(model.dispatch.statusLabel).toBe('canon');
+    expect(model.dispatch.statusLabel).toBe('verified story');
   });
 
   test('formats Storyteller copy into a lead sentence and readable paragraphs', () => {
@@ -654,11 +702,11 @@ describe('story overview projector model', () => {
       }],
     });
 
-    expect(model.dispatch.body).toBe('Good evening from Null City. Hans shook off a snag. The Steward counted the crowd. Twelve residents stayed active. No one is low on AP.');
+    expect(model.dispatch.body).toBe('Good evening from Null City. Hans shook off a snag. The Steward counted the crowd. Twelve residents stayed active. No one is low on attention.');
     expect(model.dispatch.bodyLead).toBe('Good evening from Null City.');
     expect(model.dispatch.bodyParagraphs).toEqual([
       'Hans shook off a snag. The Steward counted the crowd.',
-      'Twelve residents stayed active. No one is low on AP.',
+      'Twelve residents stayed active. No one is low on attention.',
     ]);
   });
 
@@ -691,7 +739,7 @@ describe('story overview projector model', () => {
     expect(model.dispatch.bodyParagraphs).toEqual([
       'Hans shook off a snag. The Steward counted the crowd. QA Social waved from the road.',
       'Pip stayed near the church. Father Aereck kept watch. Twelve residents stayed active.',
-      'No one is low on AP.',
+      'No one is low on attention.',
     ]);
   });
 
@@ -718,7 +766,7 @@ describe('story overview projector model', () => {
     expect(model.atlas.pins).toHaveLength(1);
     expect(model.atlas.pins[0]).toMatchObject({
       residentName: 'res:wren-calix',
-      eventLabel: 'speaking',
+      eventLabel: 'talking',
     });
     expect(model.atlas.offMapRegions).toEqual([]);
   });
@@ -751,7 +799,7 @@ describe('story overview projector model', () => {
     });
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'trading gold for attention at Lumbridge West Road',
+      detail: 'Trading gold for attention at Lumbridge West Road',
     });
   });
 
@@ -786,11 +834,11 @@ describe('story overview projector model', () => {
 
     expect(model.atlas.offMapRegions[0]).toMatchObject({
       label: 'Varrock',
-      detail: '7 residents beyond the current viewport',
+      detail: '7 residents active outside this map area',
     });
     expect(model.atlas.offMapRegions[0]?.residents).toHaveLength(5);
-    expect(model.watchItems.find(item => item.label === 'Off-Map Tension')?.detail).toBe('7 residents outside the atlas viewport');
-    expect(model.dramaItems.find(item => item.label === 'Off-Map Tension')).toBeUndefined();
+    expect(model.watchItems.find(item => item.label === 'Elsewhere in the city')?.detail).toBe('7 residents are active outside this map area');
+    expect(model.dramaItems.find(item => item.label === 'Elsewhere in the city')).toBeUndefined();
   });
 
   test('ignores review-state Storyteller copy and keeps resident actions grounded', () => {
@@ -840,17 +888,17 @@ describe('story overview projector model', () => {
       now: new Date('2026-06-01T00:00:00Z'),
     });
 
-    expect(model.dispatch.statusLabel).toBe('live feed');
+    expect(model.dispatch.statusLabel).toBe('live city feed');
     expect(model.dispatch.title).toBe('The Steward is moving the city forward');
     expect(model.dispatch.body).toBe('The Steward is lighting a fire at Lumbridge West Road. The map is live; the story follows the evidence.');
     expect(model.dispatch.bullets).toEqual([]);
     expect(JSON.stringify(model.dispatch)).not.toContain('Agent lit a fire on the west road');
     expect(model.residentActions[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'lighting a fire at Lumbridge West Road',
+      detail: 'Lighting a fire at Lumbridge West Road',
       path: '/residents/agent',
     });
-    expect(model.citySignals.map(signal => signal.label)).toContain('Visible AP');
+    expect(model.citySignals.map(signal => signal.label)).toContain('Attention Available');
   });
 
   test('builds right-rail leaderboards and drama without duplicating global counters', () => {
@@ -899,13 +947,15 @@ describe('story overview projector model', () => {
     });
 
     expect(model.leaderboardItems).toHaveLength(2);
-    expect(model.citySignals.map(item => item.label)).toEqual(['Online Residents', 'Mapped Residents', 'Visible AP', 'Storyteller']);
+    expect(model.citySignals.map(item => item.label)).toEqual(['Online Residents', 'Known Places', 'Attention Available', 'Latest Story']);
     expect(model.leaderboardItems[0]).toMatchObject({
       label: 'The Steward',
-      detail: 'speaking near 33 people and objects at Lumbridge Castle courtyard',
+      detail: 'Talking at Lumbridge Castle courtyard with people nearby',
     });
+    expect(JSON.stringify(model.leaderboardItems)).not.toContain('33');
+    expect(JSON.stringify(model.leaderboardItems)).not.toContain('person or object');
+    expect(JSON.stringify(model.leaderboardItems)).not.toContain('people and objects');
     expect(JSON.stringify(model.leaderboardItems)).not.toContain('|');
-    expect(JSON.stringify(model.leaderboardItems)).not.toContain('nearby');
     expect(model.leaderboardItems.map(item => item.label)).not.toContain('Object Magnet');
     expect(model.dramaItems.length).toBeLessThanOrEqual(3);
     expect(model.watchItems.length).toBeLessThanOrEqual(2);
@@ -915,7 +965,7 @@ describe('story overview projector model', () => {
       tone: 'warn',
     });
     expect(model.dramaItems.map(item => item.label)).not.toContain('Online Residents');
-    expect(model.dramaItems.map(item => item.label)).not.toContain('Mapped Residents');
-    expect(model.dramaItems.map(item => item.label)).not.toContain('Visible AP');
+    expect(model.dramaItems.map(item => item.label)).not.toContain('Known Places');
+    expect(model.dramaItems.map(item => item.label)).not.toContain('Attention Available');
   });
 });

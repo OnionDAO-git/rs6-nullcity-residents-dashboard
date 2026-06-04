@@ -216,7 +216,7 @@ function buildOffMapRegions(positioned: { row: ResidentDashboardRow; position: P
     .map(([label, residents]) => ({
       label,
       count: residents.length,
-      detail: `${residents.length.toLocaleString()} resident${residents.length === 1 ? '' : 's'} beyond the current viewport`,
+      detail: `${residents.length.toLocaleString()} resident${residents.length === 1 ? '' : 's'} active outside this map area`,
       residents: residents.slice(0, 5),
     }));
 }
@@ -246,15 +246,15 @@ function buildDispatch(
     ? `${displayName(leadResident.name)} is ${fallbackEvent === 'quiet' ? 'visible' : fallbackEvent} at ${locationLabel(leadPosition)}. The map is live; the story follows the evidence.`
     : 'Residents with live positions will appear here as soon as the dashboard feed reports them.';
   const generated = dispatch?.generatedAt || digest?.builtAt;
-  const body = prettifyResidentRefs(dispatch?.publicBody || fallbackBody);
+  const body = publicProjectorCopy(dispatch?.publicBody || fallbackBody);
   const formattedBody = formatStoryBody(body);
   return {
-    title: prettifyResidentRefs(dispatch?.publicTitle || fallbackTitle),
+    title: publicProjectorCopy(dispatch?.publicTitle || fallbackTitle),
     body,
     bodyLead: formattedBody.bodyLead,
     bodyParagraphs: formattedBody.bodyParagraphs,
     bullets: buildDispatchBullets(digest),
-    statusLabel: dispatch ? 'canon' : 'live feed',
+    statusLabel: dispatch ? 'verified story' : 'live city feed',
     statusTone: 'ok',
     detail: generated ? `updated ${relativeTime(generated, now)}` : 'waiting for first dispatch',
   };
@@ -269,14 +269,14 @@ function buildProjectorFrameDispatch(frame: ProjectorStoryFrame, now: Date | und
     : frame.source.freshnessStatus === 'stale'
       ? 'city evidence needs refresh'
       : 'city evidence freshness unknown';
-  const source = frame.narration.source === 'verified_dispatch' ? 'verified narration' : 'live fallback narration';
+  const source = frame.narration.source === 'verified_dispatch' ? 'verified Storyteller' : 'safe public story';
   return {
     title: publicTitle,
     body: publicBody,
     bodyLead: formattedBody.bodyLead,
     bodyParagraphs: formattedBody.bodyParagraphs,
     bullets: frame.narration.bullets.map(publicProjectorCopy).slice(0, 4),
-    statusLabel: frame.narration.source === 'verified_dispatch' ? 'verified story' : 'grounded live story',
+    statusLabel: frame.narration.source === 'verified_dispatch' ? 'verified story' : 'safe live story',
     statusTone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn',
     detail: `${freshness} · ${source} · updated ${relativeTime(frame.generatedAt, now)}`,
   };
@@ -317,7 +317,7 @@ function buildDispatchBullets(digest: StorytellerDigestSummary | undefined): str
     ? dispatchBullets
     : (digest?.topEvents || []).map(event => event.note || `${displayName(event.residentName || 'city')}: ${eventKindLabel(event.kind)}`);
   return source
-    .map(item => prettifyResidentRefs(item.trim()))
+    .map(item => publicProjectorCopy(item.trim()))
     .filter(Boolean)
     .slice(0, 4);
 }
@@ -336,7 +336,7 @@ function buildResidentActions(
       const eventLabel = publicActionPhrase(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
       return {
         label: displayName(row.name),
-        detail: position ? `${eventLabel} at ${locationLabel(position)}` : row.thinking?.activePlan || eventLabel,
+        detail: position ? humanResidentActionDetail(eventLabel, position, nearbyActivityCount(row)) : row.thinking?.activePlan || sentenceCase(eventLabel),
         path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
         tone: row.inCombat || (row.attention ?? 999) <= 2 ? 'warn' : 'ok',
       };
@@ -353,9 +353,9 @@ function buildCitySignals(
   const visibleAp = input.patronAp ?? input.overview?.patrons?.totalShardBalance;
   return [
     { label: 'Online Residents', detail: `${online.toLocaleString()} / ${residents.length.toLocaleString()} visible`, tone: online > 0 ? 'ok' : 'warn' },
-    { label: 'Mapped Residents', detail: `${positionedCount.toLocaleString()} have named locations`, tone: positionedCount > 0 ? 'ok' : 'warn' },
-    { label: 'Visible AP', detail: visibleAp === undefined ? 'waiting for patron summary' : `${visibleAp.toLocaleString()} AP in the city pool`, tone: visibleAp ? 'ok' : 'warn' },
-    { label: 'Storyteller', detail: digest ? `${digest.topEventCount.toLocaleString()} top events in latest run` : 'waiting for digest', tone: digest ? 'ok' : 'warn' },
+    { label: 'Known Places', detail: `${positionedCount.toLocaleString()} have named locations`, tone: positionedCount > 0 ? 'ok' : 'warn' },
+    { label: 'Attention Available', detail: visibleAp === undefined ? 'waiting for patron summary' : `${visibleAp.toLocaleString()} attention available for residents`, tone: visibleAp ? 'ok' : 'warn' },
+    { label: 'Latest Story', detail: digest ? `${digest.topEventCount.toLocaleString()} story moments in the latest update` : 'waiting for Storyteller', tone: digest ? 'ok' : 'warn' },
   ];
 }
 
@@ -363,16 +363,16 @@ function buildProjectorFrameCitySignals(frame: ProjectorStoryFrame): StoryOvervi
   const health = frame.publicHealth;
   const freshnessTone = frame.source.freshnessStatus === 'fresh' ? 'ok' : 'warn';
   const safetyDetail = frame.narration.source === 'verified_dispatch'
-    ? 'verified narration is live'
-    : 'showing safe fallback copy';
+    ? 'safe public story is live'
+    : 'using safe public copy';
   const attentionDetail = health.lowApResidents > 0
-    ? `${health.lowApResidents.toLocaleString()} resident${health.lowApResidents === 1 ? '' : 's'} near the edge`
-    : 'no residents at the edge';
+    ? `${health.lowApResidents.toLocaleString()} resident${health.lowApResidents === 1 ? '' : 's'} need attention soon`
+    : 'no residents need urgent support';
   return [
     { label: 'Residents Awake', detail: `${health.activeResidents.toLocaleString()} / ${health.totalResidents.toLocaleString()} active`, tone: health.activeResidents > 0 ? 'ok' : 'warn' },
     { label: 'Latest Story', detail: frame.source.freshnessStatus === 'fresh' ? 'fresh city evidence' : 'city evidence needs refresh', tone: freshnessTone },
-    { label: 'Projector Safety', detail: safetyDetail, tone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn' },
-    { label: 'Attention Pressure', detail: attentionDetail, tone: health.lowApResidents > 0 ? 'warn' : 'ok' },
+    { label: 'Public Copy', detail: safetyDetail, tone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn' },
+    { label: 'Residents Needing Support', detail: attentionDetail, tone: health.lowApResidents > 0 ? 'warn' : 'ok' },
   ];
 }
 
@@ -389,13 +389,7 @@ function buildLeaderboardItems(
       const position = residentPosition(row);
       const nearby = nearbyActivityCount(row);
       const eventLabel = publicActionPhrase(row.feed?.latestEventKind || row.lastEvent?.kind || row.body?.lastAction?.kind || storytellerEventKinds.get(residentRouteSlug(row.name)) || '');
-      const detailParts = [
-        eventLabel,
-        position ? locationLabel(position) : '',
-      ].filter(Boolean);
-      const detail = position && nearby > 0
-        ? `${eventLabel} near ${nearbyProximityLabel(nearby)} at ${locationLabel(position)}`
-        : detailParts.join(' at ');
+      const detail = position ? humanResidentActionDetail(eventLabel, position, nearby) : sentenceCase(eventLabel);
       return {
         label: displayName(row.name),
         detail: detail || 'waiting for live signal',
@@ -433,15 +427,15 @@ function buildDramaItems(
 
   for (const row of residents.filter(row => (row.attention ?? 999) <= 2).slice(0, 3)) {
     items.push({
-      label: `${displayName(row.name)} needs AP`,
-      detail: `${(row.attention ?? 0).toLocaleString()} AP remaining`,
+      label: `${displayName(row.name)} needs attention`,
+      detail: `${(row.attention ?? 0).toLocaleString()} attention left`,
       path: `/residents/${encodeURIComponent(residentRouteSlug(row.name))}`,
       tone: 'warn',
     });
   }
 
   if (!items.length) {
-    items.push({ label: 'Stable Window', detail: 'No major alerts in the current public feed.', tone: 'ok' });
+    items.push({ label: 'City is calm right now', detail: 'No urgent story moments in the latest update.', tone: 'ok' });
   }
 
   return items.slice(0, 3);
@@ -452,20 +446,20 @@ function buildProjectorFrameDramaItems(frame: ProjectorStoryFrame): StoryOvervie
   const events = [...lead, ...frame.events.filter(event => event.ref !== frame.leadEvent?.ref)]
     .slice(0, 3)
     .map(event => ({
-      label: event.label,
-      detail: compactDetail(prettifyResidentRefs(event.note)),
+      label: publicStoryEventLabel(event.label),
+      detail: publicStoryEventDetail(event.note),
       path: `/residents/${encodeURIComponent(residentRouteSlug(event.residentName))}`,
       tone: event.importance === 'critical' || event.importance === 'high' ? 'warn' as const : 'ok' as const,
     }));
   if (events.length) return events;
   if (frame.publicHealth.warnings.length) {
     return frame.publicHealth.warnings.slice(0, 3).map(warning => ({
-      label: 'Public health warning',
-      detail: warning,
+      label: 'Story needs staff review',
+      detail: publicWarningDetail(warning),
       tone: 'warn' as const,
     }));
   }
-  return [{ label: 'Stable Window', detail: 'No major alerts in the current public feed.', tone: 'ok' }];
+  return [{ label: 'City is calm right now', detail: 'No urgent story moments in the latest update.', tone: 'ok' }];
 }
 
 function buildWatchItems(
@@ -481,19 +475,19 @@ function buildWatchItems(
     const eventLabel = publicActionPhrase(leadResident.feed?.latestEventKind || leadResident.lastEvent?.kind || leadResident.body?.lastAction?.kind || '');
     items.push({
       label: `Follow ${displayName(leadResident.name)}`,
-      detail: position ? `${eventLabel} at ${locationLabel(position)}` : eventLabel,
+      detail: position ? humanResidentActionDetail(eventLabel, position, nearbyActivityCount(leadResident)) : sentenceCase(eventLabel),
       path: `/residents/${encodeURIComponent(residentRouteSlug(leadResident.name))}`,
       tone: leadResident.inCombat || (leadResident.attention ?? 999) <= 2 ? 'warn' : 'ok',
     });
   }
   if (digest?.dispatch?.needsReview || (digest && digest.queue !== 'canon')) {
-    items.push({ label: 'Story Review', detail: 'Latest dispatch is a review draft, not canon yet.', tone: 'warn', path: '/story' });
+    items.push({ label: 'Story awaiting review', detail: 'The latest story is still being checked before public display.', tone: 'warn', path: '/story' });
   }
   if (offMapRegions.length) {
-    items.push({ label: 'Off-Map Tension', detail: `${offMapRegions.reduce((sum, region) => sum + region.count, 0)} residents outside the atlas viewport`, tone: 'ok' });
+    items.push({ label: 'Elsewhere in the city', detail: `${offMapRegions.reduce((sum, region) => sum + region.count, 0)} residents are active outside this map area`, tone: 'ok' });
   }
   if (lowAp.length) {
-    items.push({ label: 'AP Runway', detail: `${lowAp.length} residents are at or below the support floor`, tone: 'warn', path: '/residents?triage=attention' });
+    items.push({ label: 'Attention support', detail: `${lowAp.length} residents need attention soon`, tone: 'warn', path: '/residents?triage=attention' });
   }
   return items.slice(0, 2);
 }
@@ -501,7 +495,7 @@ function buildWatchItems(
 function buildProjectorFrameWatchItems(frame: ProjectorStoryFrame): StoryOverviewListItem[] {
   const watch = frame.watchNext.map(item => ({
     label: publicProjectorWatchLine(item, frame.leadEvent),
-    detail: 'Watch this next.',
+    detail: 'Worth watching next.',
     tone: 'ok' as const,
   }));
   const actionItems = frame.actions.map(action => ({
@@ -610,6 +604,15 @@ function prettifyResidentRefs(text: string): string {
 
 function publicProjectorCopy(text: string): string {
   return prettifyResidentRefs(text)
+    .replace(/\bescaped a dead loop\b/gi, 'got unstuck')
+    .replace(/\brecovered from a stuck state\b/gi, 'got unstuck')
+    .replace(/\brecovered from being stuck\b/gi, 'got unstuck')
+    .replace(/\bbounded goal\b/gi, 'goal')
+    .replace(/\blead event\b/gi, 'latest moment')
+    .replace(/\bI see \d+ characters? and \d+ players? nearby\b/gi, 'I can see people nearby')
+    .replace(/\bI see one character and one player nearby\b/gi, 'I can see people nearby')
+    .replace(/\b\d+ characters? and \d+ players? nearby\b/gi, 'people nearby')
+    .replace(/\bone character and one player nearby\b/gi, 'people nearby')
     .replace(/\bAn NCRI\b/g, 'A special item')
     .replace(/\ban NCRI\b/g, 'a special item')
     .replace(/\bAttention-for-gold\b/g, 'Gold-for-attention')
@@ -647,7 +650,7 @@ function titleForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent']>)
     case 'Attention-for-gold exchange':
       return `${name} traded gold for more time`;
     case 'Recovered from being stuck':
-      return `${name} escaped a dead loop`;
+      return `${name} got unstuck`;
     case 'Attention running low':
       return `${name} is running out of attention`;
     case 'Gold observed':
@@ -657,7 +660,7 @@ function titleForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent']>)
     case 'Special item redeemed':
       return `${name} moved a special item forward`;
     case 'Goal completed':
-      return `${name} finished a bounded goal`;
+      return `${name} finished a goal`;
     default:
       return `${name} has the lead story`;
   }
@@ -672,11 +675,11 @@ function bodyForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent']>, 
     case 'Attention-for-gold exchange':
       return `${name} converted RuneScape gold into attention.${active}`;
     case 'Recovered from being stuck':
-      return `${name} recovered from a stuck state.${active}`;
+      return `${name} got unstuck.${active}`;
     case 'Attention running low':
       return `${name} is near the edge, and human support can still change the outcome.${active}`;
     default:
-      return `${name} has the strongest verified beat in the current window.${active}`;
+      return `${name} has the clearest verified moment in the current window.${active}`;
   }
 }
 
@@ -688,10 +691,39 @@ function watchLineForLeadEvent(event: NonNullable<ProjectorStoryFrame['leadEvent
     case 'Recovered from being stuck':
       return `Whether ${name} keeps moving after the recovery.`;
     case 'Attention running low':
-      return `Whether ${name} gets attention before the window closes.`;
+      return `Whether ${name} gets attention before attention runs out.`;
     default:
-      return `${name}'s next move after the lead event.`;
+      return `${name}'s next move after the latest moment.`;
   }
+}
+
+function publicWarningDetail(warning: string): string {
+  const lower = warning.toLowerCase();
+  if (lower.includes('nooped') || lower.includes('model') || lower.includes('fallback')) {
+    return 'Using safe public copy until the story refreshes.';
+  }
+  return 'Using safe public copy until the story refreshes.';
+}
+
+function publicStoryEventLabel(label: string): string {
+  switch (label) {
+    case 'Recovered from being stuck':
+      return 'Got unstuck';
+    case 'Library updated':
+      return 'Library memory updated';
+    default:
+      return publicProjectorCopy(label);
+  }
+}
+
+function publicStoryEventDetail(note: string): string {
+  const cleaned = publicProjectorCopy(note)
+    .replace(/^([A-Z][^:"]{1,40}) said:\s*"\1:\s*/i, '$1 said: "')
+    .replace(/\bI see \d+ characters? and \d+ players? nearby\b/gi, 'I can see people nearby')
+    .replace(/\bI see one character and one player nearby\b/gi, 'I can see people nearby')
+    .replace(/\b\d+ characters? and \d+ players? nearby\b/gi, 'people nearby')
+    .replace(/\bone character and one player nearby\b/gi, 'people nearby');
+  return compactDetail(cleaned);
 }
 
 function humanizeAcronyms(text: string): string {
@@ -713,12 +745,21 @@ function publicActionPhrase(kind: string): string {
     case 'chat':
     case 'say':
     case 'speech':
-      return 'speaking';
+    case 'talk-to':
+    case 'talk_to':
+      return 'talking';
     case 'arrived':
     case 'position_changed':
     case 'move':
     case 'walk':
+    case 'move_to':
       return 'moving';
+    case 'use_item_on':
+      return 'using an item';
+    case 'interact':
+      return 'interacting';
+    case 'attack':
+      return 'in a fight';
     case 'fire_lit':
       return 'lighting a fire';
     case 'stuck_recovered':
@@ -728,12 +769,25 @@ function publicActionPhrase(kind: string): string {
     case 'attention_low':
       return 'running low on attention';
     default:
-      return eventKindLabel(kind);
+      return cleaned.includes('_') || cleaned.includes('-') ? 'active' : eventKindLabel(kind);
   }
 }
 
-function nearbyProximityLabel(count: number): string {
-  return `${count.toLocaleString()} ${count === 1 ? 'person or object' : 'people and objects'}`;
+function humanResidentActionDetail(action: string, position: Position, nearbyCount = 0): string {
+  const place = locationLabel(position);
+  const base = `${sentenceCase(action)} at ${place}`;
+  if (nearbyCount <= 0) return base;
+  return `${base} ${nearbyPresencePhrase(nearbyCount)}`;
+}
+
+function sentenceCase(text: string): string {
+  const compact = text.trim();
+  if (!compact) return '';
+  return `${compact.slice(0, 1).toUpperCase()}${compact.slice(1)}`;
+}
+
+function nearbyPresencePhrase(count: number): string {
+  return count === 1 ? 'with someone nearby' : 'with people nearby';
 }
 
 function locationLabel(position: Position): string {
