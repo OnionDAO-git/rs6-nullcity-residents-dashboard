@@ -1623,39 +1623,6 @@ pre {
   color: var(--s-teal);
 }
 
-.city-expert-toggle {
-  display: grid;
-  gap: 5px;
-  padding: 10px;
-  background: var(--ground-1);
-  border: 1px solid var(--ground-4);
-}
-
-.city-expert-toggle button {
-  justify-content: center;
-  min-height: 34px;
-  color: var(--text-2);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.city-expert-toggle button.active {
-  border-color: rgba(228, 184, 64, 0.62);
-  color: var(--s-gold);
-}
-
-.city-expert-toggle small {
-  overflow: hidden;
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: 10px;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .city-nav {
   display: grid;
   gap: 6px;
@@ -1700,6 +1667,49 @@ pre {
   border-color: rgba(228, 184, 64, 0.62);
   background: var(--ground-0);
   color: var(--text-0);
+}
+
+.city-expert-floating-toggle {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 24;
+  display: grid;
+  gap: 4px;
+  min-width: 166px;
+  max-width: min(220px, calc(100vw - 28px));
+  min-height: 48px;
+  padding: 9px 12px;
+  color: var(--text-2);
+  background: rgba(22, 19, 16, 0.96);
+  border: 1px solid var(--ground-4);
+  border-left: 3px solid var(--s-mauve);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  font-family: var(--mono);
+  text-align: left;
+}
+
+.city-expert-floating-toggle span {
+  overflow: hidden;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.city-expert-floating-toggle small {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.city-expert-floating-toggle.active {
+  border-color: rgba(228, 184, 64, 0.62);
+  border-left-color: var(--s-gold);
+  color: var(--s-gold);
 }
 
 .city-points {
@@ -3877,16 +3887,6 @@ pre {
     display: none;
   }
 
-  .city-rail .city-expert-toggle {
-    padding: 0;
-    background: transparent;
-    border: 0;
-  }
-
-  .city-rail .city-expert-toggle small {
-    display: none;
-  }
-
   .city-rail .city-nav {
     display: none;
   }
@@ -4368,6 +4368,19 @@ pre {
 
   .city-bottom-nav {
     padding: 5px 4px;
+  }
+
+  .city-expert-floating-toggle {
+    bottom: 67px;
+    left: 8px;
+    min-width: 134px;
+    min-height: 42px;
+    padding: 7px 9px;
+  }
+
+  .city-expert-floating-toggle span,
+  .city-expert-floating-toggle small {
+    font-size: 9px;
   }
 
   .city-bottom-nav button {

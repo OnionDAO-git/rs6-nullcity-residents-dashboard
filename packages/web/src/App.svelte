@@ -3650,12 +3650,6 @@
           <button onclick={installPwa}>Install App</button>
         {/if}
       </div>
-      <div class="city-expert-toggle">
-        <button type="button" class:active={expertMode} aria-pressed={expertMode} onclick={toggleExpertMode}>
-          {expertMode ? 'Expert Mode On' : 'Expert Mode'}
-        </button>
-        <small>{expertMode ? 'Diagnostics visible' : 'Simple dashboard'}</small>
-      </div>
       <div class="city-nav">
         {#each visibleCityNavItems as item (item.path)}
           <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
@@ -3727,6 +3721,11 @@
         {@render CityNotFound()}
       {/if}
     </main>
+
+    <button type="button" class="city-expert-floating-toggle" class:active={expertMode} aria-pressed={expertMode} onclick={toggleExpertMode}>
+      <span>{expertMode ? 'Expert Mode On' : 'Expert Mode'}</span>
+      <small>{expertMode ? 'Diagnostics visible' : 'Simple dashboard'}</small>
+    </button>
 
     <nav class="city-bottom-nav" aria-label="Primary city navigation">
       {#each primaryCityNavItems as item (item.path)}
