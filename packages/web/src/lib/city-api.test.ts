@@ -113,6 +113,40 @@ describe('cityApi', () => {
     ]);
   });
 
+  test('posts OnionDAO-backed resident attention grants', async () => {
+    const calls: Array<{ path: string; method: string; body: unknown; csrf: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        csrf: new Headers(init?.headers).get('x-csrf-token'),
+      });
+      return new Response(JSON.stringify({
+        status: 'settled',
+        residentId: 'res:fern',
+        onionRequest: { id: 'req-1', status: 'completed', amount: 25 },
+      }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    setCityCsrfToken('csrf-123');
+    await cityApi.grantResidentOnionAttention('res:fern', {
+      onionAmount: 25,
+      memo: 'Focus Fern',
+      idempotencyKey: 'onion-1',
+    });
+
+    expect(calls).toEqual([{
+      path: '/api/city/residents/res%3Afern/onion-attention-grants',
+      method: 'POST',
+      body: { onionAmount: 25, memo: 'Focus Fern', idempotencyKey: 'onion-1' },
+      csrf: 'csrf-123',
+    }]);
+  });
+
   test('calls controller-backed NCRI admin endpoint', async () => {
     const calls: Array<{ path: string; method: string; body: unknown }> = [];
     globalThis.fetch = (async (input, init) => {

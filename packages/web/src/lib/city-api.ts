@@ -18,6 +18,18 @@ export interface PointBalance {
   updatedAt: string;
 }
 
+export interface OnionWallet {
+  name: string;
+  handle?: string | null;
+  avatarUrl?: string | null;
+  onionId?: number | null;
+  solanaWalletAddress?: string | null;
+  balanceType: string;
+  currentOnionPoints: number | null;
+  currentOnionTokens: number | null;
+  currentBalance: number;
+}
+
 export interface PointLedgerEntry {
   id: string;
   cityUserId: string;
@@ -39,6 +51,8 @@ export interface CitySessionResponse {
   csrfToken?: string;
   user?: CitySessionUser;
   points?: PointBalance[];
+  onionWallet?: OnionWallet;
+  onionWalletError?: string;
   auth?: Record<string, unknown>;
   store?: Record<string, unknown>;
 }
@@ -706,6 +720,11 @@ export const cityApi = {
   grantResidentAttention: (residentId: string, body: { apAmount: number; memo?: string; idempotencyKey?: string }) =>
     request<{ status: string; residentId: string; mocked: boolean; ledger: PointLedgerEntry }>(
       `/api/city/residents/${encodeURIComponent(residentId)}/attention-grants`,
+      { method: 'POST', body: jsonBody(body) },
+    ),
+  grantResidentOnionAttention: (residentId: string, body: { onionAmount: number; attentionAmount?: number; memo?: string; idempotencyKey?: string }) =>
+    request<{ status: string; residentId: string; onionRequest: { id: string; status: string; amount: number; currencyMode?: string | null }; onionWallet?: OnionWallet; onionWalletError?: string; city?: unknown }>(
+      `/api/city/residents/${encodeURIComponent(residentId)}/onion-attention-grants`,
       { method: 'POST', body: jsonBody(body) },
     ),
   trades: () => request<{ trades: ResidentTrade[] }>('/api/city/trades'),

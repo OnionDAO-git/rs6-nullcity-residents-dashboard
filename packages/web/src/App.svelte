@@ -82,6 +82,9 @@
     avatarUrl: string;
     ap: number;
     gp: number;
+    onions: number;
+    onionBalanceType: string;
+    onionWalletError: string;
     admin: boolean;
     loginUrl: string;
     logoutUrl: string;
@@ -126,6 +129,9 @@
     avatarUrl: '',
     ap: 0,
     gp: 0,
+    onions: 0,
+    onionBalanceType: 'points',
+    onionWalletError: '',
     admin: false,
     loginUrl: '/login',
     logoutUrl: '',
@@ -347,7 +353,7 @@
   let proposalEquipment = '';
   let proposalInventory = '';
   let contributionAp = '100';
-  let grantAttentionAp = '100';
+  let grantAttentionOnions = '100';
   let grantAttentionMemo = '';
   let tradeOfferResource: PointResource = 'AP';
   let tradeOfferAmount = '25';
@@ -1088,9 +1094,16 @@
     const root = asRecord(value);
     const user = asRecord(root.user || root.profile || root.attendee);
     const balances = asRecord(root.balances || root.points || root.wallet);
+    const onionWallet = asRecord(root.onionWallet || root.onions);
     const pointBalances = Array.isArray(root.points) ? root.points : Array.isArray(root.balances) ? root.balances : [];
     const roles = arrayStrings(root.roles).concat(arrayStrings(user.roles));
     const authenticated = booleanField(root, 'authenticated') ?? Boolean(Object.keys(user).length || stringField(root, 'userId'));
+    const onionBalanceType = stringField(onionWallet, 'balanceType') || stringField(root, 'onionBalanceType') || 'points';
+    const onions =
+      numberField(onionWallet, 'currentBalance') ??
+      (onionBalanceType === 'tokens' ? numberField(onionWallet, 'currentOnionTokens') : numberField(onionWallet, 'currentOnionPoints')) ??
+      numberField(root, 'onions') ??
+      0;
     const name =
       stringField(user, 'displayName') ||
       stringField(user, 'name') ||
@@ -1111,6 +1124,9 @@
       avatarUrl: stringField(user, 'avatarUrl') || stringField(user, 'avatar') || stringField(root, 'avatarUrl') || '',
       ap: pointBalance(pointBalances, 'AP') ?? numberField(balances, 'ap') ?? numberField(balances, 'AP') ?? numberField(root, 'ap') ?? numberField(root, 'AP') ?? 0,
       gp: pointBalance(pointBalances, 'GP') ?? numberField(balances, 'gp') ?? numberField(balances, 'GP') ?? numberField(root, 'gp') ?? numberField(root, 'GP') ?? 0,
+      onions,
+      onionBalanceType,
+      onionWalletError: stringField(root, 'onionWalletError') || '',
       admin:
         booleanField(root, 'admin') ??
         booleanField(root, 'isAdmin') ??
@@ -1132,6 +1148,11 @@
     return undefined;
   }
 
+  function onionBalanceLabel(session: CitySession): string {
+    const suffix = session.onionBalanceType === 'tokens' ? 'tokens' : 'Onions';
+    return `${session.onions.toLocaleString()} ${suffix}`;
+  }
+
   function arrayStrings(value: unknown): string[] {
     return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
   }
@@ -1144,11 +1165,11 @@
     const unreadThreads = cityInboxThreads.filter(thread => !thread.latestMessage?.readAt).length;
     return [
       {
-        label: 'Profile / AP / GP',
+        label: 'Profile / Onions',
         path: '/profile',
         tone: 'gold',
-        metric: `${session.ap.toLocaleString()} AP / ${session.gp.toLocaleString()} GP`,
-        detail: session.authenticated ? `${session.handle} ledger ready` : 'Sign in to load attendee balances',
+        metric: session.authenticated ? onionBalanceLabel(session) : 'login required',
+        detail: session.authenticated ? `${session.handle} Onion wallet ready` : 'Sign in to load attendee balances',
       },
       {
         label: 'Enter City',
@@ -1925,13 +1946,13 @@
 
   async function grantResidentAttention(residentId: string) {
     await runAction(async () => {
-      const apAmount = positiveInt(grantAttentionAp, 'AP grant');
-      await cityApi.grantResidentAttention(residentId, {
-        apAmount,
+      const onionAmount = positiveInt(grantAttentionOnions, 'Onion spend');
+      await cityApi.grantResidentOnionAttention(residentId, {
+        onionAmount,
         memo: grantAttentionMemo.trim(),
         idempotencyKey: crypto.randomUUID(),
       });
-      cityActionNotice = `${apAmount.toLocaleString()} AP grant sent`;
+      cityActionNotice = `${onionAmount.toLocaleString()} Onions spent for resident attention`;
       await bootstrapSession();
       await loadRoute(false);
     });
@@ -1939,9 +1960,9 @@
 
   function applyApSupportSuggestion(recommendation: ResidentApSupportRecommendation) {
     if (recommendation.suggestedAp <= 0) return;
-    grantAttentionAp = String(recommendation.suggestedAp);
+    grantAttentionOnions = String(recommendation.suggestedAp);
     grantAttentionMemo = recommendation.suggestedMemo;
-    cityActionNotice = `${recommendation.suggestedAp.toLocaleString()} AP support suggestion staged`;
+    cityActionNotice = `${recommendation.suggestedAp.toLocaleString()} Onion support suggestion staged`;
   }
 
   async function createResidentTradePrompt(residentId: string) {
@@ -3715,6 +3736,7 @@
       <p class="city-lede">Resident signal, attendee ledger, Embassy proposals, inbox, and print queue in one console.</p>
     </div>
     <div class="city-ledger-strip">
+      <span><small>Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
       <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
       <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
       <span><small>Session</small><strong>{citySession.authenticated ? citySession.handle : 'guest'}</strong></span>
@@ -3726,7 +3748,7 @@
       <div>
         <p class="kicker">Attendee Session</p>
         <strong>Guest mode</strong>
-        <span>Public residents and the Library are visible. Sign in as an attendee to unlock AP, GP, inbox, Embassy actions, and prints.</span>
+        <span>Public residents and the Library are visible. Sign in as an attendee to unlock Onions, AP, GP, inbox, Embassy actions, and prints.</span>
       </div>
       <button class="primary" onclick={() => cityNav('/login')}>Login</button>
     </section>
@@ -4431,7 +4453,7 @@
     <div>
       <p class="kicker">Attendee Session</p>
       <strong>{label}</strong>
-      <span>Use the Onion DAO login to load AP, GP, inbox, Embassy actions, and print workflows.</span>
+      <span>Use the Onion DAO login to load Onions, AP, GP, inbox, Embassy actions, and print workflows.</span>
       {#if !cityLoginUrlReady}
         <small>Ask event staff for the attendee QR or staff login link.</small>
       {/if}
@@ -4539,9 +4561,13 @@
     <div class="city-panel">
       <div class="panel-title">Balances</div>
       <div class="city-balance-grid">
+        <span><small>Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
         <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
         <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
       </div>
+      {#if citySession.onionWalletError}
+        <small>Onion wallet unavailable: {citySession.onionWalletError}</small>
+      {/if}
     </div>
     <div class={`city-panel span-2 city-economy-health tone-${cityProfileEconomy.tone}`}>
       <div class="row">
@@ -5211,7 +5237,7 @@
         <div class={`city-copy-block resident-ap-support tone-${cityResidentApSupport.tone}`}>
           <strong>{cityResidentApSupport.title}</strong>
           <p>{cityResidentApSupport.detail}</p>
-          <small>{cityResidentApSupport.suggestedAp > 0 ? `${cityResidentApSupport.suggestedAp.toLocaleString()} AP suggested` : 'No AP grant suggested'} · {cityResidentApSupport.suggestedMemo}</small>
+          <small>{cityResidentApSupport.suggestedAp > 0 ? `${cityResidentApSupport.suggestedAp.toLocaleString()} Onions suggested` : 'No Onion spend suggested'} · {cityResidentApSupport.suggestedMemo}</small>
           {#if citySession.authenticated && cityResidentApSupport.suggestedAp > 0}
             <div class="resident-ap-support-actions">
               <button type="button" onclick={() => applyApSupportSuggestion(cityResidentApSupport)}>{cityResidentApSupport.actionLabel}</button>
@@ -5220,12 +5246,12 @@
         </div>
         {#if citySession.authenticated}
           <div class="city-form-grid single">
-            <label>AP <input bind:value={grantAttentionAp} inputmode="numeric" /></label>
+            <label>Onions <input bind:value={grantAttentionOnions} inputmode="numeric" /></label>
             <label>Memo <input bind:value={grantAttentionMemo} placeholder="optional" /></label>
-            <button disabled={actionBusy} onclick={() => grantResidentAttention(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>Grant</button>
+            <button disabled={actionBusy} onclick={() => grantResidentAttention(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>Spend</button>
           </div>
         {:else}
-          {@render CityAuthCta({ label: 'Login to grant AP' })}
+          {@render CityAuthCta({ label: 'Login to spend Onions' })}
         {/if}
       </div>
       <div class="city-panel">
@@ -5952,7 +5978,7 @@
   <section class="city-panel">
     <div class="city-empty-state">
       <strong>{cityLoginUrlReady ? 'Attendee login ready' : 'Attendee login not connected'}</strong>
-      <span>{cityLoginUrlReady ? 'Open the Onion DAO login to unlock AP, GP, inbox, Embassy actions, and print workflows.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
+      <span>{cityLoginUrlReady ? 'Open the Onion DAO login to unlock Onions, AP, GP, inbox, Embassy actions, and print workflows.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
     </div>
     {#if cityLoginUrlReady}
       <a class="city-link-button" href={citySession.loginUrl}>Open Onion DAO Login</a>

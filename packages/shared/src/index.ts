@@ -823,6 +823,8 @@ export interface CitySessionResponse {
   logoutUrl?: string;
   user?: CitySessionUser;
   points?: CityPointBalance[];
+  onionWallet?: CityOnionWallet;
+  onionWalletError?: string;
 }
 
 export interface CityPointBalance {
@@ -830,6 +832,18 @@ export interface CityPointBalance {
   balance: number;
   pending?: number;
   updatedAt?: string;
+}
+
+export interface CityOnionWallet {
+  name: string;
+  handle?: string | null;
+  avatarUrl?: string | null;
+  onionId?: number | null;
+  solanaWalletAddress?: string | null;
+  balanceType: string;
+  currentOnionPoints: number | null;
+  currentOnionTokens: number | null;
+  currentBalance: number;
 }
 
 export interface CityPointLedgerEntry {

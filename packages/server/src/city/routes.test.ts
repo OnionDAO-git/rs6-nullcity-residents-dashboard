@@ -55,6 +55,48 @@ describe('routeCityApi session', () => {
       profile: { displayName: 'Alice', handle: 'alice' },
     });
   });
+
+  test('includes the OnionDAO wallet readout when the integration is configured', async () => {
+    const profileLookups: string[] = [];
+    const services = testServices(adminUser, undefined, {
+      oniondao: {
+        async profile(identifier: string) {
+          profileLookups.push(identifier);
+          return {
+            name: 'Alice',
+            handle: 'alice',
+            avatarUrl: 'https://example.com/alice.png',
+            onionId: null,
+            solanaWalletAddress: null,
+            balanceType: 'points',
+            currentOnionPoints: 1200,
+            currentOnionTokens: null,
+            currentBalance: 1200,
+          };
+        },
+        async createRequest() {
+          throw new Error('not called');
+        },
+        async approveRequest() {
+          throw new Error('not called');
+        },
+        async requestStatus() {
+          throw new Error('not called');
+        },
+      },
+    });
+
+    const response = await route(new Request('http://city.test/api/session', { headers: authHeaders() }), services);
+    const payload = await response.json() as { onionWallet?: { balanceType: string; currentOnionPoints: number; currentBalance: number } };
+
+    expect(response.status).toBe(200);
+    expect(profileLookups).toEqual(['alice']);
+    expect(payload.onionWallet).toMatchObject({
+      balanceType: 'points',
+      currentOnionPoints: 1200,
+      currentBalance: 1200,
+    });
+  });
 });
 
 describe('routeCityApi points and souls', () => {
@@ -191,6 +233,98 @@ describe('routeCityApi points and souls', () => {
 
     expect(reconstructed).toBe(625);
     expect(balanceOf(await points.json(), 'AP')).toBe(reconstructed);
+  });
+
+  test('spends OnionDAO onions before crediting resident attention', async () => {
+    const createdRequests: Array<{ username: string; amount: number; callbackUrl: string; externalId?: string }> = [];
+    const approvedRequests: Array<{ id: string; sessionToken: string }> = [];
+    const statusSequence = ['pending', 'completed'];
+    const creditCalls: Array<{ resident: string; body: Record<string, unknown> }> = [];
+    const services = testServices(adminUser, undefined, {
+      oniondao: {
+        async profile() {
+          return {
+            name: 'Alice',
+            handle: 'alice',
+            avatarUrl: null,
+            onionId: null,
+            solanaWalletAddress: null,
+            balanceType: 'points',
+            currentOnionPoints: 1175,
+            currentOnionTokens: null,
+            currentBalance: 1175,
+          };
+        },
+        async createRequest(input) {
+          createdRequests.push({
+            username: input.username,
+            amount: input.amount,
+            callbackUrl: input.callbackUrl,
+            externalId: input.externalId,
+          });
+          return { id: 'onion-req-1', status: 'pending' };
+        },
+        async approveRequest(id: string, sessionToken: string) {
+          approvedRequests.push({ id, sessionToken });
+        },
+        async requestStatus(id: string) {
+          return {
+            id,
+            requestType: 'burn',
+            status: statusSequence.shift() || 'completed',
+            amount: 25,
+            currencyMode: 'points',
+            solanaSignature: null,
+            error: null,
+            createdAt: '2026-06-04T12:00:00.000Z',
+            updatedAt: '2026-06-04T12:00:01.000Z',
+            reviewedAt: '2026-06-04T12:00:01.000Z',
+          };
+        },
+      },
+      nullcityControl: {
+        creditAttention: async (resident: string, body: Record<string, unknown>) => {
+          creditCalls.push({ resident, body });
+          return { ok: true as const, resident, attentionBefore: 10, attentionAfter: 35, creditedAmount: 25 };
+        },
+      } as never,
+    });
+
+    const response = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
+      onionAmount: 25,
+      idempotencyKey: 'onion-attn-1',
+      memo: 'Focus Fern',
+    }), services);
+    const payload = await response.json() as {
+      onionRequest: { id: string; status: string };
+      city: { creditedAmount: number };
+      onionWallet?: { currentBalance: number };
+    };
+
+    expect(response.status).toBe(202);
+    expect(createdRequests).toEqual([{
+      username: 'alice',
+      amount: 25,
+      callbackUrl: 'http://localhost:8787/api/onions/callback',
+      externalId: expect.stringContaining('onion-attn-1') as unknown as string,
+    }]);
+    expect(approvedRequests).toEqual([{ id: 'onion-req-1', sessionToken: 'test-token' }]);
+    expect(creditCalls).toEqual([{
+      resident: 'res:fern',
+      body: {
+        idempotencyKey: 'onion-attn-1',
+        amount: 25,
+        cityUserId: expect.any(String) as unknown as string,
+        personId: 'landing-user-1',
+        patronHandle: 'alice',
+        sourceType: 'oniondao_attention_spend',
+        sourceId: 'onion-req-1',
+        note: 'Focus Fern',
+      },
+    }]);
+    expect(payload.onionRequest).toMatchObject({ id: 'onion-req-1', status: 'completed' });
+    expect(payload.city).toMatchObject({ creditedAmount: 25 });
+    expect(payload.onionWallet).toMatchObject({ currentBalance: 1175 });
   });
 
   test('creates resident trade saga entries with idempotent point debits while Null City is mocked', async () => {
@@ -979,7 +1113,13 @@ function balanceOf(payload: unknown, resource: 'AP' | 'GP'): number | undefined 
 function testServices(
   user: LandingSessionUser | null,
   onToken?: (token: string) => LandingSessionUser | null,
-  options: { csrfEnabled?: boolean; landingCheckins?: LandingCheckinReader; nullcityControl?: CityServices['nullcityControl']; printBridgeToken?: string } = {},
+  options: {
+    csrfEnabled?: boolean;
+    landingCheckins?: LandingCheckinReader;
+    nullcityControl?: CityServices['nullcityControl'];
+    oniondao?: CityServices['oniondao'];
+    printBridgeToken?: string;
+  } = {},
 ): CityServices {
   const config = cityConfigFromEnv({
     LANDING_AUTH_BASE_URL: 'https://oniondao.dev',
@@ -1003,6 +1143,7 @@ function testServices(
     }),
     landingCheckins: options.landingCheckins,
     nullcityControl: options.nullcityControl,
+    oniondao: options.oniondao,
   };
 }
 

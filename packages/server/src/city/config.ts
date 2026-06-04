@@ -2,6 +2,10 @@ export interface CityConfig {
   cityDatabaseUrl?: string;
   landingDatabaseUrl?: string;
   landingAuthBaseUrl: string;
+  onionApiBaseUrl?: string;
+  onionExternalApiKey?: string;
+  onionExternalRequester: string;
+  onionCallbackUrl?: string;
   authCookieName: string;
   authCookieDomain?: string;
   sessionCookieSecure: boolean;
@@ -22,6 +26,10 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     cityDatabaseUrl: clean(env.CITY_DATABASE_URL),
     landingDatabaseUrl: clean(env.LANDING_DATABASE_URL),
     landingAuthBaseUrl: clean(env.LANDING_AUTH_BASE_URL) || 'https://oniondao.dev',
+    onionApiBaseUrl: clean(env.ONION_API_BASE_URL) || clean(env.CITY_ONION_API_BASE_URL) || clean(env.LANDING_AUTH_BASE_URL),
+    onionExternalApiKey: clean(env.ONION_EXTERNAL_API_KEY) || clean(env.CITY_ONION_EXTERNAL_API_KEY),
+    onionExternalRequester: clean(env.ONION_EXTERNAL_REQUESTER) || clean(env.CITY_ONION_EXTERNAL_REQUESTER) || 'nullcity-dashboard',
+    onionCallbackUrl: clean(env.ONION_CALLBACK_URL) || clean(env.CITY_ONION_CALLBACK_URL),
     authCookieName: clean(env.AUTH_COOKIE_NAME) || 'session',
     authCookieDomain: clean(env.AUTH_COOKIE_DOMAIN),
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',

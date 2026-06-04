@@ -11,6 +11,7 @@ import {
 } from './game-session';
 import type { LandingSessionAuthenticator } from './landing-session';
 import { NullCityControlError, type NullCityControlClient, type NullCityEconomyStreamQuery, type NullCityNcriPrintQueueStatus } from './nullcity-control';
+import { OnionDaoClientError, type OnionDaoClient, type OnionWallet } from './oniondao';
 import { quoteSoulProposal } from './quote';
 import { runAttentionGrant } from './attention-grant';
 import { CityStoreError, type CityStore } from './store';
@@ -23,6 +24,7 @@ export interface CityApiContext {
   store: CityStore;
   landingCheckins?: LandingCheckinReader;
   nullcityControl?: NullCityControlClient;
+  oniondao?: OnionDaoClient;
   gameTicketSecret?: string;
   gameTicketTtlSeconds?: number;
 }
@@ -46,6 +48,10 @@ export async function routeCityApi(
       return jsonResponse(await sessionResponse(request, url, context, csrfToken), {
         headers: { 'set-cookie': csrfCookie(csrfToken, context.config) },
       });
+    }
+
+    if (method === 'POST' && pathname === '/api/onions/callback') {
+      return jsonResponse({ ok: true });
     }
 
     if (isStateChanging(method) && !isPrintBridgeEndpoint(pathname) && !context.config.csrfDisabled) {
@@ -84,6 +90,13 @@ export async function routeCityApi(
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
       return jsonResponse({ balances: await context.store.getPointBalances(auth.cityUser.id) });
+    }
+
+    if (method === 'GET' && pathname === '/api/onions/wallet') {
+      const auth = await requireCityUser(request, url, context);
+      if (auth instanceof Response) return auth;
+      if (!context.oniondao) return jsonResponse({ error: 'oniondao_not_configured' }, { status: 503 });
+      return jsonResponse({ wallet: await context.oniondao.profile(onionUsername(auth.landingUser)) });
     }
 
     if (method === 'GET' && pathname === '/api/profile/ledger') {
@@ -544,6 +557,19 @@ export async function routeCityApi(
       }, { status: 202 });
     }
 
+    const residentOnionAttention = pathname.match(/^\/api\/city\/residents\/([^/]+)\/onion-attention-grants$/);
+    if (residentOnionAttention && method === 'POST') {
+      const auth = await requireCityUser(request, url, context);
+      if (auth instanceof Response) return auth;
+      return runOnionAttentionGrant(
+        request,
+        context,
+        auth,
+        decodeURIComponent(residentOnionAttention[1] || ''),
+        await readJsonBody(request),
+      );
+    }
+
     if (method === 'GET' && pathname === '/api/city/trades') {
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
@@ -593,6 +619,9 @@ export async function routeCityApi(
   } catch (error) {
     if (error instanceof CityStoreError) return jsonResponse({ error: error.message }, { status: error.status });
     if (error instanceof NullCityControlError) return jsonResponse({ error: error.message }, { status: error.status });
+    if (error instanceof OnionDaoClientError) {
+      return jsonResponse({ error: error.code, details: error.details }, { status: error.status });
+    }
     throw error;
   }
 }
@@ -613,7 +642,10 @@ async function sessionResponse(
   };
   if (!result.user) return { authenticated: false, loginUrl, auth, store, csrfToken };
   const cityUser = await context.store.upsertUserFromLanding(result.user);
-  const points = await context.store.getPointBalances(cityUser.id);
+  const [points, onionWalletResult] = await Promise.all([
+    context.store.getPointBalances(cityUser.id),
+    onionWalletForUser(context, result.user),
+  ]);
   const roles: Array<'attendee' | 'admin'> = result.user.isAdmin ? ['attendee', 'admin'] : ['attendee'];
   return {
     authenticated: true,
@@ -631,6 +663,8 @@ async function sessionResponse(
       profileClaimed: result.user.profileClaimed,
     },
     points,
+    ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
+    ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
     auth,
     store,
     csrfToken,
@@ -657,6 +691,105 @@ async function requireAdmin(
   if (auth instanceof Response) return auth;
   if (!auth.landingUser.isAdmin) return jsonResponse({ error: 'forbidden' }, { status: 403 });
   return auth;
+}
+
+async function runOnionAttentionGrant(
+  request: Request,
+  context: CityApiContext,
+  auth: AuthenticatedCityRequest,
+  residentId: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  if (!context.oniondao) return jsonResponse({ error: 'oniondao_not_configured' }, { status: 503 });
+  if (!context.nullcityControl?.creditAttention) return jsonResponse({ error: 'nullcity_control_not_configured' }, { status: 503 });
+  const sessionToken = parseCookieHeader(request.headers.get('cookie')).get(context.config.authCookieName);
+  if (!sessionToken) return jsonResponse({ error: 'landing_session_cookie_required' }, { status: 401 });
+
+  const onionAmount = numberBody(body, 'onionAmount', numberBody(body, 'amount'));
+  const attentionAmount = numberBody(body, 'attentionAmount', onionAmount);
+  if (onionAmount <= 0 || attentionAmount <= 0) return jsonResponse({ error: 'invalid_amount' }, { status: 400 });
+
+  const username = onionUsername(auth.landingUser);
+  if (!username) return jsonResponse({ error: 'onion_username_required' }, { status: 400 });
+  const idempotencyKey = stringBody(body, 'idempotencyKey') || crypto.randomUUID();
+  const memo = stringBody(body, 'memo') || `Spend ${onionAmount} Onions to support ${residentId}`;
+  const requestResult = await context.oniondao.createRequest({
+    type: 'burn',
+    username,
+    amount: onionAmount,
+    callbackUrl: onionCallbackUrl(context.config),
+    requester: context.config.onionExternalRequester,
+    externalId: onionAttentionExternalId(auth.cityUser.id, residentId, idempotencyKey),
+    note: memo,
+    metadata: {
+      app: 'nullcity-dashboard',
+      cityUserId: auth.cityUser.id,
+      landingUserId: auth.landingUser.id,
+      residentId,
+      idempotencyKey,
+      attentionAmount,
+    },
+  });
+
+  let onionRequest = await context.oniondao.requestStatus(requestResult.id);
+  if (onionRequest.status === 'pending') {
+    await context.oniondao.approveRequest(requestResult.id, sessionToken);
+    onionRequest = await context.oniondao.requestStatus(requestResult.id);
+  }
+  if (onionRequest.status !== 'completed') {
+    return jsonResponse({
+      status: 'pending_onion_settlement',
+      residentId,
+      onionRequest,
+    }, { status: 202 });
+  }
+
+  const cityResponse = await context.nullcityControl.creditAttention(residentId, {
+    idempotencyKey,
+    amount: attentionAmount,
+    cityUserId: auth.cityUser.id,
+    personId: auth.landingUser.id,
+    patronHandle: auth.landingUser.handle || auth.landingUser.email || auth.landingUser.name,
+    sourceType: 'oniondao_attention_spend',
+    sourceId: onionRequest.id,
+    note: memo,
+  });
+  const onionWalletResult = await onionWalletForUser(context, auth.landingUser);
+  return jsonResponse({
+    status: 'settled',
+    residentId,
+    onionRequest,
+    city: cityResponse,
+    ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
+    ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
+  }, { status: 202 });
+}
+
+async function onionWalletForUser(
+  context: CityApiContext,
+  user: LandingSessionUser,
+): Promise<{ wallet?: OnionWallet; error?: string }> {
+  if (!context.oniondao) return {};
+  try {
+    return { wallet: await context.oniondao.profile(onionUsername(user)) };
+  } catch (error) {
+    return { error: error instanceof OnionDaoClientError ? error.code : 'onion_wallet_unavailable' };
+  }
+}
+
+function onionUsername(user: LandingSessionUser): string {
+  return (user.handle || user.email || user.name || user.id).replace(/^@/, '').trim();
+}
+
+function onionAttentionExternalId(cityUserId: string, residentId: string, idempotencyKey: string): string {
+  return `attention:${cityUserId}:${residentId}:${idempotencyKey}`;
+}
+
+function onionCallbackUrl(config: CityConfig): string {
+  if (config.onionCallbackUrl) return config.onionCallbackUrl;
+  const url = new URL('/api/onions/callback', config.publicBaseUrl || 'http://localhost:8787');
+  if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')) url.hostname = 'localhost';
+  return url.toString();
 }
 
 async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
