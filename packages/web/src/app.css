@@ -1675,40 +1675,41 @@ pre {
   bottom: 14px;
   z-index: 24;
   display: grid;
-  gap: 4px;
-  min-width: 166px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  min-width: 178px;
   max-width: min(220px, calc(100vw - 28px));
-  min-height: 48px;
-  padding: 9px 12px;
+  min-height: 44px;
+  padding: 3px;
   color: var(--text-2);
   background: rgba(22, 19, 16, 0.96);
   border: 1px solid var(--ground-4);
-  border-left: 3px solid var(--s-mauve);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
   font-family: var(--mono);
-  text-align: left;
 }
 
-.city-expert-floating-toggle span {
+.city-expert-floating-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
   font-size: 10px;
   letter-spacing: 1px;
+  line-height: 1;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.city-expert-floating-toggle small {
-  overflow: hidden;
-  color: var(--text-3);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.city-expert-floating-toggle.active {
+.city-expert-floating-toggle button.active {
   border-color: rgba(228, 184, 64, 0.62);
-  border-left-color: var(--s-gold);
+  background: var(--ground-0);
   color: var(--s-gold);
 }
 
@@ -4373,13 +4374,14 @@ pre {
   .city-expert-floating-toggle {
     bottom: 67px;
     left: 8px;
-    min-width: 134px;
-    min-height: 42px;
-    padding: 7px 9px;
+    min-width: 154px;
+    min-height: 40px;
+    padding: 3px;
   }
 
-  .city-expert-floating-toggle span,
-  .city-expert-floating-toggle small {
+  .city-expert-floating-toggle button {
+    min-height: 32px;
+    padding-inline: 8px;
     font-size: 9px;
   }
 

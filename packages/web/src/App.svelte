@@ -716,8 +716,8 @@
     routeTo(cityPath(path));
   }
 
-  function toggleExpertMode() {
-    expertMode = !expertMode;
+  function setExpertMode(enabled: boolean) {
+    expertMode = enabled;
     try {
       window.sessionStorage.setItem(expertModeStorageKey, expertMode ? 'true' : 'false');
     } catch {
@@ -3722,10 +3722,10 @@
       {/if}
     </main>
 
-    <button type="button" class="city-expert-floating-toggle" class:active={expertMode} aria-pressed={expertMode} onclick={toggleExpertMode}>
-      <span>{expertMode ? 'Expert Mode On' : 'Expert Mode'}</span>
-      <small>{expertMode ? 'Diagnostics visible' : 'Simple dashboard'}</small>
-    </button>
+    <div class="city-expert-floating-toggle" role="group" aria-label="Dashboard mode">
+      <button type="button" class:active={!expertMode} aria-pressed={!expertMode} onclick={() => setExpertMode(false)}>Simple</button>
+      <button type="button" class:active={expertMode} aria-pressed={expertMode} onclick={() => setExpertMode(true)}>Expert</button>
+    </div>
 
     <nav class="city-bottom-nav" aria-label="Primary city navigation">
       {#each primaryCityNavItems as item (item.path)}
