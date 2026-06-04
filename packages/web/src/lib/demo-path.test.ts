@@ -27,9 +27,9 @@ describe('cityDemoPathSteps', () => {
         tone: 'ok',
         label: 'City alive',
         metric: '21 / 23 online',
-        action: 'Open city overview',
-        path: '/overview',
-        detail: 'Room-safe overview shows the live city, Storyteller status, and resident roster; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+        action: 'Open live city',
+        path: '/live',
+        detail: 'Room-safe live view shows the city, Storyteller status, and resident roster; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.',
       },
       {
         id: 'ap-support',
@@ -54,8 +54,8 @@ describe('cityDemoPathSteps', () => {
         tone: 'ok',
         label: 'Read grounded story',
         metric: 'Morning dispatch',
-        action: 'Open Storyteller',
-        path: '/story',
+        action: 'Open Chronicle',
+        path: '/chronicle',
         detail: 'Dispatch is grounded and ready for public review.',
       },
     ]);
@@ -87,9 +87,9 @@ describe('cityDemoPathSteps', () => {
       id: 'city-alive',
       tone: 'ok',
       metric: '10 / 23 active',
-      action: 'Open city overview',
-      path: '/overview',
-      detail: '10 controller-held residents are active; 13 online rows are paused/cohort-excluded. Room-safe overview shows the live city first; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.',
+      action: 'Open live city',
+      path: '/live',
+      detail: '10 controller-held residents are active; 13 online rows are paused/cohort-excluded. Room-safe live view shows the city first; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.',
     });
   });
 
@@ -111,7 +111,7 @@ describe('cityDemoPathSteps', () => {
       },
     });
 
-    expect(steps.map(step => step.path)).toEqual(['/overview', '/login', '/residents', '/story']);
+    expect(steps.map(step => step.path)).toEqual(['/live', '/login', '/residents', '/chronicle']);
     expect(steps[0]).toMatchObject({ tone: 'warn', metric: '0 / 0 online' });
     expect(steps[1]).toMatchObject({
       tone: 'warn',
@@ -254,6 +254,6 @@ describe('cityDemoPathSteps', () => {
       },
     });
 
-    expect(steps.map(step => step.path)).toEqual(['/overview', '/embassy', '/residents', '/story']);
+    expect(steps.map(step => step.path)).toEqual(['/live', '/embassy', '/residents', '/chronicle']);
   });
 });

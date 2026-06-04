@@ -75,8 +75,8 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       metric: hasCohortCounts
         ? `${activeCount.toLocaleString()} / ${residentCount.toLocaleString()} active`
         : `${online.toLocaleString()} / ${residentCount.toLocaleString()} online`,
-      action: 'Open city overview',
-      path: '/overview',
+      action: 'Open live city',
+      path: '/live',
       detail: cityAliveStepDetail({ activeCount, online, paused, hasCohortCounts }),
     },
     {
@@ -106,8 +106,8 @@ export function cityDemoPathSteps(input: CityDemoPathInput): CityDemoPathStep[] 
       tone: input.story.tone,
       label: 'Read grounded story',
       metric: storyMetric,
-      action: 'Open Storyteller',
-      path: '/story',
+      action: 'Open Chronicle',
+      path: '/chronicle',
       detail: input.story.summary,
     },
   ];
@@ -119,11 +119,11 @@ function cityAliveStepDetail(input: {
   paused: number | undefined;
   hasCohortCounts: boolean;
 }): string {
-  const proofDetail = 'Room-safe overview shows the live city, Storyteller status, and resident roster; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.';
+  const proofDetail = 'Room-safe live view shows the city, Storyteller status, and resident roster; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.';
   if (!input.hasCohortCounts) return proofDetail;
 
   const pausedCount = input.paused ?? Math.max(0, input.online - input.activeCount);
-  return `${input.activeCount.toLocaleString()} controller-held residents are active; ${pausedCount.toLocaleString()} online rows are paused/cohort-excluded. Room-safe overview shows the live city first; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.`;
+  return `${input.activeCount.toLocaleString()} controller-held residents are active; ${pausedCount.toLocaleString()} online rows are paused/cohort-excluded. Room-safe live view shows the city first; use the directory next for names, AP/GP, qmd memory, model, endpoint, and loop proof.`;
 }
 
 function displayResidentName(name: string | undefined): string {

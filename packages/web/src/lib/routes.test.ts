@@ -12,7 +12,7 @@ import {
   publicEventPath,
   residentDebugRoute,
   residentRuntimeApiPath,
-  isStoryRoute,
+  isChronicleRoute,
   isProtectedCityRoute,
   toDebugInternalRoute,
 } from './routes';
@@ -71,23 +71,27 @@ describe('dashboard route helpers', () => {
     expect(isProtectedCityRoute('/residents')).toBe(false);
   });
 
-  test('protects Storyteller routes while keeping them independent from the heavy city snapshot', () => {
-    expect(isStoryRoute('/story')).toBe(true);
-    expect(isStoryRoute('/story/run-2026-05-30')).toBe(true);
-    expect(isKnownCityRoute('/story')).toBe(true);
-    expect(isKnownCityRoute('/story/run-2026-05-30')).toBe(true);
-    expect(isProtectedCityRoute('/story')).toBe(true);
-    expect(isProtectedCityRoute('/story/run-2026-05-30')).toBe(true);
-    expect(cityRouteNeedsSnapshot('/story')).toBe(false);
-    expect(cityRouteNeedsSnapshot('/story/run-2026-05-30')).toBe(false);
+  test('protects Chronicle routes while keeping them independent from the heavy city snapshot', () => {
+    expect(isChronicleRoute('/chronicle')).toBe(true);
+    expect(isChronicleRoute('/chronicle/run-2026-05-30')).toBe(true);
+    expect(isKnownCityRoute('/chronicle')).toBe(true);
+    expect(isKnownCityRoute('/chronicle/run-2026-05-30')).toBe(true);
+    expect(isProtectedCityRoute('/chronicle')).toBe(true);
+    expect(isProtectedCityRoute('/chronicle/run-2026-05-30')).toBe(true);
+    expect(cityRouteNeedsSnapshot('/chronicle')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/chronicle/run-2026-05-30')).toBe(false);
+    expect(isChronicleRoute('/story')).toBe(false);
+    expect(isKnownCityRoute('/story')).toBe(false);
+    expect(isProtectedCityRoute('/story')).toBe(false);
     expect(cityRouteNeedsSnapshot('/residents/res%3Aagent')).toBe(true);
   });
 
-  test('keeps the projector overview public while avoiding the heavy city snapshot', () => {
-    expect(isKnownCityRoute('/overview')).toBe(true);
-    expect(isProtectedCityRoute('/overview')).toBe(false);
-    expect(cityRouteNeedsSnapshot('/overview')).toBe(false);
-    expect(cityRouteNeedsStoryDigests('/overview')).toBe(true);
+  test('keeps the live projector public while avoiding the heavy city snapshot', () => {
+    expect(isKnownCityRoute('/live')).toBe(true);
+    expect(isProtectedCityRoute('/live')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/live')).toBe(false);
+    expect(cityRouteNeedsStoryDigests('/live')).toBe(true);
+    expect(isKnownCityRoute('/overview')).toBe(false);
   });
 
   test('keeps the live economy route public while loading city state', () => {
@@ -101,7 +105,7 @@ describe('dashboard route helpers', () => {
     expect(cityRouteNeedsStoryDigests('/residents')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/residents/mother-anvil')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/library')).toBe(true);
-    expect(cityRouteNeedsStoryDigests('/story')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/chronicle')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/economy')).toBe(false);
   });
 });

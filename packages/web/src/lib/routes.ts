@@ -91,24 +91,24 @@ export function isProtectedCityRoute(route: string): boolean {
     normalized.startsWith('/inbox/') ||
     normalized === '/prints' ||
     normalized.startsWith('/prints/') ||
-    normalized === '/story' ||
-    normalized.startsWith('/story/') ||
+    normalized === '/chronicle' ||
+    normalized.startsWith('/chronicle/') ||
     normalized.startsWith('/admin');
 }
 
-export function isStoryRoute(route: string): boolean {
+export function isChronicleRoute(route: string): boolean {
   const normalized = normalizePath(route);
-  return normalized === '/story' || normalized.startsWith('/story/');
+  return normalized === '/chronicle' || normalized.startsWith('/chronicle/');
 }
 
 export function cityRouteNeedsStoryDigests(route: string): boolean {
   const normalized = normalizePath(route);
   return normalized === '/' ||
-    normalized === '/overview' ||
+    normalized === '/live' ||
     normalized === '/residents' ||
     normalized.startsWith('/residents/') ||
     normalized === '/library' ||
-    isStoryRoute(normalized);
+    isChronicleRoute(normalized);
 }
 
 export function cityRouteNeedsSnapshot(route: string): boolean {
@@ -132,10 +132,10 @@ export function cityRouteNeedsSnapshot(route: string): boolean {
 export function isKnownCityRoute(route: string): boolean {
   const normalized = normalizePath(route);
   if (normalized === '/' || normalized === '/login') return true;
-  if (normalized === '/overview') return true;
+  if (normalized === '/live') return true;
   if (normalized === '/economy') return true;
   if (normalized === '/profile' || normalized === '/world' || normalized === '/library') return true;
-  if (isStoryRoute(normalized)) return true;
+  if (isChronicleRoute(normalized)) return true;
   if (normalized === '/residents') return true;
   if (normalized.startsWith('/residents/') && normalized !== '/residents/new') return true;
   if (normalized === '/embassy' || normalized === '/embassy/new' || normalized.startsWith('/embassy/')) return true;

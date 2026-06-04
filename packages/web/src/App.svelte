@@ -59,7 +59,7 @@
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestSafetyLine, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isStoryRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isChronicleRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
   import { buildStoryOverviewModel, type StoryOverviewListItem, type StoryOverviewModel } from './lib/story-overview';
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
@@ -398,9 +398,9 @@
   } as const;
   const skillOrder = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 'runecrafting', 'construction'];
   const cityNavItems: CityNavItem[] = [
-    { label: 'Overview', path: '/', match: '/', glyph: 'OV' },
+    { label: 'Dashboard', path: '/', match: '/', glyph: 'DB' },
     { label: 'World', path: '/world', match: '/world', glyph: 'WO' },
-    { label: 'Story', path: '/story', match: '/story', glyph: 'ST' },
+    { label: 'Chronicle', path: '/chronicle', match: '/chronicle', glyph: 'CH' },
     { label: 'Economy', path: '/economy', match: '/economy', glyph: 'EC' },
     { label: 'Embassy', path: '/embassy', match: '/embassy', glyph: 'EM' },
     { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
@@ -429,7 +429,7 @@
   $: cityProposalId = !isDebugRoute && cityParts[0] === 'embassy' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
   $: cityInboxThreadId = !isDebugRoute && cityParts[0] === 'inbox' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
   $: cityPrintId = !isDebugRoute && cityParts[0] === 'prints' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
-  $: cityStoryRunId = !isDebugRoute && cityParts[0] === 'story' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
+  $: cityStoryRunId = !isDebugRoute && cityParts[0] === 'chronicle' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
   $: cityStoryDigest = cityStoryRunId
     ? cityStoryDigests.find(digest => digest.runId === cityStoryRunId || digest.digestId === cityStoryRunId)
     : cityStoryDigests[0];
@@ -765,12 +765,12 @@
     closeRuntimeStream();
     closeSessionStream();
     const routePublicProfileHandle = activeRoute === '/profile' ? publicPatronHandleFromSearch(browserSearch) : '';
-    if (isStoryRoute(activeRoute)) {
+    if (isChronicleRoute(activeRoute)) {
       closeCityEconomyStream();
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
       return;
     }
-    if (activeRoute === '/overview') {
+    if (activeRoute === '/live') {
       closeCityEconomyStream();
       await loadCityProjectorSnapshot();
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
@@ -3144,7 +3144,7 @@
 </script>
 
 <svelte:head>
-  <title>{isDebugRoute ? 'Null City Resident Operations' : route === '/overview' ? 'Null City Overview' : 'Null City Dashboard'}</title>
+  <title>{isDebugRoute ? 'Null City Resident Operations' : route === '/live' ? 'Null City Live' : 'Null City Dashboard'}</title>
 </svelte:head>
 
 {#if isDebugRoute}
@@ -3400,7 +3400,7 @@
   </div>
 {/if}
 {:else}
-  {#if route === '/overview'}
+  {#if route === '/live'}
     {@render CityProjectorOverview()}
   {:else}
     {@render CityShell()}
@@ -3408,7 +3408,7 @@
 {/if}
 
 {#snippet CityProjectorOverview()}
-  <main class="projector-overview" aria-label="Null City public overview">
+  <main class="projector-overview" aria-label="Null City public live view">
     <header class="projector-header">
       <div class="projector-title-block">
         <p class="kicker">Null City Live</p>
@@ -3432,7 +3432,7 @@
       <div class="notice city-notice">{cityDataNoticeCopy(cityDataError)}</div>
     {/if}
     {#if loading}
-      <div class="notice">Loading city state</div>
+      <div class="notice">Syncing live city</div>
     {/if}
 
     {@render ProjectorPrimaryAction({ item: cityProjectorOverview.primaryAction })}
@@ -3628,9 +3628,9 @@
         {/if}
       </div>
       <div class="city-nav">
-        <button class:active={route === '/overview'} onclick={() => cityNav('/overview')}>
+        <button class:active={route === '/live'} onclick={() => cityNav('/live')}>
           <span aria-hidden="true">LV</span>
-          Live Overview
+          Live
         </button>
         {#each cityNavItems as item (item.path)}
           <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
@@ -3671,7 +3671,7 @@
         {@render CityProfile()}
       {:else if route === '/world'}
         {@render CityWorld()}
-      {:else if route === '/story' || route.startsWith('/story/')}
+      {:else if route === '/chronicle' || route.startsWith('/chronicle/')}
         {@render CityStory()}
       {:else if route === '/economy'}
         {@render CityEconomy()}
@@ -3948,7 +3948,7 @@
     <div class="city-panel">
       <div class="row">
         <div class="panel-title">Storyteller</div>
-        <button onclick={() => cityNav('/story')}>Open Feed</button>
+        <button onclick={() => cityNav('/chronicle')}>Open Feed</button>
       </div>
       {#if cityStoryDigests[0]}
         {@const storyStatus = storytellerDigestStatus(cityStoryDigests[0])}
@@ -4273,7 +4273,7 @@
         {#each cityStoryRunList.visible as digest (digest.runId)}
           {@const status = storytellerDigestStatus(digest)}
           {@const safetyLine = storytellerDigestSafetyLine(digest)}
-          <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/story/${encodeURIComponent(digest.runId)}`)}>
+          <button class:active={cityStoryDigest?.runId === digest.runId} onclick={() => cityNav(`/chronicle/${encodeURIComponent(digest.runId)}`)}>
             <span class={`tag ${status.tone}`}>{digest.queue === 'canon' ? 'canon' : digest.queue === 'review' ? 'review' : status.label}</span>
             <strong>{digest.dispatch?.publicTitle || digest.digestId}</strong>
             <small>{digest.queue || 'dry-run'} · {digest.topEventCount} events · {digest.residentCount} residents · {digest.builtAt ? timeAgo(digest.builtAt) : 'undated'}</small>
@@ -5295,7 +5295,7 @@
         <strong>{missingState.title}</strong>
         <span>{missingState.detail}</span>
         <div class="resident-sync-actions">
-          <button onclick={() => cityNav('/story')}>Story</button>
+          <button onclick={() => cityNav('/chronicle')}>Story</button>
           <button onclick={() => debugNav('/residents')}>Ops Roster</button>
         </div>
       </div>
@@ -5525,7 +5525,7 @@
                 <small>run {cityPrintStorySignal.latestRunId}</small>
               {/if}
             </div>
-            <button onclick={() => cityNav('/story')}>Story</button>
+            <button onclick={() => cityNav('/chronicle')}>Story</button>
           </article>
           {#each cityPrintStorySignal.events.slice(0, 3) as event (event.ref)}
             {@const myth = storytellerMythCard(event)}
@@ -5660,7 +5660,7 @@
     <div class="city-panel">
       <div class="row">
         <div class="panel-title">Storyteller</div>
-        <button onclick={() => cityNav('/story')}>Open Feed</button>
+        <button onclick={() => cityNav('/chronicle')}>Open Feed</button>
       </div>
       <div class="city-copy-block">
         <strong>{cityLibraryStoryPreview.title}</strong>
@@ -6011,7 +6011,7 @@
         <strong>{rosterState.title}</strong>
         <span>{rosterState.detail}</span>
         <div class="resident-sync-actions">
-          <button onclick={() => cityNav('/story')}>Story</button>
+          <button onclick={() => cityNav('/chronicle')}>Story</button>
           <button onclick={() => debugNav('/residents')}>Ops Roster</button>
         </div>
       </div>

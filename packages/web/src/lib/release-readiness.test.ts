@@ -1159,20 +1159,20 @@ describe('buildReleaseReadiness', () => {
       value: 'no digest',
       detail: 'No Storyteller digest is available for operator or public narrative context.',
     });
-    expect(summary.nextActions).toContain('Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.');
+    expect(summary.nextActions).toContain('Prepare a deterministic Storyteller dry-run and open the Chronicle before using public canon narration.');
     expect(releaseReadinessActionQueue(summary)).toContainEqual({
       label: 'Prepare dry-run',
       tone: 'warn',
-      detail: 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.',
-      target: 'Story',
-      destination: 'Story',
-      destinationLabel: 'Story',
-      path: '/story',
+      detail: 'Prepare a deterministic Storyteller dry-run and open the Chronicle before using public canon narration.',
+      target: 'Chronicle',
+      destination: 'Chronicle',
+      destinationLabel: 'Chronicle',
+      path: '/chronicle',
     });
     expect(releaseReadinessDemoProofRail(summary).find(item => item.label === 'Dry-run')).toEqual({
       label: 'Dry-run',
       tone: 'warn',
-      detail: 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.',
+      detail: 'Prepare a deterministic Storyteller dry-run and open the Chronicle before using public canon narration.',
     });
   });
 
@@ -1255,10 +1255,10 @@ describe('buildReleaseReadiness', () => {
       label: 'Ground Story',
       tone: 'warn',
       detail: 'Run Storyteller with grounded event evidence before using public canon narration.',
-      target: 'Story',
-      destination: 'Story',
-      destinationLabel: 'Story',
-      path: '/story',
+      target: 'Chronicle',
+      destination: 'Chronicle',
+      destinationLabel: 'Chronicle',
+      path: '/chronicle',
     });
   });
 
@@ -1306,10 +1306,10 @@ describe('buildReleaseReadiness', () => {
       label: 'Review grounding',
       tone: 'warn',
       detail: 'Review Storyteller grounding audit before using public canon narration.',
-      target: 'Story',
-      destination: 'Story',
-      destinationLabel: 'Story',
-      path: '/story',
+      target: 'Chronicle',
+      destination: 'Chronicle',
+      destinationLabel: 'Chronicle',
+      path: '/chronicle',
     });
   });
 

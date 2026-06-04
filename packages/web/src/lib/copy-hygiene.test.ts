@@ -36,6 +36,17 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('<strong>Storyteller feed is unavailable</strong>');
   });
 
+  test('uses human-facing live and chronicle route names instead of stale overview and story paths', () => {
+    expect(appSource).not.toContain("route === '/overview'");
+    expect(appSource).not.toContain("cityNav('/overview')");
+    expect(appSource).not.toContain("route === '/story'");
+    expect(appSource).not.toContain("cityNav('/story')");
+    expect(appSource).toContain("route === '/live'");
+    expect(appSource).toContain("cityNav('/live')");
+    expect(appSource).toContain("route === '/chronicle'");
+    expect(appSource).toContain("cityNav('/chronicle')");
+  });
+
   test('keeps Story Canon events on myth copy instead of raw log notes', () => {
     expect(appSource).not.toContain('<strong>{event.note || event.ref}</strong>');
     expect(appSource).toContain('{@const myth = storytellerMythCard(event)}');

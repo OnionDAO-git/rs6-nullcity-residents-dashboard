@@ -97,7 +97,7 @@ const LOW_AP_DEMO_THRESHOLD = 10;
 const STORYTELLER_STALE_MS = 60 * 60 * 1000;
 const CAPABILITY_STALE_MS = 48 * 60 * 60 * 1000;
 const FIRST_FIVE_CAPTURE_EVIDENCE = 'resident roster, goal/action link proof, AP/GP proof, Storyteller review, and dry-run digest evidence';
-const DRY_RUN_DEMO_ACTION = 'Prepare a deterministic Storyteller dry-run and open the Storyteller feed before using public canon narration.';
+const DRY_RUN_DEMO_ACTION = 'Prepare a deterministic Storyteller dry-run and open the Chronicle before using public canon narration.';
 const DRY_RUN_FRESH_EVIDENCE = 'prepare deterministic Storyteller dry-run evidence for the demo';
 
 type CapabilityGroupId = 'ap-gp' | 'trade' | 'combat' | 'gear' | 'memory';
@@ -468,11 +468,11 @@ function readinessActionTarget(action: string): { target: string; destination: s
   if (action.startsWith('Configure the live economy')) return { target: 'Economy', destination: 'Economy', path: '/economy' };
   if (action.startsWith('Restore the economy')) return { target: 'Economy', destination: 'Economy', path: '/economy' };
   if (action.startsWith('Run missing')) return { target: 'Operator Readiness', destination: 'Operator Readiness', path: '/' };
-  if (action.startsWith('Review and clear')) return { target: 'Story', destination: 'Story', path: '/story' };
-  if (action.startsWith('Review Storyteller grounding')) return { target: 'Story', destination: 'Story', path: '/story' };
-  if (action.startsWith('Run Storyteller with grounded')) return { target: 'Story', destination: 'Story', path: '/story' };
-  if (action.startsWith('Prepare a deterministic Storyteller dry-run')) return { target: 'Story', destination: 'Story', path: '/story' };
-  if (action.startsWith('Run or review Storyteller')) return { target: 'Story', destination: 'Story', path: '/story' };
+  if (action.startsWith('Review and clear')) return { target: 'Chronicle', destination: 'Chronicle', path: '/chronicle' };
+  if (action.startsWith('Review Storyteller grounding')) return { target: 'Chronicle', destination: 'Chronicle', path: '/chronicle' };
+  if (action.startsWith('Run Storyteller with grounded')) return { target: 'Chronicle', destination: 'Chronicle', path: '/chronicle' };
+  if (action.startsWith('Prepare a deterministic Storyteller dry-run')) return { target: 'Chronicle', destination: 'Chronicle', path: '/chronicle' };
+  if (action.startsWith('Run or review Storyteller')) return { target: 'Chronicle', destination: 'Chronicle', path: '/chronicle' };
   if (action.startsWith('Assign blocked print')) return { target: 'Prints', destination: 'Prints', path: '/prints' };
   return { target: 'Overview', destination: 'Overview', path: '/' };
 }

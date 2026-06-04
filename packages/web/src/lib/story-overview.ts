@@ -492,7 +492,7 @@ function buildWatchItems(
     });
   }
   if (digest?.dispatch?.needsReview || (digest && digest.queue !== 'canon')) {
-    items.push({ label: 'Story awaiting review', detail: 'The latest story is still being checked before public display.', tone: 'warn', path: '/story' });
+    items.push({ label: 'Story awaiting review', detail: 'The latest story is still being checked before public display.', tone: 'warn', path: '/chronicle' });
   }
   if (offMapRegions.length) {
     items.push({ label: 'Elsewhere in the city', detail: `${offMapRegions.reduce((sum, region) => sum + region.count, 0)} residents are active outside this map area`, tone: 'ok' });
