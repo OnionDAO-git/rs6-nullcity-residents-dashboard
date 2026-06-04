@@ -388,4 +388,54 @@ describe('buildProjectorOverviewSnapshot', () => {
     expect(snapshot.projectorFrame?.watchNext[0]).toBe('Will Bob appear or will The Steward pivot to another tool source?');
     expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/render|fade line|something to load|tile load|wait-state|\bspawn\b|a appear/i);
   });
+
+  test('removes false attention-fade melodrama from fresh model narration', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:sonnet-fade-copy:2026-06-04T18:49:40.000Z',
+      digestId: 'sonnet-fade-copy',
+      generatedAt: '2026-06-04T18:49:40.000Z',
+      source: {
+        digestId: 'sonnet-fade-copy',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: 'Two residents unstick, one gathers wood, one eyes the embassy',
+        body: "Hans, meanwhile, felt the first pull of attention fade and spoke it aloud: an offering at the embassy might buy more time in the city. No RuneScape gold moved, no fires lit yet, but the goals are clear and the clock is visible. The question is whether The Steward finds the wood before Hans fades, or whether Hans's attention meter becomes the louder story.",
+        bullets: ['Hans felt the first pull of attention fade and asked whether an offering might buy more time in the city.'],
+      },
+      leadEvent: null,
+      events: [],
+      residents: [],
+      actions: [],
+      watchNext: ['Whether Hans visits embassy or attention accelerates'],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 2,
+        activeResidents: 2,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-04T18:50:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.narration.body).toBe(
+      'Hans, meanwhile, mentioned attention and the embassy: an offering could help choose what happens next. No RuneScape gold moved, no fires lit yet, but the goals are clear and the next choice is visible. The question is whether The Steward finds the wood before Hans needs support, or whether Hans\'s support becomes the louder story.',
+    );
+    expect(snapshot.projectorFrame?.narration.bullets).toEqual([
+      'Hans felt attention and asked whether an offering could help choose what happens next.',
+    ]);
+    expect(snapshot.projectorFrame?.watchNext[0]).toBe('Whether Hans visits embassy or Hans asks for support');
+    expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/attention fade|buy more time|clock is visible|Hans fades|attention meter|attention accelerates/i);
+  });
 });
