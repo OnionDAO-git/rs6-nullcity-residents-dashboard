@@ -183,6 +183,67 @@ describe('story overview projector model', () => {
     expect(model.watchItems[0]?.label).toBe('Whether QA Guardian spends attention wisely.');
   });
 
+  test('translates model and game jargon before public projector display', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:npc-jargon:2026-06-03T18:00:00.000Z',
+        digestId: 'npc-jargon',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'npc-jargon',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'verified_dispatch',
+          title: 'The agent is waiting on Bob NPC',
+          body: 'The agent is waiting for the Bob NPC to materialize. NPCs nearby can unblock axe collection.',
+          bullets: ['Will Bob NPC spawn and allow agent to acquire axe?'],
+          confidence: 'high',
+        },
+        leadEvent: {
+          ref: 'axe-bob',
+          label: 'Tool route waiting',
+          residentName: 'res:agent',
+          happenedAt: '2026-06-03T17:59:00.000Z',
+          importance: 'medium',
+          note: 'res:agent is waiting for the Bob NPC to materialize.',
+          whyItMatters: 'Bob NPC can unblock axe collection',
+        },
+        events: [],
+        residents: [],
+        actions: [{
+          kind: 'watch_resident',
+          label: 'Watch agent NPC route',
+          detail: 'Will Bob NPC spawn and allow agent to acquire axe?',
+          residentName: 'res:agent',
+        }],
+        watchNext: ['Will Bob NPC spawn and allow agent to acquire axe?'],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'ok',
+          totalResidents: 1,
+          activeResidents: 1,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: [],
+        },
+      },
+    });
+
+    expect(model.dispatch.title).toBe('The Steward is waiting on Bob');
+    expect(model.dispatch.bodyLead).toBe('The Steward is waiting for Bob to appear.');
+    expect(model.dispatch.bodyParagraphs).toEqual(['Characters nearby can unblock axe collection.']);
+    expect(model.dispatch.bullets).toEqual(['Whether Bob appears and lets The Steward get an axe.']);
+    expect(model.watchItems[0]?.label).toBe('Whether Bob appears and lets The Steward get an axe.');
+    expect(model.primaryAction.detail).toBe('Whether Bob appears and lets The Steward get an axe.');
+    expect(JSON.stringify(model)).not.toMatch(/\bNPCs?\b|\bspawn\b|\bmaterialize\b|\bthe agent\b/i);
+  });
+
   test('rewrites raw actor-count phrasing in public narration', () => {
     const model = buildStoryOverviewModel({
       residents: [],

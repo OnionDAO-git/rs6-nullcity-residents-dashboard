@@ -507,8 +507,8 @@ function buildProjectorFrameWatchItems(frame: ProjectorStoryFrame): StoryOvervie
     tone: 'ok' as const,
   }));
   const actionItems = frame.actions.map(action => ({
-    label: action.label,
-    detail: action.detail,
+    label: publicProjectorCopy(action.label),
+    detail: publicProjectorCopy(action.detail),
     ...(action.residentName ? { path: `/residents/${encodeURIComponent(residentRouteSlug(action.residentName))}` } : {}),
     tone: action.kind === 'grant_attention' ? 'warn' as const : 'ok' as const,
   }));
@@ -687,6 +687,21 @@ function prettifyResidentRefs(text: string): string {
 
 function publicProjectorCopy(text: string): string {
   return prettifyResidentRefs(text)
+    .replace(/\bWill\s+([A-Z][A-Za-z0-9' -]+?)\s+NPC\s+spawn\s+and\s+allow\s+(?:the\s+)?agent\s+to\s+acquire\s+axe\?/gi, (_match, name: string) => `Whether ${name.trim()} appears and lets The Steward get an axe.`)
+    .replace(/\bthe\s+agent's\b/gi, "The Steward's")
+    .replace(/\bthe\s+agent\b/gi, 'The Steward')
+    .replace(/\bagent's\b/gi, "The Steward's")
+    .replace(/\bagent\b/gi, 'The Steward')
+    .replace(/\bthe\s+([A-Z][A-Za-z0-9'-]*(?:\s+[A-Z][A-Za-z0-9'-]*)*)\s+NPC\b/g, '$1')
+    .replace(/\b([A-Z][A-Za-z0-9'-]*(?:\s+[A-Z][A-Za-z0-9'-]*)*)\s+NPC\b/g, '$1')
+    .replace(/\bNPCs\b/g, 'Characters')
+    .replace(/\bnpcs\b/g, 'characters')
+    .replace(/\bNPC\b/g, 'character')
+    .replace(/\bnpc\b/g, 'character')
+    .replace(/\bspawn\b/gi, 'appear')
+    .replace(/\bspawns\b/gi, 'appears')
+    .replace(/\bto materialize\b/gi, 'to appear')
+    .replace(/\bmaterialize\b/gi, 'appear')
     .replace(/\bescaped a dead loop\b/gi, 'got unstuck')
     .replace(/\brecovered from a stuck state\b/gi, 'got unstuck')
     .replace(/\brecovered from being stuck\b/gi, 'got unstuck')
