@@ -341,4 +341,51 @@ describe('buildProjectorOverviewSnapshot', () => {
     expect(snapshot.projectorFrame?.watchNext[0]).toBe('Will Hans make an embassy offering to guide his next move?');
     expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/fading fast|attention situation|on the ledger|attention is fading|feel my attention fading|stabilize attention|rendering|wait-state|tile load/i);
   });
+
+  test('cleans live model phrasing about rendering, loading, and fade lines', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:live-phrasing:2026-06-04T18:39:25.000Z',
+      digestId: 'live-phrasing',
+      generatedAt: '2026-06-04T18:39:25.000Z',
+      source: {
+        digestId: 'live-phrasing',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: "Two recoveries, one axe shop, and a city that won't let go",
+        body: "The Steward is hunting logs and a fire, but Bob's counter is empty or the character hasn't rendered yet. The city is holding its breath: two residents, both active, both above the fade line, both waiting for something to load. It's the kind of quiet that hums—not dead air, but the pause before a click, a spawn, or a pivot.",
+        bullets: ['Both residents remain active; system health stable at 2/2'],
+      },
+      leadEvent: null,
+      events: [],
+      residents: [],
+      actions: [],
+      watchNext: ['Will Bob spawn or will The Steward pivot to another tool source?'],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 2,
+        activeResidents: 2,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-04T18:40:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.narration.body).toBe(
+      "The Steward is hunting logs and a fire, but Bob's counter is empty or the character has not appeared yet. The city is holding its breath: two residents, both active, both stable for now, both waiting for the next opening. It's the kind of quiet that hums—not dead air, but the pause before the next move.",
+    );
+    expect(snapshot.projectorFrame?.watchNext[0]).toBe('Will Bob appear or will The Steward pivot to another tool source?');
+    expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/render|fade line|something to load|tile load|wait-state|\bspawn\b|a appear/i);
+  });
 });
