@@ -19,46 +19,52 @@ export function buildProjectorOverviewSnapshot(input: BuildProjectorOverviewSnap
 }
 
 function sanitizeProjectorFrame(frame: ProjectorStoryFrame): ProjectorStoryFrame {
+  const copy = (text: string) => publicProjectorCopy(text, {
+    hasUrgentAttentionRisk: frame.publicHealth.lowApResidents > 0,
+  });
   return {
     ...frame,
     narration: {
       ...frame.narration,
-      title: publicProjectorCopy(frame.narration.title),
-      body: publicProjectorCopy(frame.narration.body),
-      bullets: frame.narration.bullets.map(publicProjectorCopy),
+      title: copy(frame.narration.title),
+      body: copy(frame.narration.body),
+      bullets: frame.narration.bullets.map(copy),
     },
-    leadEvent: frame.leadEvent ? sanitizeProjectorFrameEvent(frame.leadEvent) : null,
-    events: frame.events.map(sanitizeProjectorFrameEvent),
+    leadEvent: frame.leadEvent ? sanitizeProjectorFrameEvent(frame.leadEvent, copy) : null,
+    events: frame.events.map(event => sanitizeProjectorFrameEvent(event, copy)),
     residents: frame.residents.map(resident => ({
       ...resident,
-      displayName: publicProjectorCopy(resident.displayName),
-      ...(resident.goal ? { goal: publicProjectorCopy(resident.goal) } : {}),
-      ...(resident.latestSpeechSummary ? { latestSpeechSummary: publicProjectorCopy(resident.latestSpeechSummary) } : {}),
+      displayName: copy(resident.displayName),
+      ...(resident.goal ? { goal: copy(resident.goal) } : {}),
+      ...(resident.latestSpeechSummary ? { latestSpeechSummary: copy(resident.latestSpeechSummary) } : {}),
     })),
     actions: frame.actions.map(action => ({
       ...action,
-      label: publicProjectorCopy(action.label),
-      detail: publicProjectorCopy(action.detail),
+      label: copy(action.label),
+      detail: copy(action.detail),
     })),
-    watchNext: frame.watchNext.map(publicProjectorCopy),
+    watchNext: frame.watchNext.map(copy),
     publicHealth: {
       ...frame.publicHealth,
-      warnings: frame.publicHealth.warnings.map(publicProjectorCopy),
+      warnings: frame.publicHealth.warnings.map(copy),
     },
   };
 }
 
-function sanitizeProjectorFrameEvent(event: ProjectorStoryFrame['events'][number]): ProjectorStoryFrame['events'][number] {
+function sanitizeProjectorFrameEvent(
+  event: ProjectorStoryFrame['events'][number],
+  copy: (text: string) => string,
+): ProjectorStoryFrame['events'][number] {
   return {
     ...event,
-    label: publicProjectorCopy(event.label),
-    note: publicProjectorCopy(event.note),
-    whyItMatters: publicProjectorCopy(event.whyItMatters),
+    label: copy(event.label),
+    note: copy(event.note),
+    whyItMatters: copy(event.whyItMatters),
   };
 }
 
-function publicProjectorCopy(text: string): string {
-  return prettifyResidentRefs(text)
+function publicProjectorCopy(text: string, options: { hasUrgentAttentionRisk: boolean }): string {
+  const copy = prettifyResidentRefs(text)
     .replace(/\bWill\s+([A-Z][A-Za-z0-9' -]+?)\s+NPC\s+spawn\s+and\s+allow\s+(?:the\s+)?agent\s+to\s+acquire\s+axe\?/gi, (_match, name: string) => `Whether ${name.trim()} appears and lets The Steward get an axe.`)
     .replace(/\bthe\s+agent's\b/gi, "The Steward's")
     .replace(/\bthe\s+agent\b/gi, 'The Steward')
@@ -77,6 +83,19 @@ function publicProjectorCopy(text: string): string {
     .replace(/\bAP\b/g, 'attention')
     .replace(/\bGP\b/g, 'RuneScape gold')
     .replace(/\bNCRI\b/g, 'special item');
+  return options.hasUrgentAttentionRisk ? copy : removeFalseAttentionUrgency(copy);
+}
+
+function removeFalseAttentionUrgency(text: string): string {
+  return text
+    .replace(/\battention warnings rise\b/gi, 'attention reserves hold')
+    .replace(/Hans,\s+sitting at 5000 attention,\s+voiced the familiar refrain:\s+an embassy offering could buy more time before the fade clock starts ticking\./gi, 'Hans has 5000 attention, and an embassy offering could still shape what happens next.')
+    .replace(/\bHans has 5000 attention,\s+but fade risk becomes real if no one helps\./gi, 'Hans has 5000 attention, and support can still shape what happens next.')
+    .replace(/\bbefore the fade clock starts ticking\b/gi, 'while support still has time to matter')
+    .replace(/\bbefore fade risk becomes real\b/gi, 'while support still has time to matter')
+    .replace(/\bfade risk becomes real\b/gi, 'support still has time to matter')
+    .replace(/\bfade clock starts ticking\b/gi, 'support becomes urgent')
+    .replace(/\bfade risk\b/gi, 'support timing');
 }
 
 function prettifyResidentRefs(text: string): string {

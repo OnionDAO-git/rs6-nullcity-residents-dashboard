@@ -220,4 +220,63 @@ describe('buildProjectorOverviewSnapshot', () => {
       publicWarnings: snapshot.projectorFrame?.publicHealth.warnings,
     })).not.toMatch(/\bNPCs?\b|\bspawn\b|\bmaterialize\b|\bthe agent\b/i);
   });
+
+  test('does not manufacture fade urgency when no residents need urgent attention', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:attention-risk:2026-06-03T18:00:00.000Z',
+      digestId: 'attention-risk',
+      generatedAt: '2026-06-03T18:00:00.000Z',
+      source: {
+        digestId: 'attention-risk',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: "Two residents unstuck; Bob's shop still empty, attention warnings rise",
+        body: "Hans, sitting at 5000 attention, voiced the familiar refrain: an embassy offering could buy more time before the fade clock starts ticking.",
+        bullets: ['Hans has 5000 attention, but fade risk becomes real if no one helps.'],
+      },
+      leadEvent: null,
+      events: [],
+      residents: [{
+        residentName: 'res:hans',
+        displayName: 'Hans',
+        attention: 5_000,
+        status: 'active',
+        gpObserved: null,
+        goal: 'Ask for help before fade risk becomes real.',
+      }],
+      actions: [],
+      watchNext: ['Hans at 5000 attention—will an embassy offering arrive before fade risk becomes real?'],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 2,
+        activeResidents: 2,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-03T18:01:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.narration.title).toBe("Two residents unstuck; Bob's shop still empty, attention reserves hold");
+    expect(snapshot.projectorFrame?.narration.body).toBe('Hans has 5000 attention, and an embassy offering could still shape what happens next.');
+    expect(snapshot.projectorFrame?.narration.bullets).toEqual(['Hans has 5000 attention, and support can still shape what happens next.']);
+    expect(snapshot.projectorFrame?.residents[0]?.goal).toBe('Ask for help while support still has time to matter.');
+    expect(snapshot.projectorFrame?.watchNext[0]).toBe('Hans at 5000 attention—will an embassy offering arrive while support still has time to matter?');
+    expect(JSON.stringify({
+      narration: snapshot.projectorFrame?.narration,
+      residents: snapshot.projectorFrame?.residents.map(resident => ({ goal: resident.goal })),
+      watchNext: snapshot.projectorFrame?.watchNext,
+    })).not.toMatch(/attention warnings|fade clock|fade risk|before fade/i);
+  });
 });
