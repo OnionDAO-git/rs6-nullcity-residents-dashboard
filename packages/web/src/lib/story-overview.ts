@@ -68,6 +68,7 @@ export interface StoryOverviewModel {
   citySignals: StoryOverviewListItem[];
   dramaItems: StoryOverviewListItem[];
   watchItems: StoryOverviewListItem[];
+  chronicleItems: StoryOverviewListItem[];
   primaryAction: StoryOverviewListItem;
 }
 
@@ -113,6 +114,7 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
   const citySignals = projectorFrame ? buildProjectorFrameCitySignals(projectorFrame) : buildCitySignals(input, digest, positioned.length);
   const dramaItems = projectorFrame ? buildProjectorFrameDramaItems(projectorFrame) : buildDramaItems(residents, digest, offMapRegions);
   const watchItems = projectorFrame ? buildProjectorFrameWatchItems(projectorFrame) : buildWatchItems(residents, digest, offMapRegions, leadResident);
+  const chronicleItems = buildChronicleItems(input.digests, projectorFrame, input.now);
 
   return {
     dispatch: projectorFrame ? buildProjectorFrameDispatch(projectorFrame, input.now) : buildDispatch(digest, leadResident, input.now),
@@ -127,6 +129,7 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
     citySignals,
     dramaItems,
     watchItems,
+    chronicleItems,
     primaryAction: projectorFrame ? buildProjectorFramePrimaryAction(projectorFrame, watchItems) : buildPrimaryAction(leadResident, watchItems),
   };
 }
@@ -561,6 +564,51 @@ function buildProjectorFramePrimaryAction(frame: ProjectorStoryFrame, watchItems
     detail: 'The Storyteller will surface the next verified moment.',
     tone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn',
   };
+}
+
+function buildChronicleItems(
+  digests: StorytellerDigestSummary[],
+  projectorFrame: ProjectorStoryFrame | undefined,
+  now: Date | undefined,
+): StoryOverviewListItem[] {
+  const items: StoryOverviewListItem[] = [];
+  if (projectorFrame?.narration.source === 'verified_dispatch') {
+    items.push({
+      label: publicProjectorCopy(projectorFrame.narration.title),
+      detail: `latest verified story · updated ${relativeTime(projectorFrame.generatedAt, now)}`,
+      tone: 'ok',
+    });
+  }
+
+  for (const digest of digests) {
+    if (items.length >= 4) break;
+    if (!hasSafeChronicleDispatch(digest)) continue;
+    if (projectorFrame && digest.digestId === projectorFrame.digestId) continue;
+    const title = publicProjectorCopy(digest.dispatch?.publicTitle || digest.digestId);
+    const detailSource = publicProjectorCopy(digest.dispatch?.publicBody || digest.summary || 'Verified dispatch captured.');
+    if (unsafeChronicleCopy(title) || unsafeChronicleCopy(detailSource)) continue;
+    const generated = digest.dispatch?.generatedAt || digest.builtAt;
+    items.push({
+      label: compactDetail(title, 72),
+      detail: generated ? `previous dispatch · updated ${relativeTime(generated, now)}` : 'previous dispatch',
+      tone: 'ok',
+    });
+  }
+  return items;
+}
+
+function hasSafeChronicleDispatch(digest: StorytellerDigestSummary): boolean {
+  return Boolean(
+    hasPublicProjectorDispatch(digest) &&
+    digest.dispatch &&
+    !unsafeChronicleCopy(digest.dispatch.publicTitle || '') &&
+    !unsafeChronicleCopy(digest.dispatch.publicBody || '') &&
+    !digest.dispatch.publicBullets.some(unsafeChronicleCopy),
+  );
+}
+
+function unsafeChronicleCopy(text: string): boolean {
+  return /\b(?:do not show|review queue|dry-run|attention warnings|fade risk|fade clock|before fade|nooped|fallback|support floor)\b/i.test(text);
 }
 
 function buildPrimaryAction(

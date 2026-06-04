@@ -138,6 +138,128 @@ describe('story overview projector model', () => {
     });
   });
 
+  test('builds a recent public dispatch chronicle without review or unsafe raw copy', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [
+        {
+          runId: 'canon-safe',
+          digestId: 'digest-safe',
+          queue: 'canon',
+          builtAt: '2026-06-03T17:30:00.000Z',
+          topEventCount: 1,
+          residentCount: 2,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-safe',
+            generatedAt: '2026-06-03T17:31:00.000Z',
+            needsReview: false,
+            warningCount: 0,
+            publicTitle: 'Hans answered the crowd',
+            publicBody: 'Hans changed route after an embassy offering.',
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 1,
+            eventRefsUsed: ['event-hans'],
+          },
+        },
+        {
+          runId: 'review-copy',
+          digestId: 'digest-review',
+          queue: 'review',
+          builtAt: '2026-06-03T17:45:00.000Z',
+          topEventCount: 1,
+          residentCount: 1,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-review',
+            generatedAt: '2026-06-03T17:46:00.000Z',
+            needsReview: false,
+            warningCount: 0,
+            publicTitle: 'DO NOT SHOW review title',
+            publicBody: 'Review queue text.',
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 1,
+            eventRefsUsed: ['event-review'],
+          },
+        },
+        {
+          runId: 'canon-risky',
+          digestId: 'digest-risky',
+          queue: 'canon',
+          builtAt: '2026-06-03T17:40:00.000Z',
+          topEventCount: 1,
+          residentCount: 1,
+          topEvents: [],
+          dispatch: {
+            dispatchId: 'dispatch-risky',
+            generatedAt: '2026-06-03T17:41:00.000Z',
+            needsReview: false,
+            warningCount: 0,
+            publicTitle: 'Attention warnings rise',
+            publicBody: 'Hans faces fade risk.',
+            publicBullets: [],
+            operatorWarnings: [],
+            reviewReasons: [],
+            eventRefCount: 1,
+            eventRefsUsed: ['event-risk'],
+          },
+        },
+      ],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:digest-current:2026-06-03T18:00:00.000Z',
+        digestId: 'digest-current',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'digest-current',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'verified_dispatch',
+          title: "Bob's shop is still empty",
+          body: 'The Steward is choosing whether to wait or pivot.',
+          bullets: [],
+          confidence: 'high',
+        },
+        leadEvent: null,
+        events: [],
+        residents: [],
+        actions: [],
+        watchNext: [],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'ok',
+          totalResidents: 2,
+          activeResidents: 2,
+          fadedResidents: 0,
+          lowApResidents: 0,
+          warnings: [],
+        },
+      },
+      now: new Date('2026-06-03T18:05:00.000Z'),
+    });
+
+    expect(model.chronicleItems).toEqual([
+      {
+        label: "Bob's shop is still empty",
+        detail: 'latest verified story · updated 5m ago',
+        tone: 'ok',
+      },
+      {
+        label: 'Hans answered the crowd',
+        detail: 'previous dispatch · updated 34m ago',
+        tone: 'ok',
+      },
+    ]);
+    expect(JSON.stringify(model.chronicleItems)).not.toMatch(/DO NOT SHOW|review queue|attention warnings|fade risk|dry-run/i);
+  });
+
   test('normalizes common Null City acronyms in public frame copy', () => {
     const model = buildStoryOverviewModel({
       residents: [],

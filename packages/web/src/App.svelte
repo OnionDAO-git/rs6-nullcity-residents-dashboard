@@ -3496,6 +3496,7 @@
     <section class="projector-rail-grid">
       {@render ProjectorRegionPanel()}
       {@render ProjectorListPanel({ title: 'What Residents Are Doing', items: cityProjectorOverview.residentActions })}
+      {@render ProjectorListPanel({ title: 'Recent Dispatches', items: cityProjectorOverview.chronicleItems })}
     </section>
   </main>
 {/snippet}

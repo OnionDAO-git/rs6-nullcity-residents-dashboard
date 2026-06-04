@@ -118,4 +118,11 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain('grant_attention');
     expect(appSource).not.toContain('support floor');
   });
+
+  test('shows a public recent-dispatch chronicle on the projector overview', () => {
+    expect(appSource).toContain("title: 'Recent Dispatches'");
+    expect(appSource).toContain('cityProjectorOverview.chronicleItems');
+    expect(appSource).not.toContain('Dispatch History');
+    expect(appSource).not.toContain('Run ID');
+  });
 });
