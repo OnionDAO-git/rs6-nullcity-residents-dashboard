@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { publicProjectorCopy } from './public-copy';
 import { asRecord, readJsonFile, readTextFile } from './util';
 
 export interface StorytellerDigestSummary {
@@ -106,6 +107,8 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
   const residents = arrayField(digest.residents);
   const systemHealth = asRecord(digest.systemHealth);
   const totalResidents = numberOrNullField(systemHealth, 'totalResidents');
+  const hasUrgentAttentionRisk = Math.max(0, Math.trunc(numberOrNullField(systemHealth, 'lowApResidents') ?? 0)) > 0;
+  const scrub = (text: string) => publicProjectorCopy(redactPublicText(text), { hasUrgentAttentionRisk });
   const summary = trimText(await readTextFile(path.join(runRoot, 'summary.txt')));
 
   if (!Object.keys(digest).length && !summary) return undefined;
@@ -113,8 +116,8 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
   const dispatchRecord = asRecord(await readJsonFile<unknown>(path.join(runRoot, 'dispatch.json')));
   const dispatch = Object.keys(dispatchRecord).length
     ? (() => {
-        const operatorWarnings = stringArrayField(dispatchRecord.operatorWarnings).map(redactPublicText);
-        const reviewReasons = stringArrayField(dispatchRecord.reviewReasons).map(redactPublicText);
+        const operatorWarnings = stringArrayField(dispatchRecord.operatorWarnings).map(scrub);
+        const reviewReasons = stringArrayField(dispatchRecord.reviewReasons).map(scrub);
         const warningCount = operatorWarnings.length + reviewReasons.length;
         const needsReview = typeof dispatchRecord.needsReview === 'boolean'
           ? dispatchRecord.needsReview
@@ -128,10 +131,10 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
           modelProfile: stringField(dispatchRecord, 'modelProfile'),
           needsReview,
           warningCount,
-          publicTitle: allowPublicCopy ? redactOptionalText(stringField(dispatchRecord, 'publicTitle')) : undefined,
-          publicBody: allowPublicCopy ? redactOptionalText(stringField(dispatchRecord, 'publicBody')) : undefined,
-          publicBullets: allowPublicCopy ? stringArrayField(dispatchRecord.publicBullets).map(redactPublicText) : [],
-          operatorSummary: redactOptionalText(stringField(dispatchRecord, 'operatorSummary')),
+          publicTitle: allowPublicCopy ? scrubOptionalText(stringField(dispatchRecord, 'publicTitle'), scrub) : undefined,
+          publicBody: allowPublicCopy ? scrubOptionalText(stringField(dispatchRecord, 'publicBody'), scrub) : undefined,
+          publicBullets: allowPublicCopy ? stringArrayField(dispatchRecord.publicBullets).map(scrub) : [],
+          operatorSummary: scrubOptionalText(stringField(dispatchRecord, 'operatorSummary'), scrub),
           operatorWarnings,
           reviewReasons,
           eventRefCount: arrayField(dispatchRecord.eventRefsUsed).length,
@@ -149,9 +152,9 @@ async function readStorytellerRun(root: string, runId: string, queue: Storytelle
     windowStart: stringField(digest, 'windowStart'),
     windowEnd: stringField(digest, 'windowEnd'),
     topEventCount: topEvents.length,
-    topEvents: topEvents.map(readTopEvent).filter((event): event is StorytellerDigestEventSummary => event !== undefined),
+    topEvents: topEvents.map(event => readTopEvent(event, scrub)).filter((event): event is StorytellerDigestEventSummary => event !== undefined),
     residentCount: typeof totalResidents === 'number' ? Math.max(0, Math.trunc(totalResidents)) : residents.length,
-    summary: summary ? redactPublicText(summary) : undefined,
+    summary: summary ? scrub(summary) : undefined,
     dispatch,
   };
 }
@@ -164,7 +167,7 @@ function isPublicDispatchCopyAllowed(queue: StorytellerQueue, needsReview: boole
   return queue === 'canon' && !needsReview && warningCount === 0;
 }
 
-function readTopEvent(value: unknown): StorytellerDigestEventSummary | undefined {
+function readTopEvent(value: unknown, scrub: (text: string) => string): StorytellerDigestEventSummary | undefined {
   const event = asRecord(value);
   const ref = stringField(event, 'ref') || stringField(event, 'id');
   const kind = stringField(event, 'kind');
@@ -175,9 +178,9 @@ function readTopEvent(value: unknown): StorytellerDigestEventSummary | undefined
     kind,
     ...(stringField(event, 'residentName') !== undefined ? { residentName: stringField(event, 'residentName') } : {}),
     ...(stringField(event, 'ts') !== undefined ? { ts: stringField(event, 'ts') } : {}),
-    ...(note !== undefined ? { note: redactPublicText(note) } : {}),
+    ...(note !== undefined ? { note: scrub(note) } : {}),
     ...(stringField(event, 'importance') !== undefined ? { importance: stringField(event, 'importance') } : {}),
-    evidenceLabels: evidenceLabels(asRecord(event.evidence)),
+    evidenceLabels: evidenceLabels(asRecord(event.evidence)).map(scrubEvidenceLabel),
   };
 }
 
@@ -289,8 +292,16 @@ function redactPublicText(value: string): string {
     .replace(/\b(?:human|patron|city-user|user):[A-Za-z0-9._:-]+\b/gi, '[human]');
 }
 
-function redactOptionalText(value: string | undefined): string | undefined {
-  return value === undefined ? undefined : redactPublicText(value);
+function scrubOptionalText(value: string | undefined, scrub: (text: string) => string): string | undefined {
+  return value === undefined ? undefined : scrub(value);
+}
+
+function scrubEvidenceLabel(value: string): string {
+  return redactPublicText(value)
+    .replace(/\bAP\b/g, 'attention')
+    .replace(/\bGP\b/g, 'RuneScape gold')
+    .replace(/\bNPCs\b/g, 'Characters')
+    .replace(/\bNPC\b/g, 'character');
 }
 
 function isPrivateHumanValue(value: string): boolean {

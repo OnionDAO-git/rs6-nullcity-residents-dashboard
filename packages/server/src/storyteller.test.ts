@@ -205,6 +205,63 @@ describe('readStorytellerDigestFeed', () => {
     expect(JSON.stringify(feed)).not.toContain('patron:james');
   });
 
+  test('sanitizes canon dispatch copy before exposing the public digest feed', async () => {
+    const memoryRoot = await makeMemoryRoot();
+    const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
+
+    await fs.mkdir(path.join(storytellerRoot, 'canon', 'digest-canon-jargon'), { recursive: true });
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon-jargon', 'digest.json'), JSON.stringify({
+      digestId: 'digest-canon-jargon',
+      builtAt: '2026-05-30T04:00:00.000Z',
+      topEvents: [{
+        ref: 'event-jargon',
+        kind: 'say',
+        residentName: 'res:hans',
+        note: 'Hans said: "I can feel my AP fading while I wait for Bob NPC to spawn."',
+        evidence: { apGranted: 5000, source: 'library.timeline' },
+      }],
+      residents: [{ residentName: 'res:hans' }],
+      systemHealth: { totalResidents: 1, activeResidents: 1, fadedResidents: 0, lowApResidents: 0 },
+    }));
+    await fs.writeFile(
+      path.join(storytellerRoot, 'canon', 'digest-canon-jargon', 'summary.txt'),
+      'Operator summary: Hans saw AP fade, Bob NPC did not spawn, no GP moved.',
+    );
+    await fs.writeFile(path.join(storytellerRoot, 'canon', 'digest-canon-jargon', 'dispatch.json'), JSON.stringify({
+      dispatchId: 'dispatch-canon-jargon',
+      needsReview: false,
+      publicTitle: 'Hans NPC watches AP warnings rise',
+      publicBody: 'Hans felt AP fade and waited for the Bob NPC to spawn. The AP meter becomes the louder story; the clock is visible.',
+      publicBullets: [
+        'Hans has 5000 AP, but fade risk becomes real if no one helps.',
+        'Hans voiced concern about fading attention, mentioning embassy offering.',
+        'Will Bob NPC spawn and allow agent to acquire axe?',
+      ],
+      operatorSummary: 'Hans AP fade comment; Bob NPC did not render.',
+      operatorWarnings: [],
+      reviewReasons: [],
+      eventRefsUsed: [],
+    }));
+
+    const feed = await readStorytellerDigestFeed(memoryRoot);
+    const item = feed.items[0];
+    const dispatch = item?.dispatch;
+
+    expect(item?.summary).toBe('Operator summary: Hans saw attention, Bob did not appear, no RuneScape gold moved.');
+    expect(item?.topEvents[0]?.note).toBe('Hans said: "I can have attention to spend while I wait for Bob to appear."');
+    expect(item?.topEvents[0]?.evidenceLabels).toEqual(['5,000 attention', 'source:library.timeline']);
+    expect(dispatch?.publicTitle).toBe('Hans watches attention reserves hold');
+    expect(dispatch?.publicBody).toBe('Hans felt attention and waited for Bob to appear. The support becomes the louder story; the next choice is visible.');
+    expect(dispatch?.publicBullets).toEqual([
+      'Hans has 5000 attention, and support can still shape what happens next.',
+      'Hans voiced concern about attention, mentioning embassy offering.',
+      'Whether Bob appears and lets The Steward get an axe.',
+    ]);
+    expect(dispatch?.operatorSummary).toBe('Hans attention comment; Bob did not appear.');
+    expect(dispatch?.operatorWarnings).toEqual([]);
+    expect(JSON.stringify(item)).not.toMatch(/\bAP\b|\bNPCs?\b|\bspawn\b|\bfad(?:e|ing)\b|\battention meter\b|\bclock is visible\b|\brender\b|\bload\b/i);
+  });
+
   test('summarizes grounded top events with safe evidence labels and redacted public text', async () => {
     const memoryRoot = await makeMemoryRoot();
     const storytellerRoot = path.join(path.dirname(memoryRoot), 'storyteller');
@@ -266,9 +323,9 @@ describe('readStorytellerDigestFeed', () => {
         kind: 'ap_for_gp_exchange',
         residentName: 'res:alice',
         ts: '2026-05-30T00:00:30.000Z',
-        note: 'Alice traded 200 GP with [human] and [human] for life-force.',
+        note: 'Alice traded 200 RuneScape gold with [human] and [human] for life-force.',
         importance: 'high',
-        evidenceLabels: ['coin-995', '200 GP', '50 AP', 'exchange apgp:res:alice:fixture-001'],
+        evidenceLabels: ['coin-995', '200 RuneScape gold', '50 attention', 'exchange apgp:res:alice:fixture-001'],
       },
       {
         ref: 'goal-1',

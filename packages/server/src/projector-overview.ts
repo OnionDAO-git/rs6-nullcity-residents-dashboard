@@ -1,5 +1,6 @@
 import { refreshProjectorFrameFreshness, type ProjectorOverviewSnapshot, type ProjectorStoryFrame, type ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import { toPublicOverviewResident } from './public-overview';
+import { publicProjectorCopy } from './public-copy';
 
 export interface BuildProjectorOverviewSnapshotInput {
   generatedAt: string;
@@ -61,95 +62,4 @@ function sanitizeProjectorFrameEvent(
     note: copy(event.note),
     whyItMatters: copy(event.whyItMatters),
   };
-}
-
-function publicProjectorCopy(text: string, options: { hasUrgentAttentionRisk: boolean }): string {
-  const copy = prettifyResidentRefs(text)
-    .replace(/\bWill\s+([A-Z][A-Za-z0-9' -]+?)\s+NPC\s+spawn\s+and\s+allow\s+(?:the\s+)?agent\s+to\s+acquire\s+axe\?/gi, (_match, name: string) => `Whether ${name.trim()} appears and lets The Steward get an axe.`)
-    .replace(/\bthe\s+agent's\b/gi, "The Steward's")
-    .replace(/\bthe\s+agent\b/gi, 'The Steward')
-    .replace(/\bagent's\b/gi, "The Steward's")
-    .replace(/\bagent\b/gi, 'The Steward')
-    .replace(/\bthe\s+([A-Z][A-Za-z0-9'-]*(?:\s+[A-Z][A-Za-z0-9'-]*)*)\s+NPC\b/g, '$1')
-    .replace(/\b([A-Z][A-Za-z0-9'-]*(?:\s+[A-Z][A-Za-z0-9'-]*)*)\s+NPC\b/g, '$1')
-    .replace(/\bNPCs\b/g, 'Characters')
-    .replace(/\bnpcs\b/g, 'characters')
-    .replace(/\bNPC\b/g, 'character')
-    .replace(/\bnpc\b/g, 'character')
-    .replace(/\bspawns\b/gi, 'appears')
-    .replace(/\bspawn\b/gi, 'appear')
-    .replace(/\bto materialize\b/gi, 'to appear')
-    .replace(/\bmaterialize\b/gi, 'appear')
-    .replace(/\bAP\b/g, 'attention')
-    .replace(/\bGP\b/g, 'RuneScape gold')
-    .replace(/\bNCRI\b/g, 'special item');
-  return options.hasUrgentAttentionRisk ? copy : removeFalseAttentionUrgency(copy);
-}
-
-function removeFalseAttentionUrgency(text: string): string {
-  return text
-    .replace(/\bthe character hasn't rendered yet\b/gi, 'the character has not appeared yet')
-    .replace(/\bthe character has not rendered yet\b/gi, 'the character has not appeared yet')
-    .replace(/\bcharacter hasn't rendered yet\b/gi, 'character has not appeared yet')
-    .replace(/\bcharacter has not rendered yet\b/gi, 'character has not appeared yet')
-    .replace(/\bBob himself isn't rendering yet\b/gi, 'Bob still has not appeared')
-    .replace(/\bBob himself isn't appearing yet\b/gi, 'Bob still has not appeared')
-    .replace(/\bhasn't rendered yet\b/gi, 'has not appeared yet')
-    .replace(/\bhas not rendered yet\b/gi, 'has not appeared yet')
-    .replace(/\brendered\b/gi, 'appeared')
-    .replace(/\brendering\b/gi, 'appearing')
-    .replace(/\bboth above the fade line\b/gi, 'both stable for now')
-    .replace(/\bfade line\b/gi, 'safe line')
-    .replace(/\bwaiting for something to load\b/gi, 'waiting for the next opening')
-    .replace(/\bsomething to load\b/gi, 'the next opening')
-    .replace(/\bto load\b/gi, 'to open up')
-    .replace(/\ba appear\b/gi, 'an appearance')
-    .replace(/\bthe pause before a click,\s+an appearance,\s+or a pivot\b/gi, 'the pause before the next move')
-    .replace(/\battention warnings rise\b/gi, 'attention reserves hold')
-    .replace(/Hans,\s+meanwhile,\s+felt the first pull of attention fade and spoke it aloud:\s+an offering at the embassy might buy more time in the city\./gi, 'Hans, meanwhile, mentioned attention and the embassy: an offering could help choose what happens next.')
-    .replace(/\bthe first pull of attention fade\b/gi, 'attention')
-    .replace(/\battention fade\b/gi, 'attention')
-    .replace(/\battention meter becomes the louder story\b/gi, 'support becomes the louder story')
-    .replace(/\battention meter\b/gi, 'attention')
-    .replace(/\battention accelerates\b/gi, 'Hans asks for support')
-    .replace(/\bmight buy more time in the city\b/gi, 'could help choose what happens next')
-    .replace(/\bthe clock is visible\b/gi, 'the next choice is visible')
-    .replace(/\bbefore Hans fades\b/gi, 'before Hans needs support')
-    .replace(/flagged his attention situation:\s+5000 on the ledger,\s+but fading fast enough that he's eyeing an offering to stay anchored\./gi, 'flagged his attention: 5000 remains, and an offering could help choose his next move.')
-    .replace(/warned his attention is fading—5000 remains,\s+but he's considering an embassy offering\./gi, "mentioned attention—5000 remains, but he's considering an embassy offering.")
-    .replace(/Hans:\s+I can feel my attention fading\.\s+An offering at the embassy would keep me here a while longer\./gi, 'Hans: I have 5000 attention. An offering at the embassy would help choose what happens next.')
-    .replace(/\bmake an embassy offering to stabilize attention\b/gi, 'make an embassy offering to guide his next move')
-    .replace(/\bRuneScape wait-state\b/gi, 'RuneScape problem')
-    .replace(/\blet the tile load\b/gi, 'wait a moment')
-    .replace(/Hans,\s+sitting at 5000 attention,\s+voiced the familiar refrain:\s+an embassy offering could buy more time before the fade clock starts ticking\./gi, 'Hans has 5000 attention, and an embassy offering could still shape what happens next.')
-    .replace(/\bHans has 5000 attention,\s+but fade risk becomes real if no one helps\./gi, 'Hans has 5000 attention, and support can still shape what happens next.')
-    .replace(/\battention situation\b/gi, 'attention')
-    .replace(/\bon the ledger\b/gi, 'recorded')
-    .replace(/\bfading fast\b/gi, 'ready for support')
-    .replace(/\battention is fading\b/gi, 'attention could use support')
-    .replace(/\bfeel my attention fading\b/gi, 'have attention to spend')
-    .replace(/\bbefore the fade clock starts ticking\b/gi, 'while support still has time to matter')
-    .replace(/\bbefore fade risk becomes real\b/gi, 'while support still has time to matter')
-    .replace(/\bfade risk becomes real\b/gi, 'support still has time to matter')
-    .replace(/\bfade clock starts ticking\b/gi, 'support becomes urgent')
-    .replace(/\bfade risk\b/gi, 'support timing');
-}
-
-function prettifyResidentRefs(text: string): string {
-  return text
-    .replace(/\bres:([a-z0-9_-]+)/gi, (_match, slug: string) => displayName(`res:${slug}`))
-    .replace(/\bQa\b/g, 'QA')
-    .replace(/\bGp\b/g, 'GP')
-    .replace(/\bAp\b/g, 'AP')
-    .replace(/\bNcri\b/g, 'NCRI');
-}
-
-function displayName(name: string): string {
-  const slug = name.replace(/^res:/i, '');
-  if (slug === 'agent') return 'The Steward';
-  return slug
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map(part => part.toLowerCase() === 'qa' ? 'QA' : `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
 }
