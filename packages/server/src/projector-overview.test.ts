@@ -279,4 +279,66 @@ describe('buildProjectorOverviewSnapshot', () => {
       watchNext: snapshot.projectorFrame?.watchNext,
     })).not.toMatch(/attention warnings|fade clock|fade risk|before fade/i);
   });
+
+  test('softens fast-fading attention copy when public health has no low-attention residents', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:fast-fading:2026-06-04T18:19:50.000Z',
+      digestId: 'fast-fading',
+      generatedAt: '2026-06-04T18:19:50.000Z',
+      source: {
+        digestId: 'fast-fading',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: 'Hans unstuck, The Steward waiting on Bob—both hunting basics',
+        body: "Hans shook off a navigation freeze near the embassy and immediately flagged his attention situation: 5000 on the ledger, but fading fast enough that he's eyeing an offering to stay anchored. Meanwhile, The Steward made it to Bob's axe shop with a clear goal—gather logs, light a fire—but Bob himself isn't rendering yet. No panic, just the familiar RuneScape wait-state: look around, try another angle, or let the tile load.",
+        bullets: [
+          "Hans recovered from a stuck state and warned his attention is fading—5000 remains, but he's considering an embassy offering.",
+        ],
+      },
+      leadEvent: null,
+      events: [],
+      residents: [{
+        residentName: 'res:hans',
+        displayName: 'Hans',
+        attention: 5_000,
+        status: 'active',
+        gpObserved: null,
+        latestSpeechSummary: "Hans: I can feel my attention fading. An offering at the embassy would keep me here a while longer.",
+      }],
+      actions: [],
+      watchNext: ['Will Hans make an embassy offering to stabilize attention?'],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 2,
+        activeResidents: 2,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-04T18:20:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.narration.body).toBe(
+      "Hans shook off a navigation freeze near the embassy and immediately flagged his attention: 5000 remains, and an offering could help choose his next move. Meanwhile, The Steward made it to Bob's axe shop with a clear goal—gather logs, light a fire—but Bob still has not appeared. No panic, just the familiar RuneScape problem: look around, try another angle, or wait a moment.",
+    );
+    expect(snapshot.projectorFrame?.narration.bullets).toEqual([
+      "Hans recovered from a stuck state and mentioned attention—5000 remains, but he's considering an embassy offering.",
+    ]);
+    expect(snapshot.projectorFrame?.residents[0]?.latestSpeechSummary).toBe(
+      'Hans: I have 5000 attention. An offering at the embassy would help choose what happens next.',
+    );
+    expect(snapshot.projectorFrame?.watchNext[0]).toBe('Will Hans make an embassy offering to guide his next move?');
+    expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/fading fast|attention situation|on the ledger|attention is fading|feel my attention fading|stabilize attention|rendering|wait-state|tile load/i);
+  });
 });
