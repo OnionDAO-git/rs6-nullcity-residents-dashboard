@@ -112,4 +112,112 @@ describe('buildProjectorOverviewSnapshot', () => {
     expect(snapshot.projectorFrame?.publicHealth.warnings).toEqual(['storyteller frame is stale (48m old)']);
     expect(frame.source.freshnessStatus).toBe('fresh');
   });
+
+  test('sanitizes model and game jargon before serving the public projector JSON', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:npc-jargon:2026-06-03T18:00:00.000Z',
+      digestId: 'npc-jargon',
+      generatedAt: '2026-06-03T18:00:00.000Z',
+      source: {
+        digestId: 'npc-jargon',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: 'The agent is waiting on Bob NPC',
+        body: 'The agent is waiting for the Bob NPC to materialize. NPCs nearby can unblock axe collection.',
+        bullets: ['Will Bob NPC spawn and allow agent to acquire axe?'],
+      },
+      leadEvent: {
+        ref: 'axe-bob',
+        label: 'Tool route waiting',
+        residentName: 'res:agent',
+        happenedAt: '2026-06-03T17:59:00.000Z',
+        importance: 'medium',
+        note: 'res:agent is waiting for the Bob NPC to materialize.',
+        whyItMatters: 'Bob NPC can unblock axe collection',
+      },
+      events: [{
+        ref: 'axe-bob-2',
+        label: 'Tool route waiting',
+        residentName: 'res:agent',
+        happenedAt: '2026-06-03T18:00:00.000Z',
+        importance: 'medium',
+        note: 'The agent still needs the Bob NPC to spawn.',
+        whyItMatters: 'agent needs axe access',
+      }],
+      residents: [{
+        residentName: 'res:agent',
+        displayName: 'The Steward',
+        attention: 12_617,
+        status: 'active',
+        gpObserved: 0,
+        goal: 'Wait for Bob NPC to spawn.',
+        latestSpeechSummary: 'The agent asked whether the NPC arrived.',
+      }],
+      actions: [{
+        kind: 'watch_resident',
+        label: 'Watch agent NPC route',
+        detail: 'Will Bob NPC spawn and allow agent to acquire axe?',
+        residentName: 'res:agent',
+      }],
+      watchNext: [
+        'Will Bob NPC spawn and allow agent to acquire axe?',
+        "Agent's first fire-lighting attempt once tools are secured",
+      ],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 1,
+        activeResidents: 1,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-03T18:01:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.narration.title).toBe('The Steward is waiting on Bob');
+    expect(snapshot.projectorFrame?.narration.body).toBe('The Steward is waiting for Bob to appear. Characters nearby can unblock axe collection.');
+    expect(snapshot.projectorFrame?.narration.bullets).toEqual(['Whether Bob appears and lets The Steward get an axe.']);
+    expect(snapshot.projectorFrame?.leadEvent?.note).toBe('The Steward is waiting for Bob to appear.');
+    expect(snapshot.projectorFrame?.events[0]?.note).toBe('The Steward still needs Bob to appear.');
+    expect(snapshot.projectorFrame?.residents[0]?.goal).toBe('Wait for Bob to appear.');
+    expect(snapshot.projectorFrame?.residents[0]?.latestSpeechSummary).toBe('The Steward asked whether the character arrived.');
+    expect(snapshot.projectorFrame?.actions[0]?.detail).toBe('Whether Bob appears and lets The Steward get an axe.');
+    expect(snapshot.projectorFrame?.watchNext[0]).toBe('Whether Bob appears and lets The Steward get an axe.');
+    expect(snapshot.projectorFrame?.watchNext[1]).toBe("The Steward's first fire-lighting attempt once tools are secured");
+    expect(JSON.stringify({
+      narration: snapshot.projectorFrame?.narration,
+      leadEvent: snapshot.projectorFrame?.leadEvent && {
+        label: snapshot.projectorFrame.leadEvent.label,
+        note: snapshot.projectorFrame.leadEvent.note,
+        whyItMatters: snapshot.projectorFrame.leadEvent.whyItMatters,
+      },
+      events: snapshot.projectorFrame?.events.map(event => ({
+        label: event.label,
+        note: event.note,
+        whyItMatters: event.whyItMatters,
+      })),
+      residents: snapshot.projectorFrame?.residents.map(resident => ({
+        displayName: resident.displayName,
+        goal: resident.goal,
+        latestSpeechSummary: resident.latestSpeechSummary,
+      })),
+      actions: snapshot.projectorFrame?.actions.map(action => ({
+        label: action.label,
+        detail: action.detail,
+      })),
+      watchNext: snapshot.projectorFrame?.watchNext,
+      publicWarnings: snapshot.projectorFrame?.publicHealth.warnings,
+    })).not.toMatch(/\bNPCs?\b|\bspawn\b|\bmaterialize\b|\bthe agent\b/i);
+  });
 });
