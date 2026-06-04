@@ -438,4 +438,59 @@ describe('buildProjectorOverviewSnapshot', () => {
     expect(snapshot.projectorFrame?.watchNext[0]).toBe('Whether Hans visits embassy or Hans asks for support');
     expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/attention fade|buy more time|clock is visible|Hans fades|attention meter|attention accelerates/i);
   });
+
+  test('removes live fade phrasing from titles and watch lines when attention is healthy', () => {
+    const frame: ProjectorStoryFrame = {
+      ok: true,
+      schemaVersion: 1,
+      frameId: 'projector:live-fade-title:2026-06-04T19:50:12.017Z',
+      digestId: 'live-fade-title',
+      generatedAt: '2026-06-04T19:50:12.017Z',
+      source: {
+        digestId: 'live-fade-title',
+        freshnessMs: 0,
+        freshnessStatus: 'fresh',
+      },
+      narration: {
+        source: 'verified_dispatch',
+        title: 'Two residents unstuck; one hunts axes, one feels the fade',
+        body: 'The city holds two active residents, both above the fade line for now, but Hans is watching his own timer.',
+        bullets: ['Hans said: "I can feel my attention fading. An offering at the embassy would keep me here a while longer."'],
+      },
+      leadEvent: null,
+      events: [],
+      residents: [{
+        residentName: 'res:hans',
+        displayName: 'Hans',
+        attention: 5_000,
+        status: 'active',
+        gpObserved: null,
+      }],
+      actions: [],
+      watchNext: ['Will Hans seek an embassy offering before attention drops further?'],
+      omitted: { events: 0, residents: 0 },
+      publicHealth: {
+        status: 'ok',
+        totalResidents: 2,
+        activeResidents: 2,
+        fadedResidents: 0,
+        lowApResidents: 0,
+        warnings: [],
+      },
+    };
+
+    const snapshot = buildProjectorOverviewSnapshot({
+      generatedAt: '2026-06-04T20:08:00.000Z',
+      residents: [],
+      projectorFrame: frame,
+    });
+
+    expect(snapshot.projectorFrame?.narration.title).toBe('Two residents unstuck; one hunts axes, one asks for support');
+    expect(snapshot.projectorFrame?.narration.body).toBe('The city holds two active residents, both stable for now, but Hans is watching his next choice.');
+    expect(snapshot.projectorFrame?.narration.bullets).toEqual([
+      'Hans said: "I have 5000 attention. An offering at the embassy would help choose what happens next."',
+    ]);
+    expect(snapshot.projectorFrame?.watchNext[0]).toBe('Will Hans seek an embassy offering while support still has time to matter?');
+    expect(JSON.stringify(snapshot.projectorFrame)).not.toMatch(/feels the fade|fade line for now|for now for now|own timer|attention drops further|feel my attention fading|can have attention/i);
+  });
 });
