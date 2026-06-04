@@ -598,11 +598,19 @@ export class PostgresCityStore implements CityStore {
     return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
   }
 
+  async getAttentionGrantIntentByOnionRequestId(onionRequestId: string): Promise<AttentionGrantIntent | undefined> {
+    const rows = await this.sql`
+      SELECT * FROM attention_grant_intents WHERE onion_request_id = ${onionRequestId} LIMIT 1
+    `;
+    return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
+  }
+
   async updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent> {
     const rows = await this.sql`
       UPDATE attention_grant_intents SET
         state = COALESCE(${patch.state ?? null}, state),
         standin_ledger_entry_id = COALESCE(${patch.standinLedgerEntryId ?? null}, standin_ledger_entry_id),
+        onion_request_id = COALESCE(${patch.onionRequestId ?? null}, onion_request_id),
         city_response = COALESCE(${patch.cityResponse ? json(patch.cityResponse) : null}::jsonb, city_response),
         failure_reason = COALESCE(${patch.failureReason ?? null}, failure_reason),
         updated_at = now()
@@ -686,6 +694,7 @@ function mapCityUser(row: Record<string, unknown>): CityUser {
 
 function mapAttentionGrantIntent(row: Record<string, unknown>): AttentionGrantIntent {
   const standin = nullableString(row, 'standin_ledger_entry_id');
+  const onionRequestId = nullableString(row, 'onion_request_id');
   const failure = nullableString(row, 'failure_reason');
   const cityResponse = row.city_response;
   return {
@@ -696,6 +705,7 @@ function mapAttentionGrantIntent(row: Record<string, unknown>): AttentionGrantIn
     idempotencyKey: stringField(row, 'idempotency_key'),
     state: stringField(row, 'state') as AttentionGrantIntentState,
     ...(standin ? { standinLedgerEntryId: standin } : {}),
+    ...(onionRequestId ? { onionRequestId } : {}),
     ...(cityResponse && typeof cityResponse === 'object' ? { cityResponse: cityResponse as Record<string, unknown> } : {}),
     ...(failure ? { failureReason: failure } : {}),
     createdAt: dateField(row, 'created_at'),

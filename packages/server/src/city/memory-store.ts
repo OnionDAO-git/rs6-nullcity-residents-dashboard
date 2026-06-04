@@ -552,6 +552,13 @@ export class InMemoryCityStore implements CityStore {
     return id ? clone(this.attentionGrantIntents.get(id)!) : undefined;
   }
 
+  async getAttentionGrantIntentByOnionRequestId(onionRequestId: string): Promise<AttentionGrantIntent | undefined> {
+    for (const intent of this.attentionGrantIntents.values()) {
+      if (intent.onionRequestId === onionRequestId) return clone(intent);
+    }
+    return undefined;
+  }
+
   async updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent> {
     const existing = this.attentionGrantIntents.get(id);
     if (!existing) throw new CityStoreError('Attention grant intent not found', 404);
@@ -559,6 +566,7 @@ export class InMemoryCityStore implements CityStore {
       ...existing,
       ...(patch.state !== undefined ? { state: patch.state } : {}),
       ...(patch.standinLedgerEntryId !== undefined ? { standinLedgerEntryId: patch.standinLedgerEntryId } : {}),
+      ...(patch.onionRequestId !== undefined ? { onionRequestId: patch.onionRequestId } : {}),
       ...(patch.cityResponse !== undefined ? { cityResponse: patch.cityResponse } : {}),
       ...(patch.failureReason !== undefined ? { failureReason: patch.failureReason } : {}),
       updatedAt: this.now(),

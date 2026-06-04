@@ -300,4 +300,20 @@ CREATE TABLE IF NOT EXISTS attention_grant_intents (
 CREATE INDEX IF NOT EXISTS idx_attention_grant_intents_city_user_created ON attention_grant_intents(city_user_id, created_at DESC);
 `.trim(),
   },
+  {
+    id: '004_attention_grant_real_spend',
+    sql: `
+ALTER TABLE attention_grant_intents
+  ADD COLUMN IF NOT EXISTS onion_request_id TEXT;
+
+ALTER TABLE attention_grant_intents DROP CONSTRAINT IF EXISTS attention_grant_intents_state_check;
+ALTER TABLE attention_grant_intents
+  ADD CONSTRAINT attention_grant_intents_state_check CHECK (
+    state IN ('created', 'debited', 'sent_to_city', 'awaiting_approval', 'settled', 'denied', 'failed')
+  );
+
+CREATE INDEX IF NOT EXISTS idx_attention_grant_intents_onion_request
+  ON attention_grant_intents(onion_request_id);
+`.trim(),
+  },
 ];

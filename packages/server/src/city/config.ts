@@ -9,6 +9,13 @@ export interface CityConfig {
   printBridgeToken?: string;
   nullcityControlBaseUrl?: string;
   nullcityControlToken?: string;
+  // Dev's onion consent-spend API (landing). When onionSpendMode === 'real', the
+  // support flow creates a burn request the attendee approves; on the callback we
+  // credit City. Default 'standin' keeps the labelled non-production stand-in.
+  onionSpendMode: 'standin' | 'real';
+  onionApiBaseUrl: string;
+  onionApiKey?: string;
+  onionCallbackSecret?: string;
   baseBirthApCost: number;
   skillLevelApCost: number;
   equipmentGpPerAp: number;
@@ -29,6 +36,10 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     printBridgeToken: clean(env.CITY_PRINT_BRIDGE_TOKEN) || clean(env.PRINT_BRIDGE_CITY_TOKEN),
     nullcityControlBaseUrl: normalizeNullCityControlBaseUrl(clean(env.NULLCITY_CITY_API_URL) || clean(env.CITY_DASHBOARD_NULLCITY_URL)),
     nullcityControlToken: clean(env.NULLCITY_CITY_API_TOKEN) || clean(env.CITY_DASHBOARD_NULLCITY_TOKEN),
+    onionSpendMode: env.ONION_SPEND_MODE === 'real' ? 'real' : 'standin',
+    onionApiBaseUrl: (clean(env.ONION_API_BASE_URL) || clean(env.LANDING_AUTH_BASE_URL) || 'https://oniondao.dev').replace(/\/+$/, ''),
+    onionApiKey: clean(env.ONION_EXTERNAL_API_KEY),
+    onionCallbackSecret: clean(env.ONION_CALLBACK_SECRET),
     baseBirthApCost: numberEnv(env.CITY_SOUL_BASE_BIRTH_AP, 500),
     skillLevelApCost: numberEnv(env.CITY_SOUL_SKILL_LEVEL_AP, 10),
     equipmentGpPerAp: numberEnv(env.CITY_SOUL_EQUIPMENT_GP_PER_AP, 1),

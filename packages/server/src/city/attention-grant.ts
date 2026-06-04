@@ -1,5 +1,6 @@
 import { CityStoreError, type AttentionGrantIntent, type CityStore } from './store';
 import type { NullCityControlClient } from './nullcity-control';
+import type { OnionApiClient } from './landing-onions';
 import type { PointLedgerEntry, PointResource } from './types';
 
 /**
@@ -145,4 +146,122 @@ async function debitStandIn(store: CityStore, input: AttentionGrantInput, apAmou
       note: 'NON-PRODUCTION stand-in for Dev consent-spend API',
     },
   });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// REAL consent-spend path (Dev's onion API, async approval). See landing API.md.
+// Flow: initiate (create burn request, attendee approves) -> landing callback ->
+// settle (credit City). Burn = onions destroyed (a real scarcity sink).
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface InitiateOnionGrantDeps {
+  store: CityStore;
+  onionApi: OnionApiClient;
+  callbackUrl: string;
+  callbackSecret?: string;
+  requester?: string;
+}
+
+export interface InitiateOnionGrantInput {
+  cityUserId: string;
+  username: string; // attendee handle/name/email for Dev's API
+  residentId: string;
+  amount: number; // onions to burn (== attention credited on settle)
+  idempotencyKey?: string;
+  note?: string;
+}
+
+export interface InitiateOnionGrantResult {
+  status: 'pending_approval';
+  intent: AttentionGrantIntent;
+  onionRequestId: string;
+}
+
+export async function initiateOnionAttentionGrant(deps: InitiateOnionGrantDeps, input: InitiateOnionGrantInput): Promise<InitiateOnionGrantResult> {
+  const amount = Number(input.amount);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new CityStoreError('attention_grant_amount_invalid', 400);
+  }
+  const idempotencyKey = input.idempotencyKey || `${input.residentId}:${amount}`;
+
+  let intent = await deps.store.createAttentionGrantIntent({
+    cityUserId: input.cityUserId,
+    residentId: input.residentId,
+    apAmount: amount,
+    idempotencyKey,
+  });
+
+  // Replay: a request already exists for this intent — return it (don't double-create).
+  if (intent.onionRequestId) {
+    return { status: 'pending_approval', intent, onionRequestId: intent.onionRequestId };
+  }
+
+  // Create the burn request the attendee must approve. Idempotent on (requester, externalId).
+  const created = await deps.onionApi.createBurnRequest({
+    username: input.username,
+    amount,
+    callbackUrl: deps.callbackUrl,
+    callbackSecret: deps.callbackSecret,
+    requester: deps.requester ?? 'nullcity',
+    externalId: idempotencyKey,
+    note: input.note || `Support ${input.residentId} in Null City`,
+    metadata: { residentId: input.residentId, cityUserId: input.cityUserId },
+  });
+
+  intent = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'awaiting_approval', onionRequestId: created.id });
+  return { status: 'pending_approval', intent, onionRequestId: created.id };
+}
+
+export interface SettleOnionGrantDeps {
+  store: CityStore;
+  control: Pick<NullCityControlClient, 'creditAttention'>;
+}
+
+export interface SettleOnionGrantResult {
+  settled: boolean;
+  state: AttentionGrantIntent['state'] | 'unknown';
+  intent?: AttentionGrantIntent;
+}
+
+/**
+ * Settle a previously-initiated grant when landing reports the burn outcome
+ * (via callback webhook or poll). On `completed` -> credit City attention (which
+ * fires the server's standing/letter seam). Idempotent: a re-delivered callback
+ * for an already-settled intent is a no-op.
+ */
+export async function settleOnionAttentionGrant(
+  deps: SettleOnionGrantDeps,
+  params: { onionRequestId: string; status: string; success?: boolean },
+): Promise<SettleOnionGrantResult> {
+  const intent = await deps.store.getAttentionGrantIntentByOnionRequestId(params.onionRequestId);
+  if (!intent) return { settled: false, state: 'unknown' };
+  if (intent.state === 'settled') return { settled: true, state: 'settled', intent }; // idempotent replay
+
+  if (params.status === 'denied') {
+    const updated = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'denied' });
+    return { settled: false, state: 'denied', intent: updated };
+  }
+  if (params.status === 'failed') {
+    const updated = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'failed', failureReason: 'onion_request_failed' });
+    return { settled: false, state: 'failed', intent: updated };
+  }
+
+  const completed = params.status === 'completed' || params.success === true;
+  if (!completed) return { settled: false, state: intent.state, intent }; // still pending — ignore
+
+  if (!deps.control.creditAttention) throw new CityStoreError('attention_credit_unconfigured', 503);
+  const personId = await deps.store.resolveOnionId(intent.cityUserId);
+  const patronHandle = await deps.store.resolvePatronHandle(personId);
+  const cityResponse = (await deps.control.creditAttention(intent.residentId, {
+    idempotencyKey: intent.idempotencyKey,
+    amount: intent.apAmount,
+    cityUserId: intent.cityUserId,
+    personId,
+    ...(patronHandle ? { patronHandle } : {}),
+    sourceType: 'resident_attention_grant',
+    sourceId: intent.idempotencyKey,
+  })) as unknown as Record<string, unknown>;
+
+  const updated = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'settled', cityResponse });
+  return { settled: true, state: 'settled', intent: updated };
 }

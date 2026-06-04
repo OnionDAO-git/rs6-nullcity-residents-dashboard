@@ -3,6 +3,7 @@ import { BunSqlLandingCheckinReader, type LandingCheckinReader } from './checkin
 import { createLandingSessionAuthenticator, type LandingSessionAuthenticator } from './landing-session';
 import { InMemoryCityStore } from './memory-store';
 import { createNullCityControlClientFromConfig, type NullCityControlClient } from './nullcity-control';
+import { createOnionApiClient, type OnionApiClient } from './landing-onions';
 import { PostgresCityStore } from './postgres-store';
 import type { CityStore } from './store';
 
@@ -12,6 +13,7 @@ export interface CityServices {
   store: CityStore;
   landingCheckins?: LandingCheckinReader;
   nullcityControl?: NullCityControlClient;
+  onionApi?: OnionApiClient;
 }
 
 export function createCityServicesFromEnv(env: Record<string, string | undefined> = process.env): CityServices {
@@ -23,6 +25,7 @@ export function createCityServicesFromEnv(env: Record<string, string | undefined
     store,
     landingCheckins: config.landingDatabaseUrl ? new BunSqlLandingCheckinReader(config.landingDatabaseUrl) : undefined,
     nullcityControl: createNullCityControlClientFromConfig(config),
+    onionApi: config.onionSpendMode === 'real' ? createOnionApiClient({ baseUrl: config.onionApiBaseUrl, apiKey: config.onionApiKey }) : undefined,
   };
 }
 
