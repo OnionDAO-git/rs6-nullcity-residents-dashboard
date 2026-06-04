@@ -13,7 +13,8 @@ import type { LandingSessionAuthenticator } from './landing-session';
 import { NullCityControlError, type NullCityControlClient, type NullCityEconomyStreamQuery, type NullCityNcriPrintQueueStatus } from './nullcity-control';
 import { OnionDaoClientError, type OnionDaoClient, type OnionWallet } from './oniondao';
 import { quoteSoulProposal } from './quote';
-import { runAttentionGrant } from './attention-grant';
+import { runAttentionGrant, initiateOnionAttentionGrant, settleOnionAttentionGrant } from './attention-grant';
+import { verifyOnionCallbackSignature, type OnionApiClient } from './landing-onions';
 import { CityStoreError, type CityStore } from './store';
 import type { CityUser, LandingSessionUser, PointResource } from './types';
 import { jsonResponse, notFound } from '../util';
@@ -25,6 +26,7 @@ export interface CityApiContext {
   landingCheckins?: LandingCheckinReader;
   nullcityControl?: NullCityControlClient;
   oniondao?: OnionDaoClient;
+  onionApi?: OnionApiClient;
   gameTicketSecret?: string;
   gameTicketTtlSeconds?: number;
 }
@@ -51,10 +53,16 @@ export async function routeCityApi(
     }
 
     if (method === 'POST' && pathname === '/api/onions/callback') {
-      return jsonResponse({ ok: true });
+      return jsonResponse({ ok: true, legacy: true });
     }
 
-    if (isStateChanging(method) && !isPrintBridgeEndpoint(pathname) && !context.config.csrfDisabled) {
+    if (
+      isStateChanging(method) &&
+      !isPrintBridgeEndpoint(pathname) &&
+      pathname !== '/api/city/onion-callback' &&
+      pathname !== '/api/onions/callback' &&
+      !context.config.csrfDisabled
+    ) {
       const csrf = validateCsrf(request);
       if (csrf) return csrf;
     }
@@ -539,11 +547,37 @@ export async function routeCityApi(
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
       const body = await readJsonBody(request);
+      const residentId = decodeURIComponent(residentAttention[1] || '');
+
+      // REAL consent-spend: create an onion burn request the attendee approves.
+      if (context.config.onionSpendMode === 'real') {
+        if (!context.onionApi) return jsonResponse({ error: 'onion_api_unconfigured' }, { status: 503 });
+        const callbackUrl = new URL('/api/city/onion-callback', context.config.publicBaseUrl || context.config.landingAuthBaseUrl).toString();
+        const result = await initiateOnionAttentionGrant(
+          { store: context.store, onionApi: context.onionApi, callbackUrl, callbackSecret: context.config.onionCallbackSecret, requester: 'nullcity' },
+          {
+            cityUserId: auth.cityUser.id,
+            username: auth.landingUser.handle || auth.landingUser.email,
+            residentId,
+            amount: numberBody(body, 'apAmount'),
+            idempotencyKey: stringBody(body, 'idempotencyKey'),
+            note: stringBody(body, 'memo'),
+          },
+        );
+        return jsonResponse({
+          status: result.status,
+          onionRequestId: result.onionRequestId,
+          intent: { id: result.intent.id, state: result.intent.state, residentId },
+          message: 'Approve the burn in /portal/onions to support this resident.',
+        }, { status: 202 });
+      }
+
+      // STAND-IN (default, non-production): synchronous credit for dev/demo.
       const outcome = await runAttentionGrant(
         { store: context.store, control: context.nullcityControl },
         {
           cityUserId: auth.cityUser.id,
-          residentId: decodeURIComponent(residentAttention[1] || ''),
+          residentId,
           apAmount: numberBody(body, 'apAmount'),
           idempotencyKey: stringBody(body, 'idempotencyKey'),
           memo: stringBody(body, 'memo'),
@@ -568,6 +602,29 @@ export async function routeCityApi(
         decodeURIComponent(residentOnionAttention[1] || ''),
         await readJsonBody(request),
       );
+    }
+
+    // Landing onion-spend callback (webhook): settle a previously-initiated grant.
+    if (pathname === '/api/city/onion-callback' && method === 'POST') {
+      const raw = await request.text();
+      const secret = context.config.onionCallbackSecret;
+      if (secret && !verifyOnionCallbackSignature(raw, request.headers.get('x-onion-signature'), secret)) {
+        return jsonResponse({ error: 'invalid_signature' }, { status: 401 });
+      }
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = raw ? JSON.parse(raw) : {};
+      } catch {
+        return jsonResponse({ error: 'invalid_json' }, { status: 400 });
+      }
+      const onionRequestId = typeof payload.id === 'string' ? payload.id : '';
+      if (!onionRequestId) return jsonResponse({ error: 'missing_id' }, { status: 400 });
+      if (!context.nullcityControl) return jsonResponse({ error: 'control_unconfigured' }, { status: 503 });
+      const result = await settleOnionAttentionGrant(
+        { store: context.store, control: context.nullcityControl },
+        { onionRequestId, status: String(payload.status ?? ''), success: payload.success === true },
+      );
+      return jsonResponse({ ok: true, settled: result.settled, state: result.state });
     }
 
     if (method === 'GET' && pathname === '/api/city/trades') {

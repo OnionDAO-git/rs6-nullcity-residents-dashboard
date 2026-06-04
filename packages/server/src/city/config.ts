@@ -2,7 +2,7 @@ export interface CityConfig {
   cityDatabaseUrl?: string;
   landingDatabaseUrl?: string;
   landingAuthBaseUrl: string;
-  onionApiBaseUrl?: string;
+  onionApiBaseUrl: string;
   onionExternalApiKey?: string;
   onionExternalRequester: string;
   onionCallbackUrl?: string;
@@ -13,6 +13,12 @@ export interface CityConfig {
   printBridgeToken?: string;
   nullcityControlBaseUrl?: string;
   nullcityControlToken?: string;
+  // Dev's onion consent-spend API (landing). When onionSpendMode === 'real', the
+  // support flow creates a burn request the attendee approves; on the callback we
+  // credit City. Default 'standin' keeps the labelled non-production stand-in.
+  onionApiKey?: string;
+  onionCallbackSecret?: string;
+  onionSpendMode: 'standin' | 'real';
   baseBirthApCost: number;
   skillLevelApCost: number;
   equipmentGpPerAp: number;
@@ -26,7 +32,7 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     cityDatabaseUrl: clean(env.CITY_DATABASE_URL),
     landingDatabaseUrl: clean(env.LANDING_DATABASE_URL),
     landingAuthBaseUrl: clean(env.LANDING_AUTH_BASE_URL) || 'https://oniondao.dev',
-    onionApiBaseUrl: clean(env.ONION_API_BASE_URL) || clean(env.CITY_ONION_API_BASE_URL) || clean(env.LANDING_AUTH_BASE_URL),
+    onionApiBaseUrl: (clean(env.ONION_API_BASE_URL) || clean(env.CITY_ONION_API_BASE_URL) || clean(env.LANDING_AUTH_BASE_URL) || 'https://oniondao.dev').replace(/\/+$/, ''),
     onionExternalApiKey: clean(env.ONION_EXTERNAL_API_KEY) || clean(env.CITY_ONION_EXTERNAL_API_KEY),
     onionExternalRequester: clean(env.ONION_EXTERNAL_REQUESTER) || clean(env.CITY_ONION_EXTERNAL_REQUESTER) || 'nullcity-dashboard',
     onionCallbackUrl: clean(env.ONION_CALLBACK_URL) || clean(env.CITY_ONION_CALLBACK_URL),
@@ -37,6 +43,9 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     printBridgeToken: clean(env.CITY_PRINT_BRIDGE_TOKEN) || clean(env.PRINT_BRIDGE_CITY_TOKEN),
     nullcityControlBaseUrl: normalizeNullCityControlBaseUrl(clean(env.NULLCITY_CITY_API_URL) || clean(env.CITY_DASHBOARD_NULLCITY_URL)),
     nullcityControlToken: clean(env.NULLCITY_CITY_API_TOKEN) || clean(env.CITY_DASHBOARD_NULLCITY_TOKEN),
+    onionApiKey: clean(env.ONION_EXTERNAL_API_KEY),
+    onionCallbackSecret: clean(env.ONION_CALLBACK_SECRET),
+    onionSpendMode: env.ONION_SPEND_MODE === 'real' ? 'real' : 'standin',
     baseBirthApCost: numberEnv(env.CITY_SOUL_BASE_BIRTH_AP, 500),
     skillLevelApCost: numberEnv(env.CITY_SOUL_SKILL_LEVEL_AP, 10),
     equipmentGpPerAp: numberEnv(env.CITY_SOUL_EQUIPMENT_GP_PER_AP, 1),
