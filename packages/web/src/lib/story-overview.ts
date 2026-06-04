@@ -68,6 +68,7 @@ export interface StoryOverviewModel {
   citySignals: StoryOverviewListItem[];
   dramaItems: StoryOverviewListItem[];
   watchItems: StoryOverviewListItem[];
+  primaryAction: StoryOverviewListItem;
 }
 
 export interface BuildStoryOverviewModelInput {
@@ -107,6 +108,12 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
     .map(entry => residentPin(entry.row, entry.position, viewport, leadResident, storytellerEventKinds));
   const offMapRegions = buildOffMapRegions(positioned, viewport);
 
+  const residentActions = buildResidentActions(residents, leadResident, storytellerEventKinds);
+  const leaderboardItems = buildLeaderboardItems(residents, leadResident, storytellerEventKinds);
+  const citySignals = projectorFrame ? buildProjectorFrameCitySignals(projectorFrame) : buildCitySignals(input, digest, positioned.length);
+  const dramaItems = projectorFrame ? buildProjectorFrameDramaItems(projectorFrame) : buildDramaItems(residents, digest, offMapRegions);
+  const watchItems = projectorFrame ? buildProjectorFrameWatchItems(projectorFrame) : buildWatchItems(residents, digest, offMapRegions, leadResident);
+
   return {
     dispatch: projectorFrame ? buildProjectorFrameDispatch(projectorFrame, input.now) : buildDispatch(digest, leadResident, input.now),
     atlas: {
@@ -115,11 +122,12 @@ export function buildStoryOverviewModel(input: BuildStoryOverviewModelInput): St
       offMapRegions,
       totalPositioned: positioned.length,
     },
-    residentActions: buildResidentActions(residents, leadResident, storytellerEventKinds),
-    leaderboardItems: buildLeaderboardItems(residents, leadResident, storytellerEventKinds),
-    citySignals: projectorFrame ? buildProjectorFrameCitySignals(projectorFrame) : buildCitySignals(input, digest, positioned.length),
-    dramaItems: projectorFrame ? buildProjectorFrameDramaItems(projectorFrame) : buildDramaItems(residents, digest, offMapRegions),
-    watchItems: projectorFrame ? buildProjectorFrameWatchItems(projectorFrame) : buildWatchItems(residents, digest, offMapRegions, leadResident),
+    residentActions,
+    leaderboardItems,
+    citySignals,
+    dramaItems,
+    watchItems,
+    primaryAction: projectorFrame ? buildProjectorFramePrimaryAction(projectorFrame, watchItems) : buildPrimaryAction(leadResident, watchItems),
   };
 }
 
@@ -505,6 +513,81 @@ function buildProjectorFrameWatchItems(frame: ProjectorStoryFrame): StoryOvervie
     tone: action.kind === 'grant_attention' ? 'warn' as const : 'ok' as const,
   }));
   return [...watch, ...actionItems].slice(0, 2);
+}
+
+function buildProjectorFramePrimaryAction(frame: ProjectorStoryFrame, watchItems: StoryOverviewListItem[]): StoryOverviewListItem {
+  const urgentAttention = frame.actions.find(action => action.kind === 'grant_attention' && action.residentName)
+    || (frame.leadEvent?.label === 'Attention running low' && frame.leadEvent.residentName
+      ? {
+          kind: 'grant_attention',
+          label: '',
+          detail: '',
+          residentName: frame.leadEvent.residentName,
+        }
+      : undefined);
+  if (urgentAttention?.residentName) {
+    const name = displayName(urgentAttention.residentName);
+    return {
+      label: `Give attention to ${name}`,
+      detail: 'Give attention before attention runs out.',
+      path: `/residents/${encodeURIComponent(residentRouteSlug(urgentAttention.residentName))}`,
+      tone: 'warn',
+    };
+  }
+
+  const explicitWatch = frame.actions.find(action => action.kind === 'watch_resident' && action.residentName);
+  const leadResidentName = explicitWatch?.residentName || frame.leadEvent?.residentName;
+  if (leadResidentName) {
+    const watchLine = watchItems[0]?.label || frame.leadEvent?.whyItMatters || frame.leadEvent?.note || 'Watch the next move.';
+    return {
+      label: `Watch ${displayName(leadResidentName)}`,
+      detail: publicProjectorCopy(watchLine),
+      path: `/residents/${encodeURIComponent(residentRouteSlug(leadResidentName))}`,
+      tone: frame.leadEvent?.importance === 'critical' || frame.leadEvent?.importance === 'high' ? 'warn' : 'ok',
+    };
+  }
+
+  if (watchItems[0]) {
+    return {
+      label: 'Watch this next',
+      detail: watchItems[0].label,
+      tone: watchItems[0].tone || 'ok',
+      ...(watchItems[0].path ? { path: watchItems[0].path } : {}),
+    };
+  }
+
+  return {
+    label: 'Keep watching Null City',
+    detail: 'The Storyteller will surface the next verified moment.',
+    tone: frame.publicHealth.status === 'ok' ? 'ok' : 'warn',
+  };
+}
+
+function buildPrimaryAction(
+  leadResident: ResidentDashboardRow | undefined,
+  watchItems: StoryOverviewListItem[],
+): StoryOverviewListItem {
+  if (leadResident) {
+    return {
+      label: `Watch ${displayName(leadResident.name)}`,
+      detail: watchItems[0]?.detail || watchItems[0]?.label || 'Follow their next visible move.',
+      path: `/residents/${encodeURIComponent(residentRouteSlug(leadResident.name))}`,
+      tone: leadResident.inCombat || (leadResident.attention ?? 999) <= 2 ? 'warn' : 'ok',
+    };
+  }
+  if (watchItems[0]) {
+    return {
+      label: 'Watch this next',
+      detail: watchItems[0].label,
+      tone: watchItems[0].tone || 'ok',
+      ...(watchItems[0].path ? { path: watchItems[0].path } : {}),
+    };
+  }
+  return {
+    label: 'Wait for the first verified moment',
+    detail: 'As residents act, the Storyteller will choose the next public focus.',
+    tone: 'ok',
+  };
 }
 
 function hasPublicProjectorDispatch(item: StorytellerDigestSummary): boolean {

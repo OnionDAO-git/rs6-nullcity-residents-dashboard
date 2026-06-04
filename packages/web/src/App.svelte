@@ -3435,6 +3435,8 @@
       <div class="notice">Loading city state</div>
     {/if}
 
+    {@render ProjectorPrimaryAction({ item: cityProjectorOverview.primaryAction })}
+
     <section class="projector-broadcast-grid">
       {#key `${cityProjectorOverview.dispatch.title}|${cityProjectorOverview.dispatch.statusLabel}|${cityProjectorOverview.dispatch.detail}|${cityProjectorOverview.dispatch.bodyLead}`}
         <article class="projector-dispatch">
@@ -3496,6 +3498,22 @@
       {@render ProjectorListPanel({ title: 'What Residents Are Doing', items: cityProjectorOverview.residentActions })}
     </section>
   </main>
+{/snippet}
+
+{#snippet ProjectorPrimaryAction({ item }: { item: StoryOverviewListItem })}
+  {#if item.path}
+    <a class={`projector-primary-action tone-${item.tone || 'ok'}`} href={item.path} aria-label={`Primary Null City action: ${item.label}`}>
+      <small>Do this now</small>
+      <strong>{item.label}</strong>
+      <span>{item.detail}</span>
+    </a>
+  {:else}
+    <section class={`projector-primary-action tone-${item.tone || 'ok'}`} aria-label={`Primary Null City action: ${item.label}`}>
+      <small>Do this now</small>
+      <strong>{item.label}</strong>
+      <span>{item.detail}</span>
+    </section>
+  {/if}
 {/snippet}
 
 {#snippet ProjectorAtlas({ model }: { model: StoryOverviewModel })}

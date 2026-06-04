@@ -109,4 +109,13 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('residents currently located');
     expect(appSource).toContain('aria-label="Null City public story rails"');
   });
+
+  test('renders one primary public action before the long overview rails', () => {
+    expect(appSource).toContain('{@render ProjectorPrimaryAction({ item: cityProjectorOverview.primaryAction })}');
+    expect(appSource).toContain('{#snippet ProjectorPrimaryAction({ item }: { item: StoryOverviewListItem })}');
+    expect(appSource).toContain('Do this now');
+    expect(appSource).toContain('Primary Null City action');
+    expect(appSource).not.toContain('grant_attention');
+    expect(appSource).not.toContain('support floor');
+  });
 });

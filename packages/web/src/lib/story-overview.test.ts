@@ -130,6 +130,12 @@ describe('story overview projector model', () => {
       detail: 'Worth watching next.',
       tone: 'ok',
     });
+    expect(model.primaryAction).toMatchObject({
+      label: 'Watch Hans',
+      detail: 'Whether Hans answers the crowd instead of looping.',
+      path: '/residents/hans',
+      tone: 'warn',
+    });
   });
 
   test('normalizes common Null City acronyms in public frame copy', () => {
@@ -219,6 +225,67 @@ describe('story overview projector model', () => {
     expect(model.dispatch.body).toBe('The Steward noted seeing people nearby while gathering logs.');
     expect(model.dispatch.bullets).toEqual(['The Steward saw people nearby.']);
     expect(JSON.stringify(model)).not.toMatch(/\bone character and one player nearby|1 character and 1 player nearby/i);
+  });
+
+  test('builds one primary public call-to-action without internal action labels', () => {
+    const model = buildStoryOverviewModel({
+      residents: [],
+      digests: [],
+      projectorFrame: {
+        ok: true,
+        schemaVersion: 1,
+        frameId: 'projector:cta:2026-06-03T18:00:00.000Z',
+        digestId: 'cta',
+        generatedAt: '2026-06-03T18:00:00.000Z',
+        source: {
+          digestId: 'cta',
+          freshnessMs: 0,
+          freshnessStatus: 'fresh',
+        },
+        narration: {
+          source: 'verified_dispatch',
+          title: 'Hans needs attention',
+          body: 'Hans is near the edge.',
+          bullets: [],
+          confidence: 'high',
+        },
+        leadEvent: {
+          ref: 'low-hans',
+          label: 'Attention running low',
+          residentName: 'res:hans',
+          happenedAt: '2026-06-03T17:59:00.000Z',
+          importance: 'high',
+          note: 'Hans is running low on AP.',
+          whyItMatters: 'human attention can keep Hans alive',
+        },
+        events: [],
+        residents: [],
+        actions: [{
+          kind: 'grant_attention',
+          label: 'grant_attention',
+          detail: 'Give AP before the support floor hits zero.',
+          residentName: 'res:hans',
+        }],
+        watchNext: ['Whether Hans gets AP before the window closes.'],
+        omitted: { events: 0, residents: 0 },
+        publicHealth: {
+          status: 'degraded',
+          totalResidents: 1,
+          activeResidents: 1,
+          fadedResidents: 0,
+          lowApResidents: 1,
+          warnings: [],
+        },
+      },
+    });
+
+    expect(model.primaryAction).toMatchObject({
+      label: 'Give attention to Hans',
+      detail: 'Give attention before attention runs out.',
+      path: '/residents/hans',
+      tone: 'warn',
+    });
+    expect(JSON.stringify(model.primaryAction)).not.toMatch(/\bAP\b|grant_attention|support floor|window closes/i);
   });
 
   test('uses public frame residents as the projector allowlist', () => {
