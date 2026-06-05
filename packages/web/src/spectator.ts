@@ -2,7 +2,7 @@ import { Client, type SpectatorRsPacketFrame } from 'client2';
 import { shouldReplaySpectatorPacket } from './lib/spectator-packets';
 
 type SpectatorMessage =
-  | { type: 'nullcity:spectator-session'; sessionId: string; subject: { kind: string; name?: string; username?: string } }
+  | { type: 'nullcity:spectator-session'; sessionId: string; subject: { kind: string; name?: string; username?: string }; position?: { x: number; y: number; level?: number } }
   | { type: 'nullcity:spectator-packet'; sessionId: string; packet: SpectatorRsPacketFrame }
   | { type: 'nullcity:spectator-clear' };
 
@@ -12,6 +12,7 @@ let sessionId = '';
 let packetCount = 0;
 let lastOpcode = '';
 let hasMapBootstrap = false;
+let targetPosition: { x: number; y: number; level?: number } | undefined;
 
 const clientConfig = await loadClientConfig();
 (globalThis as typeof globalThis & { __NULLCITY_RS_HOST__?: string }).__NULLCITY_RS_HOST__ = clientConfig.host;
@@ -31,6 +32,7 @@ window.addEventListener('message', event => {
     packetCount = 0;
     lastOpcode = '';
     hasMapBootstrap = false;
+    targetPosition = undefined;
     setStatus('waiting for spectator packets');
     return;
   }
@@ -42,14 +44,17 @@ window.addEventListener('message', event => {
       lastOpcode = '';
       hasMapBootstrap = false;
     }
+    targetPosition = message.position;
+    applyTargetPosition();
     const label = message.subject.kind === 'resident' ? message.subject.name : message.subject.username;
-    setStatus(`following ${label || 'subject'}; waiting for render packets`);
+    setStatus(`watching ${label || 'subject'} in RuneScape; waiting for stable render packets`);
     return;
   }
 
   if (message.type === 'nullcity:spectator-packet' && message.sessionId === sessionId) {
     if (!shouldReplaySpectatorPacket(message.packet.opcode)) {
-      setStatus(`skipping volatile entity packet ${message.packet.opcode}; waiting for stable render packets`);
+      applyTargetPosition();
+      setStatus(`RuneScape client is live; skipped volatile entity packet ${message.packet.opcode} while waiting for a stable render packet`);
       return;
     }
     packetCount += 1;
@@ -57,6 +62,7 @@ window.addEventListener('message', event => {
     hasMapBootstrap = hasMapBootstrap || message.packet.opcode === 166 || message.packet.opcode === 23;
     try {
       client.pushSpectatorPacket(message.packet);
+      applyTargetPosition();
       const mapState = hasMapBootstrap ? '' : '; missing map bootstrap';
       setStatus(`packets ${packetCount}; last opcode ${lastOpcode}${mapState}`);
     } catch (error) {
@@ -70,6 +76,11 @@ function setStatus(text: string): void {
   status.textContent = text;
   status.hidden = text.length === 0;
   window.parent.postMessage({ type: 'nullcity:spectator-status', text }, window.location.origin);
+}
+
+function applyTargetPosition(): boolean {
+  if (!targetPosition) return false;
+  return client.setSpectatorPosition(targetPosition.x, targetPosition.y, targetPosition.level ?? 0);
 }
 
 async function loadClientConfig(): Promise<{ host: string; secure: boolean }> {

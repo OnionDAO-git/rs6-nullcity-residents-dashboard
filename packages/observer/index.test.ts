@@ -74,7 +74,8 @@ class FakeCanvas extends FakeElement {
 
 class FakeIframe extends FakeElement {
   contentDocument = { title: 'NullCity Spectator' };
-  contentWindow = { postMessage() {} };
+  postedMessages: unknown[] = [];
+  contentWindow = { postMessage: (message: unknown) => this.postedMessages.push(message) };
   loading = '';
   src = '';
   title = '';
@@ -136,5 +137,30 @@ describe('NullCitySpectatorBridge', () => {
     expect(iframe.tagName).toBe('IFRAME');
     expect(iframe.src).toBe('/spectator.html');
     expect(container.children.at(1)?.className).toBe('spectator-status');
+  });
+
+  test('posts the session position to the RuneScape spectator iframe after it loads', () => {
+    const container = new FakeElement('div');
+    const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
+    const session: SpectatorSession = {
+      id: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      mode: 'follow',
+      connected: true,
+      position: { x: 3222, y: 3218, level: 0 },
+      packets: [],
+    };
+
+    bridge.setSession(session);
+
+    const iframe = container.children[0] as FakeIframe;
+    iframe.dispatch('load');
+
+    expect(iframe.postedMessages).toContainEqual({
+      type: 'nullcity:spectator-session',
+      sessionId: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      position: { x: 3222, y: 3218, level: 0 },
+    });
   });
 });

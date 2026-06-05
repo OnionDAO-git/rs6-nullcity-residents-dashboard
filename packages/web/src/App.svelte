@@ -509,6 +509,7 @@
     gameClientStatus,
     ticketUser: gameClientTicketUser,
     observeResident: cityWorldObserveResidentName,
+    observeSessionConnected: Boolean(cityWorldObserveSession?.connected),
   });
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
   $: cityControlledResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === true);
@@ -851,6 +852,7 @@
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
     }
     if (activeRoute === '/world') {
+      sessions = await api.sessions().catch(() => sessions);
       await ensureWorldObserveSession(activeRoute);
     }
     if (activeRoute === '/') {
@@ -1671,12 +1673,12 @@
   async function ensureWorldObserveSession(activeRoute = route) {
     const observeResident = activeRoute === '/world' ? worldObserveResidentFromSearch(browserSearch) : '';
     if (!observeResident) return;
-    if (!gatewayStatus?.connected) return;
-    if (findResidentSession(activeSession, sessions, observeResident)) {
-      const session = findResidentSession(activeSession, sessions, observeResident);
-      if (session) openSessionStream(session);
+    const session = findResidentSession(activeSession, sessions, observeResident);
+    if (session) {
+      openSessionStream(session);
       return;
     }
+    if (!gatewayStatus?.connected) return;
     const onlineResident = residentRowsForCityDirectory(overview?.residents, residents).find(row => row.name.toLowerCase() === observeResident.toLowerCase());
     if (onlineResident && !onlineResident.online) return;
     try {
@@ -1718,7 +1720,7 @@
 
   function findResidentSession(active: SpectatorSession | undefined, available: SpectatorSession[], name: string): SpectatorSession | undefined {
     if (!name) return undefined;
-    return [active, ...available].find(session => session?.subject.kind === 'resident' && session.subject.name.toLowerCase() === name.toLowerCase());
+    return [active, ...available].find(session => session?.connected && session.subject.kind === 'resident' && session.subject.name.toLowerCase() === name.toLowerCase());
   }
 
   function subjectIsKnownOnline(subject: SpectatorSubject): boolean {
@@ -3863,7 +3865,7 @@
       <div>
         <p class="kicker">Attendee Session</p>
         <strong>Guest mode</strong>
-        <span>Public live and resident pages are visible. Sign in as an attendee to unlock attention, inbox, Soul proposal, and print quote actions.</span>
+        <span>Public live and resident pages are visible. Sign in as an attendee to unlock AP, GP, inbox, Embassy actions, and prints.</span>
       </div>
       <button class="primary" onclick={() => cityNav('/login')}>Login</button>
     </section>

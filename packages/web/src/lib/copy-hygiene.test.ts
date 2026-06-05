@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const appSource = readFileSync(new URL('../App.svelte', import.meta.url), 'utf8');
+const dashboardNavSource = readFileSync(new URL('./end-user-dashboard.ts', import.meta.url), 'utf8');
 
 describe('dashboard copy hygiene', () => {
   test('keeps guest session copy attendee-facing instead of naming API internals', () => {
@@ -20,9 +21,9 @@ describe('dashboard copy hygiene', () => {
 
   test('keeps the legacy debug rail behind admin access', () => {
     expect(appSource).not.toContain("<button onclick={() => debugNav('/')}>DB Debug</button>");
-    expect(appSource).toMatch(
-      /{#if citySession\.admin}\s+<button class:active={route\.startsWith\('\/admin'\)} onclick={\(\) => cityNav\('\/admin'\)}>AD Admin<\/button>\s+<button onclick={\(\) => debugNav\('\/'\)}>Debug<\/button>\s+{\/if}/,
-    );
+    expect(appSource).toContain('{#if expertMode && citySession.admin}');
+    expect(dashboardNavSource).toContain("{ label: 'Admin', path: '/admin', match: '/admin', glyph: 'AD', expertOnly: true, adminOnly: true }");
+    expect(dashboardNavSource).toContain("{ label: 'Debug', path: '/debug', match: '/debug', glyph: 'DG', expertOnly: true, adminOnly: true }");
   });
 
   test('keeps the public Storyteller route dispatch-first instead of operator-audit first', () => {
@@ -42,9 +43,9 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain("route === '/story'");
     expect(appSource).not.toContain("cityNav('/story')");
     expect(appSource).toContain("route === '/live'");
-    expect(appSource).toContain("cityNav('/live')");
+    expect(dashboardNavSource).toContain("{ label: 'Watch', path: '/live', match: '/live', glyph: 'WT' }");
     expect(appSource).toContain("route === '/chronicle'");
-    expect(appSource).toContain("cityNav('/chronicle')");
+    expect(dashboardNavSource).toContain("{ label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true }");
   });
 
   test('keeps the live page title separate from the latest Storyteller headline', () => {
@@ -85,7 +86,8 @@ describe('dashboard copy hygiene', () => {
 
   test('labels homepage economy activity as event-window activity, not resident liveness', () => {
     expect(appSource).not.toContain("active · GP Δ");
-    expect(appSource).toContain("economy events · GP Δ");
+    expect(appSource).toContain('<span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>');
+    expect(appSource).toContain("<span><small>GP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString() : '-'}</strong></span>");
   });
 
   test('explains quiet economy windows without implying residents are offline', () => {

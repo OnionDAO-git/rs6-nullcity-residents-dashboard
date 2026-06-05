@@ -10,6 +10,7 @@ import type { ClientPointerEventRecord } from '#/client/ClientMouseListener.js';
 import GameShell from '#/client/GameShell.js';
 import { MiniMenuAction } from '#/client/MiniMenuAction.js';
 import { hasMapFlag } from '#/client/SafeMapFlags.js';
+import { spectatorLocalTile } from '#/client/SpectatorPosition.js';
 import MobileKeyboard from '#/client/MobileKeyboard.js';
 import MouseTracking from '#/client/MouseTracking.js';
 import Skills from '#/constants/Skill.js';
@@ -799,6 +800,28 @@ export class Client extends GameShell {
     public pushSpectatorPacket(frame: SpectatorRsPacketFrame): void {
         this.enableSpectatorMode();
         this.spectatorStream?.push(frame);
+    }
+
+    public setSpectatorPosition(worldX: number, worldZ: number, level: number): boolean {
+        this.enableSpectatorMode();
+        const localTile = spectatorLocalTile(
+            { worldX, worldZ, level },
+            { baseX: this.mapBuildBaseX, baseZ: this.mapBuildBaseZ, size: BuildArea.SIZE }
+        );
+        if (!localTile) {
+            return false;
+        }
+
+        if (!this.localPlayer) {
+            this.localPlayer = this.players[LOCAL_PLAYER_INDEX] = new ClientPlayer();
+        }
+
+        this.minusedlevel = localTile.level;
+        this.localPlayer.teleport(localTile.localZ, false, localTile.localX);
+        this.localPlayer.cycle = this.loopCycle;
+        this.orbitCameraX = this.localPlayer.x;
+        this.orbitCameraZ = this.localPlayer.z;
+        return true;
     }
 
     public override error(message: string): void {

@@ -13,5 +13,6 @@ declare module 'client2' {
     constructor(nodeid: number, lowmem: boolean, members: boolean);
     enableSpectatorMode(): void;
     pushSpectatorPacket(frame: SpectatorRsPacketFrame): void;
+    setSpectatorPosition(worldX: number, worldZ: number, level: number): boolean;
   }
 }

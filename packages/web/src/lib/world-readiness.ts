@@ -29,21 +29,23 @@ export interface WorldReadinessInput {
   gameClientStatus: GameClientStatus;
   ticketUser?: string;
   observeResident?: string;
+  observeSessionConnected?: boolean;
 }
 
 export function buildWorldReadiness(input: WorldReadinessInput): WorldReadinessSummary {
   const observeResident = normalizeObserveResident(input.observeResident);
+  const observeSessionConnected = Boolean(observeResident && input.observeSessionConnected);
   const checks = [
     sessionCheck(input.authenticated, input.loginUrlReady ?? true, observeResident),
-    gatewayCheck(input.gateway),
-    residentsCheck(input.onlineResidents.length),
+    gatewayCheck(input.gateway, observeResident, observeSessionConnected),
+    residentsCheck(input.onlineResidents.length, observeResident, observeSessionConnected),
     clientCheck(input.gameClientStatus, input.ticketUser),
   ];
   const blockers = checks.filter(check => check.tone === 'fail');
   const status: WorldReadinessStatus = blockers.length ? 'blocked' : checks.some(check => check.tone === 'warn') ? 'watch' : 'ready';
   const canStartClient =
     (input.authenticated || Boolean(observeResident)) &&
-    Boolean(input.gateway?.connected) &&
+    (Boolean(input.gateway?.connected) || observeSessionConnected) &&
     input.gameClientStatus === 'idle';
 
   return {
@@ -93,8 +95,17 @@ function sessionCheck(authenticated: boolean, loginUrlReady: boolean, observeRes
   };
 }
 
-function gatewayCheck(gateway: GatewayStatus | undefined): WorldReadinessCheck {
+function gatewayCheck(gateway: GatewayStatus | undefined, observeResident: string, observeSessionConnected: boolean): WorldReadinessCheck {
   if (!gateway?.connected) {
+    if (observeResident && observeSessionConnected) {
+      return {
+        id: 'gateway',
+        label: 'AgentGateway',
+        tone: 'ok',
+        value: 'observing',
+        detail: 'A live resident observe session is connected while gateway status refreshes.',
+      };
+    }
     return {
       id: 'gateway',
       label: 'AgentGateway',
@@ -112,7 +123,16 @@ function gatewayCheck(gateway: GatewayStatus | undefined): WorldReadinessCheck {
   };
 }
 
-function residentsCheck(onlineResidents: number): WorldReadinessCheck {
+function residentsCheck(onlineResidents: number, observeResident = '', observeSessionConnected = false): WorldReadinessCheck {
+  if (observeResident && observeSessionConnected) {
+    return {
+      id: 'residents',
+      label: 'Residents',
+      tone: 'ok',
+      value: 'session online',
+      detail: `${observeResident} has an active observe stream.`,
+    };
+  }
   if (onlineResidents === 0) {
     return {
       id: 'residents',
@@ -178,7 +198,8 @@ function clientCheck(status: GameClientStatus, ticketUser: string | undefined): 
 }
 
 function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput, observeResident: string): string {
-  if (observeResident && input.gateway?.connected && status === 'ready') return 'Resident observe mode is ready.';
+  const observeReady = Boolean(observeResident && (input.gateway?.connected || input.observeSessionConnected));
+  if (observeReady && status === 'ready') return 'Resident observe mode is ready.';
   if (observeResident && !input.gateway?.connected) return 'RuneScape gateway unavailable.';
   if (!input.authenticated && input.loginUrlReady === false) return 'World route blocked until attendee login is connected.';
   if (!input.authenticated) return 'Login required to enter the RuneScape client.';
@@ -191,7 +212,7 @@ function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput, o
 }
 
 function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput, observeResident: string): string {
-  if (observeResident && input.gateway?.connected) return `Following ${observeResident} through the live RuneScape spectator client.`;
+  if (observeResident && (input.gateway?.connected || input.observeSessionConnected)) return `Following ${observeResident} through the live RuneScape spectator client.`;
   if (observeResident) return 'Start the Null City game/controller stack before observing a resident in the client.';
   if (!input.authenticated && input.loginUrlReady === false) {
     return 'Ask staff to connect attendee login before using the world route.';

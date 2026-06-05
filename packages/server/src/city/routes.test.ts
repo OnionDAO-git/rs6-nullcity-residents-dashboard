@@ -357,16 +357,19 @@ describe('routeCityApi points and souls', () => {
       expect(inbox.status).toBe(200);
       expect(fetchCalls).toContain('http://letters.test/v1/inbox?human=alice');
       expect(payload.threads).toHaveLength(1);
-      expect(payload.threads[0]).toMatchObject({
+      const [thread] = payload.threads;
+      expect(thread).toBeDefined();
+      if (!thread) throw new Error('Expected bridged inbox letter thread');
+      expect(thread).toMatchObject({
         status: 'letter',
         residentId: 'res:fern',
         latestMessage: { body: 'You are now Acquaintance of embassy' },
       });
 
-      const detail = await route(authedRequest(`/api/inbox/${encodeURIComponent(payload.threads[0].id)}`), services);
+      const detail = await route(authedRequest(`/api/inbox/${encodeURIComponent(thread.id)}`), services);
       expect(detail.status).toBe(200);
       expect(await detail.json()).toMatchObject({
-        thread: { id: payload.threads[0].id, status: 'letter', residentId: 'res:fern' },
+        thread: { id: thread.id, status: 'letter', residentId: 'res:fern' },
         messages: [{ senderType: 'resident', body: 'Alice, your support of res:fern reached the embassy.' }],
       });
     } finally {
