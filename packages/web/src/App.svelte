@@ -3434,11 +3434,7 @@
   <main class="projector-overview" aria-label="Null City public live view">
     <header class="projector-header">
       <div class="projector-title-block">
-        <p class="kicker">Null City Live</p>
-        <h1>{cityProjectorOverview.dispatch.title}</h1>
-        {#if cityProjectorOverview.dispatch.bodyLead}
-          <p class="projector-headline-copy">{cityProjectorOverview.dispatch.bodyLead}</p>
-        {/if}
+        <h1>Null City Live</h1>
         <button type="button" class="projector-dashboard-link" onclick={() => cityNav('/')}>Dashboard</button>
       </div>
       <div class="projector-status-strip" aria-label="Live city counters">

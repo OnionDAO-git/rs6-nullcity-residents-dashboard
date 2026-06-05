@@ -47,6 +47,12 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain("cityNav('/chronicle')");
   });
 
+  test('keeps the live page title separate from the latest Storyteller headline', () => {
+    expect(appSource).toContain('<h1>Null City Live</h1>');
+    expect(appSource).not.toContain('<h1>{cityProjectorOverview.dispatch.title}</h1>');
+    expect(appSource).not.toContain('<p class="projector-headline-copy">{cityProjectorOverview.dispatch.bodyLead}</p>');
+  });
+
   test('keeps Story Canon events on myth copy instead of raw log notes', () => {
     expect(appSource).not.toContain('<strong>{event.note || event.ref}</strong>');
     expect(appSource).toContain('{@const myth = storytellerMythCard(event)}');
