@@ -8,6 +8,8 @@ export interface CityConfig {
   onionCallbackUrl?: string;
   authCookieName: string;
   authCookieDomain?: string;
+  devAuthEnabled: boolean;
+  devAuthEmail?: string;
   sessionCookieSecure: boolean;
   publicBaseUrl?: string;
   printBridgeToken?: string;
@@ -39,6 +41,8 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     onionCallbackUrl: clean(env.ONION_CALLBACK_URL) || clean(env.CITY_ONION_CALLBACK_URL),
     authCookieName: clean(env.AUTH_COOKIE_NAME) || 'session',
     authCookieDomain: clean(env.AUTH_COOKIE_DOMAIN),
+    devAuthEnabled: booleanEnv(env.CITY_DEV_AUTH_ENABLED) || booleanEnv(env.DEV_AUTH_ENABLED),
+    devAuthEmail: clean(env.CITY_DEV_AUTH_EMAIL) || clean(env.DEV_AUTH_DEFAULT_EMAIL),
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     publicBaseUrl: clean(env.CITY_PUBLIC_BASE_URL),
     printBridgeToken: clean(env.CITY_PRINT_BRIDGE_TOKEN) || clean(env.PRINT_BRIDGE_CITY_TOKEN),
@@ -64,6 +68,10 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
 function clean(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function booleanEnv(value: string | undefined): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(value?.trim().toLowerCase() ?? '');
 }
 
 function normalizeBaseUrl(value: string | undefined): string | undefined {

@@ -96,9 +96,14 @@ export function createLandingSessionAuthenticator(
       }
     },
     loginUrl(requestUrl: URL): string {
-      const login = new URL('/login', config.landingAuthBaseUrl);
-      const returnTo = config.publicBaseUrl ? new URL(requestUrl.pathname + requestUrl.search, config.publicBaseUrl) : requestUrl;
+      const login = new URL(config.devAuthEnabled ? '/api/dev/auth/login' : '/login', config.landingAuthBaseUrl);
+      const returnTo = canonicalLocalhostUrl(
+        config.publicBaseUrl ? new URL(requestUrl.pathname + requestUrl.search, config.publicBaseUrl) : requestUrl,
+      );
       login.searchParams.set('returnTo', returnTo.toString());
+      if (config.devAuthEnabled && config.devAuthEmail) {
+        login.searchParams.set('email', config.devAuthEmail);
+      }
       return login.toString();
     },
   };
@@ -106,4 +111,13 @@ export function createLandingSessionAuthenticator(
 
 function nullableString(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
+}
+
+function canonicalLocalhostUrl(url: URL): URL {
+  const copy = new URL(url);
+  const normalized = copy.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (normalized === '127.0.0.1' || normalized === '::1') {
+    copy.hostname = 'localhost';
+  }
+  return copy;
 }

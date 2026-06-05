@@ -40,4 +40,14 @@ describe('cityConfigFromEnv', () => {
     expect(config.nullcityControlBaseUrl).toBeUndefined();
     expect(config.nullcityControlToken).toBeUndefined();
   });
+
+  test('enables dashboard dev auth only from explicit dev auth env', () => {
+    const config = cityConfigFromEnv({
+      DEV_AUTH_ENABLED: 'true',
+      DEV_AUTH_DEFAULT_EMAIL: 'james@null.city',
+    });
+
+    expect(config.devAuthEnabled).toBe(true);
+    expect(config.devAuthEmail).toBe('james@null.city');
+  });
 });

@@ -145,6 +145,8 @@
   let dismissedDashboardNotices = new Set<string>();
   let sessionLoading = true;
   let citySession: CitySession = guestSession;
+  let cityLoginRedirecting = false;
+  let cityLoginRedirectAttempted = false;
   let publicProfileHandle = '';
   let notificationPermission: NotificationPermission | 'unsupported' = notificationStatus();
   let notificationsEnabled = false;
@@ -452,6 +454,21 @@
   $: cityStoryRunList = storytellerDigestRunList(cityStoryDigests, cityStoryRunId);
   $: cityLibraryStoryPreview = storytellerLibraryPreview(cityStoryDigests[0]);
   $: cityLoginUrlReady = loginUrlIsReady(citySession.loginUrl);
+  $: if (route !== '/login') {
+    cityLoginRedirecting = false;
+    cityLoginRedirectAttempted = false;
+  }
+  $: if (
+    route === '/login' &&
+    !sessionLoading &&
+    !citySession.authenticated &&
+    cityLoginUrlReady &&
+    !cityLoginRedirectAttempted
+  ) {
+    cityLoginRedirecting = true;
+    cityLoginRedirectAttempted = true;
+    window.location.assign(cityLoginHref('/'));
+  }
   $: cityResident = cityResidentId ? cityResidents.find(row => residentSlug(row.name) === residentSlug(cityResidentId) || row.name.toLowerCase() === cityResidentId.toLowerCase()) : undefined;
   $: cityResidentStoryEvents = residentStoryEvents(cityResident, cityStoryDigests, 5);
   $: cityResidentStorySignal = residentStoryDigestSignal(cityResident, cityStoryDigests);
@@ -1084,6 +1101,31 @@
       return !(url.origin === browserOrigin && path === '/login');
     } catch {
       return trimmed !== '/login';
+    }
+  }
+
+  function cityLoginHref(returnPath = `${browserPath}${browserSearch}`): string {
+    if (!cityLoginUrlReady) return citySession.loginUrl;
+    try {
+      const login = new URL(citySession.loginUrl, browserOrigin);
+      const targetPath = normalizeRoutePath(returnPath) === '/login' ? '/' : returnPath;
+      login.searchParams.set('returnTo', new URL(targetPath, canonicalLocalBrowserOrigin()).toString());
+      return login.toString();
+    } catch {
+      return citySession.loginUrl;
+    }
+  }
+
+  function canonicalLocalBrowserOrigin(): string {
+    try {
+      const origin = new URL(browserOrigin);
+      const normalized = origin.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+      if (normalized === '127.0.0.1' || normalized === '::1') {
+        origin.hostname = 'localhost';
+      }
+      return origin.origin;
+    } catch {
+      return browserOrigin;
     }
   }
 
@@ -4609,7 +4651,7 @@
       {/if}
     </div>
     {#if cityLoginUrlReady}
-      <a class="city-link-button" href={citySession.loginUrl}>Open Onion DAO Login</a>
+      <a class="city-link-button" href={cityLoginHref()}>Open Onion DAO Login</a>
     {/if}
   </section>
 {/snippet}
@@ -6266,11 +6308,11 @@
   </section>
   <section class="city-panel">
     <div class="city-empty-state">
-      <strong>{cityLoginUrlReady ? 'Attendee login ready' : 'Attendee login not connected'}</strong>
-      <span>{cityLoginUrlReady ? 'Open the Onion DAO login to unlock Onions, AP, GP, inbox, Embassy actions, and print workflows.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
+      <strong>{cityLoginRedirecting ? 'Opening attendee login' : cityLoginUrlReady ? 'Attendee login ready' : 'Attendee login not connected'}</strong>
+      <span>{cityLoginRedirecting ? 'Creating the local dev session and returning to the dashboard.' : cityLoginUrlReady ? 'Open the Onion DAO login to unlock Onions, AP, GP, inbox, Embassy actions, and print workflows.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
     </div>
     {#if cityLoginUrlReady}
-      <a class="city-link-button" href={citySession.loginUrl}>Open Onion DAO Login</a>
+      <a class="city-link-button" href={cityLoginHref('/')}>Open Onion DAO Login</a>
     {/if}
   </section>
 {/snippet}
