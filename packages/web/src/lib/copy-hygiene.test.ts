@@ -99,6 +99,12 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Once a Storyteller digest cites this resident, grounded public story evidence will appear here.');
   });
 
+  test('gives humans an obvious path from residents to the RuneScape viewer', () => {
+    expect(appSource).toContain('View in RuneScape');
+    expect(appSource).toContain('cityNav(`/world?resident=${encodeURIComponent(row.name)}`)');
+    expect(appSource).toContain('cityNav(`/world?resident=${encodeURIComponent(cityResident.name)}`)');
+  });
+
   test('keeps public profile empty states endpoint-free', () => {
     expect(appSource).not.toContain('public event endpoints are running');
     expect(appSource).toContain('This profile will appear after the attendee handle has public AP, resident, or letter history.');

@@ -5268,6 +5268,12 @@
             <span><small>Goal</small><strong>{cityResidentReadModel?.goal || cityResident?.thinking?.activePlan || 'No public goal yet'}</strong></span>
             <span><small>Last update</small><strong>{cityResident ? residentFeedLabel(cityResident) : cityResidentPosts[0]?.createdAt ? `${timeAgo(cityResidentPosts[0].createdAt)} ago` : '-'}</strong></span>
           </div>
+          {#if cityResident}
+            <div class="resident-simple-actions">
+              <button class="primary" disabled={!cityResident.online} onclick={() => cityResident && cityNav(`/world?resident=${encodeURIComponent(cityResident.name)}`)}>View in RuneScape</button>
+              <button onclick={() => cityNav('/residents')}>All residents</button>
+            </div>
+          {/if}
         </div>
         <div class="city-panel resident-simple-help">
           <div class="panel-title">What Attention Means</div>
@@ -6342,22 +6348,28 @@
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
       {@const economyGp = residentLiveEconomyGpEvidence(cityLiveEconomy, row.name)}
       {@const scanLines = residentRosterScanLines(row, { benchmark, economyGp, storyteller: storySignal })}
-      <button class:simple={simple} onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
-        <span class:ok={row.online} class="dot"></span>
-        <strong>{residentDisplayName(row.name)}</strong>
-        {#if simple}
-          <small>{row.online ? 'Online now' : 'Offline'} · Attention {row.attention ?? '-'}</small>
-          <em class:warn={residentNeedsApSupportSoon(row)}>{residentNeedsApSupportSoon(row) ? 'Needs attention' : 'Give attention'}</em>
-        {:else}
-          <small>
-            {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
-          </small>
-          {#each scanLines as line}
-            <small class={`city-resident-loop-line tone-${line.tone} priority-${line.priority}`}>{line.label}: {residentLoopLine(line.text, line.limit)}</small>
-          {/each}
-          <em class:warn={residentNeedsApSupportSoon(row)}>{row.attention ?? '-'} AP</em>
-        {/if}
-      </button>
+      <article class:simple={simple} class="city-resident-card">
+        <button class="city-resident-main" onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
+          <span class:ok={row.online} class="dot"></span>
+          <strong>{residentDisplayName(row.name)}</strong>
+          {#if simple}
+            <small>{row.online ? 'Online now' : 'Offline'} · Attention {row.attention ?? '-'}</small>
+            <em class:warn={residentNeedsApSupportSoon(row)}>{residentNeedsApSupportSoon(row) ? 'Needs attention' : 'Give attention'}</em>
+          {:else}
+            <small>
+              {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
+            </small>
+            {#each scanLines as line}
+              <small class={`city-resident-loop-line tone-${line.tone} priority-${line.priority}`}>{line.label}: {residentLoopLine(line.text, line.limit)}</small>
+            {/each}
+            <em class:warn={residentNeedsApSupportSoon(row)}>{row.attention ?? '-'} AP</em>
+          {/if}
+        </button>
+        <div class="city-resident-actions">
+          <button class="primary" disabled={!row.online} onclick={() => cityNav(`/world?resident=${encodeURIComponent(row.name)}`)}>View in RuneScape</button>
+          <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>Give attention</button>
+        </div>
+      </article>
     {:else}
       {@const rosterHeartbeat = cityEconomyHeartbeat.heartbeat}
       {@const rosterState = residentRosterEmptyState({
