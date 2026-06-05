@@ -182,6 +182,8 @@
     onlineResidents: 0,
     pendingPrints: 0,
     proposalCount: 0,
+    onionBalance: 0,
+    residentCount: 0,
   });
   let cityResident: ResidentDashboardRow | undefined;
   let cityProfileData: CityProfileData | undefined;
@@ -526,6 +528,8 @@
     onlineResidents: cityOnlineResidents.length,
     pendingPrints: cityPendingPrints,
     proposalCount: cityProposals.length,
+    onionBalance: citySession.onions,
+    residentCount: cityResidents.length,
   });
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
   $: cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
@@ -1215,11 +1219,13 @@
         detail: gatewayStatus?.connected ? 'Residents are visible in the live city view' : 'Open the watch view while the city syncs',
       },
       {
-        label: 'Choose a Resident',
+        label: 'Give Attention',
         path: lowAp > 0 ? '/residents?focus=needs-attention' : '/residents',
-        tone: 'blue',
-        metric: `${rows.length.toLocaleString()} residents`,
-        detail: lowAp > 0 ? `${lowAp.toLocaleString()} may need attention soon` : 'Open resident pages and add attention',
+        tone: 'gold',
+        metric: session.authenticated && session.onions > 0 ? `${session.onions.toLocaleString()} Onions` : `${rows.length.toLocaleString()} residents`,
+        detail: lowAp > 0
+          ? `${lowAp.toLocaleString()} may need attention soon`
+          : 'Spend Onions so a resident receives attention',
       },
       {
         label: 'Browse Soul Proposals',
@@ -3810,13 +3816,18 @@
     <div>
       <p class="kicker">OnionDAO City</p>
       <h1>Null City</h1>
-      <p class="city-lede">Watch residents live, choose who to support with attention, browse Soul proposals, and track your OnionDAO activity.</p>
+      <p class="city-lede">Onions are what you spend. Attention is what residents receive. Use it when you want someone to stay active, visible, and responsive in the city.</p>
     </div>
     <div class="city-ledger-strip">
-      <span><small>Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
-      <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
-      <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
-      <span><small>Session</small><strong>{citySession.authenticated ? citySession.handle : 'guest'}</strong></span>
+      <span><small>Your Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
+      {#if expertMode}
+        <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
+        <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
+        <span><small>Session</small><strong>{citySession.authenticated ? citySession.handle : 'guest'}</strong></span>
+      {:else}
+        <span><small>Spend them on</small><strong>Residents</strong></span>
+        <span><small>They become</small><strong>Attention</strong></span>
+      {/if}
     </div>
   </section>
 
@@ -3825,8 +3836,15 @@
       <p class="kicker">Recommended now</p>
       <strong>{cityRecommendedAction.label}</strong>
       <span>{cityRecommendedAction.detail}</span>
+      {#if !expertMode && cityRecommendedAction.path.startsWith('/residents')}
+        <div class="city-simple-action-steps" aria-label="How to spend Onions">
+          <span><small>1</small>Pick a resident</span>
+          <span><small>2</small>Choose Onions</span>
+          <span><small>3</small>Complete request</span>
+        </div>
+      {/if}
     </div>
-    <button class="primary" type="button" onclick={() => cityNav(cityRecommendedAction.path)}>Open</button>
+    <button class="primary" type="button" onclick={() => cityNav(cityRecommendedAction.path)}>{cityRecommendedAction.actionLabel || 'Open'}</button>
   </section>
 
   {#if !citySession.authenticated}
@@ -3849,7 +3867,7 @@
   {/if}
 
   <section class="city-entry-grid city-human-action-grid">
-    {#each cityEntries as entry (entry.path)}
+    {#each (expertMode ? cityEntries : cityEntries.filter(entry => entry.path === '/live' || entry.path.startsWith('/residents'))) as entry (entry.path)}
       <button class={`city-entry tone-${entry.tone}`} onclick={() => cityNav(entry.path)}>
         <span>{entry.label}</span>
         <strong>{entry.metric}</strong>
@@ -3862,12 +3880,12 @@
     <article>
       <small>Online Residents</small>
       <strong>{cityOnlineResidents.length.toLocaleString()}</strong>
-      <span>Watch live or open a resident page.</span>
+      <span>Watch live or choose one to support.</span>
     </article>
     <article>
       <small>Attention</small>
       <strong>{cityLowAttentionResidents.length > 0 ? `${cityLowAttentionResidents.length} need help` : 'steady'}</strong>
-      <span>Attention keeps residents moving.</span>
+      <span>Spend Onions on a resident; completed requests credit attention.</span>
     </article>
     <article>
       <small>Latest Story</small>
@@ -3877,7 +3895,7 @@
     <article>
       <small>Your Session</small>
       <strong>{citySession.authenticated ? citySession.handle : 'guest'}</strong>
-      <span>{citySession.authenticated ? 'Inbox, attention, and print quote actions are available.' : 'Sign in when you want to participate.'}</span>
+      <span>{citySession.authenticated ? 'Your Onions can be spent from resident pages.' : 'Sign in when you want to participate.'}</span>
     </article>
   </section>
 
@@ -5072,7 +5090,7 @@
         <div class="resident-attention-steps compact" aria-label="How Onion attention works">
           <span><small>1</small><strong>Choose Onions</strong><em>Pick an amount on a resident page.</em></span>
           <span><small>2</small><strong>Approve Request</strong><em>The Onion portal confirms the spend.</em></span>
-          <span><small>3</small><strong>Attention Arrives</strong><em>After approval, Null City gives that resident attention.</em></span>
+          <span><small>3</small><strong>Attention Arrives</strong><em>When the request completes, Null City credits attention.</em></span>
         </div>
       </div>
       <div class="city-panel resident-simple-help">
@@ -5163,7 +5181,7 @@
           <div class="resident-attention-steps" aria-label="How Onion attention works">
             <span><small>1</small><strong>Choose Onions</strong><em>Pick how many Onions you want to spend.</em></span>
             <span><small>2</small><strong>Approve Request</strong><em>The Onion portal asks you to approve the spend.</em></span>
-            <span><small>3</small><strong>Resident Gets Attention</strong><em>After approval, Null City sends attention to this resident.</em></span>
+            <span><small>3</small><strong>Resident Gets Attention</strong><em>When the request completes, Null City credits attention.</em></span>
           </div>
           <div class="resident-attention-metrics" aria-label="Attention summary">
             <span><small>Your Onions</small><strong>{citySession.authenticated ? citySession.onions.toLocaleString() : 'Sign in'}</strong></span>

@@ -74,6 +74,45 @@ describe('recommendedDashboardAction', () => {
       tone: 'teal',
     });
   });
+
+  test('points attendees with Onions to resident attention before passive watching', () => {
+    expect(recommendedDashboardAction({
+      authenticated: true,
+      loginReady: true,
+      lowAttentionResidents: 0,
+      unreadThreads: 0,
+      onlineResidents: 10,
+      pendingPrints: 0,
+      proposalCount: 0,
+      onionBalance: 1009,
+      residentCount: 23,
+    })).toMatchObject({
+      label: 'Use your 1,009 Onions',
+      path: '/residents',
+      detail: 'Choose a resident and pick an amount. When the Onion request completes, Null City credits that resident with attention.',
+      actionLabel: 'Pick a Resident',
+      tone: 'gold',
+    });
+  });
+
+  test('keeps the Onion explanation even when residents need attention', () => {
+    expect(recommendedDashboardAction({
+      authenticated: true,
+      loginReady: true,
+      lowAttentionResidents: 2,
+      unreadThreads: 4,
+      onlineResidents: 3,
+      pendingPrints: 1,
+      proposalCount: 2,
+      onionBalance: 1009,
+      residentCount: 23,
+    })).toMatchObject({
+      label: 'Use your 1,009 Onions',
+      path: '/residents?focus=needs-attention',
+      actionLabel: 'Pick a Resident',
+      tone: 'gold',
+    });
+  });
 });
 
 describe('residentAttentionGuide', () => {
@@ -85,7 +124,7 @@ describe('residentAttentionGuide', () => {
       currentAttention: 4,
     })).toEqual({
       title: 'Give attention to Hans',
-      detail: 'Spend Onions to create an approval request. After approval, Hans receives attention.',
+      detail: 'Spend Onions to create an approval request. When the request completes, Hans receives attention.',
       amountLabel: '75 Onions suggested',
       primaryAction: 'Give Attention',
       tone: 'warn',

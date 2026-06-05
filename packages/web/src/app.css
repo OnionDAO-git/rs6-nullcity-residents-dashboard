@@ -1829,6 +1829,37 @@ pre {
   line-height: 1.45;
 }
 
+.city-simple-action-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.city-simple-action-steps span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 0;
+  padding: 7px 9px;
+  color: var(--text-1);
+  background: rgba(14, 12, 10, 0.42);
+  border: 1px solid var(--ground-4);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.city-simple-action-steps small {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--ground-0);
+  background: var(--s-gold);
+  border-radius: 50%;
+  font: 700 10px var(--mono);
+}
+
 .city-admin-strip {
   border-left-color: var(--s-amber);
 }
@@ -4076,6 +4107,15 @@ pre {
   .city-auth-band,
   .city-admin-strip {
     padding: 14px;
+  }
+
+  .city-recommended-action {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .city-recommended-action .primary {
+    width: 100%;
   }
 
   .city-points {

@@ -22,6 +22,8 @@ export interface RecommendedDashboardActionInput {
   onlineResidents: number;
   pendingPrints: number;
   proposalCount: number;
+  onionBalance?: number;
+  residentCount?: number;
 }
 
 export interface RecommendedDashboardAction {
@@ -29,6 +31,7 @@ export interface RecommendedDashboardAction {
   path: string;
   detail: string;
   tone: DashboardTone;
+  actionLabel?: string;
 }
 
 export interface ResidentAttentionGuideInput {
@@ -85,6 +88,18 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       path: '/login',
       detail: 'Unlock attention, inbox, Soul proposal, and print quote actions.',
       tone: 'gold',
+      actionLabel: 'Sign In',
+    };
+  }
+
+  if (input.authenticated && (input.onionBalance ?? 0) > 0 && (input.residentCount ?? 0) > 0) {
+    const path = input.lowAttentionResidents > 0 ? '/residents?focus=needs-attention' : '/residents';
+    return {
+      label: `Use your ${(input.onionBalance ?? 0).toLocaleString()} Onions`,
+      path,
+      detail: 'Choose a resident and pick an amount. When the Onion request completes, Null City credits that resident with attention.',
+      tone: 'gold',
+      actionLabel: 'Pick a Resident',
     };
   }
 
@@ -94,6 +109,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       path: '/residents?focus=needs-attention',
       detail: `${input.lowAttentionResidents} resident${input.lowAttentionResidents === 1 ? '' : 's'} may need attention soon.`,
       tone: 'warn',
+      actionLabel: 'Give Attention',
     };
   }
 
@@ -103,6 +119,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       path: '/inbox',
       detail: `${input.unreadThreads} unread resident or city update${input.unreadThreads === 1 ? '' : 's'}.`,
       tone: 'mauve',
+      actionLabel: 'Open Inbox',
     };
   }
 
@@ -112,6 +129,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       path: '/embassy',
       detail: `${input.proposalCount} proposal${input.proposalCount === 1 ? '' : 's'} can be reviewed or funded.`,
       tone: 'green',
+      actionLabel: 'Browse',
     };
   }
 
@@ -121,6 +139,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       path: '/prints',
       detail: `${input.pendingPrints} print request${input.pendingPrints === 1 ? '' : 's'} in progress.`,
       tone: 'amber',
+      actionLabel: 'Check Quotes',
     };
   }
 
@@ -131,6 +150,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       ? `${input.onlineResidents} resident${input.onlineResidents === 1 ? '' : 's'} online right now.`
       : 'Open the public live view while the city syncs resident activity.',
     tone: 'teal',
+    actionLabel: 'Watch',
   };
 }
 
@@ -151,7 +171,7 @@ export function residentAttentionGuide(input: ResidentAttentionGuideInput): Resi
   const lowAttention = input.currentAttention !== undefined && input.currentAttention <= 10;
   return {
     title: `Give attention to ${resident}`,
-    detail: `Spend Onions to create an approval request. After approval, ${resident} receives attention.`,
+    detail: `Spend Onions to create an approval request. When the request completes, ${resident} receives attention.`,
     amountLabel: suggested > 0 ? `${suggested.toLocaleString()} Onions suggested` : 'Choose how many Onions to spend',
     primaryAction: 'Give Attention',
     tone: lowAttention || suggested > 0 ? 'warn' : 'teal',
