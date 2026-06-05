@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems } from './end-user-dashboard';
+import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav small and action-focused', () => {
@@ -112,6 +112,17 @@ describe('recommendedDashboardAction', () => {
       actionLabel: 'Pick a Resident',
       tone: 'gold',
     });
+  });
+});
+
+describe('dismissible dashboard notices', () => {
+  test('hides a dismissed notice without hiding a new notice', () => {
+    const message = 'Onions spent. The Steward received 100 attention.';
+    const dismissed = dismissDashboardNotice(new Set<string>(), 'action', message);
+
+    expect([...dismissed]).toEqual([dashboardNoticeKey('action', message)]);
+    expect(dashboardNoticeVisible(dismissed, 'action', message)).toBe(false);
+    expect(dashboardNoticeVisible(dismissed, 'action', 'Loading city state')).toBe(true);
   });
 });
 

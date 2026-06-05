@@ -57,6 +57,19 @@ export interface ResidentAttentionResultNoticeInput {
   creditedAmount?: number;
 }
 
+export function dashboardNoticeKey(kind: string, message: string): string {
+  return `${kind}:${message.trim()}`;
+}
+
+export function dashboardNoticeVisible(dismissed: ReadonlySet<string>, kind: string, message: string): boolean {
+  const normalized = message.trim();
+  return Boolean(normalized) && !dismissed.has(dashboardNoticeKey(kind, normalized));
+}
+
+export function dismissDashboardNotice(dismissed: ReadonlySet<string>, kind: string, message: string): Set<string> {
+  return new Set([...dismissed, dashboardNoticeKey(kind, message)]);
+}
+
 export const dashboardNavItems: DashboardNavItem[] = [
   { label: 'Home', path: '/', match: '/', glyph: 'HM' },
   { label: 'Watch', path: '/live', match: '/live', glyph: 'WT' },

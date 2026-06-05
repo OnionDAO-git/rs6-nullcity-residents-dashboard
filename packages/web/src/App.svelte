@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { dashboardNoticeVisible, dismissDashboardNotice, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -142,6 +142,7 @@
   let error = '';
   let actionError = '';
   let cityDataError = '';
+  let dismissedDashboardNotices = new Set<string>();
   let sessionLoading = true;
   let citySession: CitySession = guestSession;
   let publicProfileHandle = '';
@@ -736,6 +737,10 @@
 
   function cityNav(path: string) {
     routeTo(cityPath(path));
+  }
+
+  function dismissNotice(kind: string, message: string) {
+    dismissedDashboardNotices = dismissDashboardNotice(dismissedDashboardNotices, kind, message);
   }
 
   function setExpertMode(enabled: boolean) {
@@ -3247,6 +3252,15 @@
   <title>{isDebugRoute ? 'Null City Resident Operations' : route === '/live' ? 'Null City Live' : 'Null City Dashboard'}</title>
 </svelte:head>
 
+{#snippet NoticeBanner({ kind, message, tone = '' }: { kind: string; message: string; tone?: string })}
+  {#if dashboardNoticeVisible(dismissedDashboardNotices, kind, message)}
+    <div class={`notice notice-dismissible ${tone}`}>
+      <span>{message}</span>
+      <button type="button" class="notice-dismiss" aria-label="Dismiss notice" title="Dismiss notice" onclick={() => dismissNotice(kind, message)}>X</button>
+    </div>
+  {/if}
+{/snippet}
+
 {#if isDebugRoute}
 <nav class="topbar">
   <button class="brand" onclick={() => debugNav('/')}>Null City Ops</button>
@@ -3274,11 +3288,9 @@
     <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
   </div>
 
-  {#if error || actionError}
-    <div class="notice rose">{error || actionError}</div>
-  {/if}
+  {@render NoticeBanner({ kind: 'debug-error', message: error || actionError, tone: 'rose' })}
   {#if loading}
-    <div class="notice">Loading dashboard state</div>
+    {@render NoticeBanner({ kind: 'debug-loading', message: 'Loading dashboard state' })}
   {/if}
 
   {#if route === '/'}
@@ -3525,10 +3537,10 @@
     </header>
 
     {#if cityDataError}
-      <div class="notice city-notice">{cityDataNoticeCopy(cityDataError)}</div>
+      {@render NoticeBanner({ kind: 'projector-city-data', message: cityDataNoticeCopy(cityDataError), tone: 'city-notice' })}
     {/if}
     {#if loading}
-      <div class="notice">Syncing live city</div>
+      {@render NoticeBanner({ kind: 'projector-loading', message: 'Syncing live city' })}
     {/if}
 
     {@render ProjectorPrimaryAction({ item: cityProjectorOverview.primaryAction })}
@@ -3746,21 +3758,20 @@
       </div>
 
       {#if cityDataError}
-        <div class="notice city-notice">{cityDataNoticeCopy(cityDataError)}</div>
+        {@render NoticeBanner({ kind: 'city-data', message: cityDataNoticeCopy(cityDataError), tone: 'city-notice' })}
       {/if}
-      {#if actionError}
-        <div class="notice rose">{actionError}</div>
-      {/if}
-      {#if cityActionNotice}
-        <div class="notice">{cityActionNotice}</div>
-      {/if}
+      {@render NoticeBanner({ kind: 'city-action-error', message: actionError, tone: 'rose' })}
+      {@render NoticeBanner({ kind: 'city-action', message: cityActionNotice })}
       {#if loading}
-        <div class="notice">Loading city state</div>
+        {@render NoticeBanner({ kind: 'city-loading', message: 'Loading city state' })}
       {/if}
-      {#if expertMode}
-        <div class="notice city-expert-banner">
-          <strong>Expert Mode is on</strong>
-          <span>Diagnostics, readiness checks, and operator links are visible. Permissions are unchanged.</span>
+      {#if expertMode && dashboardNoticeVisible(dismissedDashboardNotices, 'city-expert', 'Expert Mode is on')}
+        <div class="notice city-expert-banner notice-dismissible">
+          <div>
+            <strong>Expert Mode is on</strong>
+            <span>Diagnostics, readiness checks, and operator links are visible. Permissions are unchanged.</span>
+          </div>
+          <button type="button" class="notice-dismiss" aria-label="Dismiss expert mode notice" title="Dismiss notice" onclick={() => dismissNotice('city-expert', 'Expert Mode is on')}>X</button>
         </div>
       {/if}
 
