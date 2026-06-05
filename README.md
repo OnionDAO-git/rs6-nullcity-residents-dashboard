@@ -43,6 +43,23 @@ The gateway URL should point at the server `AgentGateway`. The gateway currently
 
 City auth reads the Onion DAO `session` cookie used by `../../landing-2026`. `LANDING_DATABASE_URL` should be read-only for the landing database, and `CITY_DATABASE_URL` should point at this dashboard's own database so AP, GP, proposals, print requests, resident inboxes, and soul-library data do not pollute the landing database.
 
+### Local OnionDAO test accounts
+
+The canonical test-account guide lives in `../landing-2026/docs/nullcity-dev-accounts.md`. Use it for the James/Alice/Bob/Treasury account table, seeded Onion balances, dev-auth URLs, and reset steps.
+
+For the local MVP stack, dashboard login can auto-forward through landing dev auth when these variables are set:
+
+```sh
+LANDING_AUTH_BASE_URL=http://localhost:5173
+LANDING_DATABASE_URL=postgresql://oniondao:oniondao_dev@localhost:5432/oniondao
+AUTH_COOKIE_NAME=session
+CITY_DEV_AUTH_ENABLED=true
+CITY_DEV_AUTH_EMAIL=james@null.city
+CITY_PUBLIC_BASE_URL=http://localhost:8787
+```
+
+Open `http://localhost:5174/login` to log into the dashboard as the configured dev account. Prefer `localhost` in the browser; host-only cookies set on `localhost` are not shared with `127.0.0.1`.
+
 ## Railway
 
 `railway.json` builds with Bun and starts the server with `bun run start`. The configured healthcheck is `/api/health`.

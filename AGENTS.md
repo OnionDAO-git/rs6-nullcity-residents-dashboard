@@ -13,6 +13,7 @@ Before changing dashboard behavior, read:
 5. `../rs6-nullcity-server/docs/agent-status.md` tail for live locks and runtime requests.
 6. `../rs6-nullcity-server/docs/issue-register.md` for dashboard bugs and QA findings that need dev fixes.
 7. `../rs6-nullcity-server/docs/city-dashboard-integration.md` for server JSON contracts.
+8. `../landing-2026/docs/nullcity-dev-accounts.md` for OnionDAO local dev accounts, seeded Onion balances, dev-auth URLs, and reset steps.
 
 Open P0/P1 rows in the server issue register whose evidence or next action names dashboard files are the dashboard dev-agent intake queue. Claim and fix one of those before taking adjacent `D*` or roadmap work unless every matching row is blocked or already leased.
 
@@ -50,6 +51,8 @@ James's local dashboard ports are part of the shared Null City stack:
 
 - Dashboard BFF: `127.0.0.1:8787` (`nullcity-dashboard-server`)
 - Dashboard web dev server: `127.0.0.1:5174` (`nullcity-dashboard-web`)
+
+For human or agent login tests, prefer `http://localhost:5174/login`. The dashboard can auto-forward through landing dev auth and return logged in as the configured local account, usually `james@null.city`. Use `../landing-2026/docs/nullcity-dev-accounts.md` before probing Onion balances or spending.
 
 If you need the shared dashboard restarted, append a `RUNTIME-REQUEST` line to `../rs6-nullcity-server/docs/agent-status.md` following `../rs6-nullcity-server/docs/runtime-stewardship.md`. Dashboard restarts are low risk, but the steward still owns shared screen sessions so live tests are not interrupted. For private experiments, run your own dev server on a different port and say so in your handoff.
 
