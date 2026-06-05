@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { shouldReplaySpectatorPacket } from './spectator-packets';
 
 describe('shouldReplaySpectatorPacket', () => {
-  test('drops volatile player and npc delta packets that crash late spectator replays', () => {
+  test('drops volatile player and npc delta packets that crash fresh spectator replays', () => {
     expect(shouldReplaySpectatorPacket(92)).toBe(false);
     expect(shouldReplaySpectatorPacket(128)).toBe(false);
   });

@@ -9,6 +9,7 @@ import ClientMouseListener from '#/client/ClientMouseListener.js';
 import type { ClientPointerEventRecord } from '#/client/ClientMouseListener.js';
 import GameShell from '#/client/GameShell.js';
 import { MiniMenuAction } from '#/client/MiniMenuAction.js';
+import { hasMapFlag } from '#/client/SafeMapFlags.js';
 import MobileKeyboard from '#/client/MobileKeyboard.js';
 import MouseTracking from '#/client/MouseTracking.js';
 import Skills from '#/constants/Skill.js';
@@ -5140,7 +5141,7 @@ export class Client extends GameShell {
         }
 
         const y: number = this.getAvH(this.camX, this.camZ, this.minusedlevel);
-        return y - this.camY >= 800 || (this.mapl[this.minusedlevel][this.camX >> 7][this.camZ >> 7] & MapFlag.RemoveRoof) === 0 ? 3 : this.minusedlevel;
+        return y - this.camY >= 800 || !hasMapFlag(this.mapl, this.minusedlevel, this.camX >> 7, this.camZ >> 7, MapFlag.RemoveRoof) ? 3 : this.minusedlevel;
     }
 
     private roofCheck(): number {
@@ -5152,7 +5153,7 @@ export class Client extends GameShell {
             const playerLocalTileX: number = this.localPlayer.x >> 7;
             const playerLocalTileZ: number = this.localPlayer.z >> 7;
 
-            if (this.mapl && (this.mapl[this.minusedlevel][cameraLocalTileX][cameraLocalTileZ] & MapFlag.RemoveRoof) !== 0) {
+            if (hasMapFlag(this.mapl, this.minusedlevel, cameraLocalTileX, cameraLocalTileZ, MapFlag.RemoveRoof)) {
                 top = this.minusedlevel;
             }
 
@@ -5181,7 +5182,7 @@ export class Client extends GameShell {
                         cameraLocalTileX--;
                     }
 
-                    if (this.mapl && (this.mapl[this.minusedlevel][cameraLocalTileX][cameraLocalTileZ] & MapFlag.RemoveRoof) !== 0) {
+                    if (hasMapFlag(this.mapl, this.minusedlevel, cameraLocalTileX, cameraLocalTileZ, MapFlag.RemoveRoof)) {
                         top = this.minusedlevel;
                     }
 
@@ -5195,7 +5196,7 @@ export class Client extends GameShell {
                             cameraLocalTileZ--;
                         }
 
-                        if (this.mapl && (this.mapl[this.minusedlevel][cameraLocalTileX][cameraLocalTileZ] & MapFlag.RemoveRoof) !== 0) {
+                        if (hasMapFlag(this.mapl, this.minusedlevel, cameraLocalTileX, cameraLocalTileZ, MapFlag.RemoveRoof)) {
                             top = this.minusedlevel;
                         }
                     }
@@ -5211,7 +5212,7 @@ export class Client extends GameShell {
                         cameraLocalTileZ--;
                     }
 
-                    if (this.mapl && (this.mapl[this.minusedlevel][cameraLocalTileX][cameraLocalTileZ] & MapFlag.RemoveRoof) !== 0) {
+                    if (hasMapFlag(this.mapl, this.minusedlevel, cameraLocalTileX, cameraLocalTileZ, MapFlag.RemoveRoof)) {
                         top = this.minusedlevel;
                     }
 
@@ -5225,7 +5226,7 @@ export class Client extends GameShell {
                             cameraLocalTileX--;
                         }
 
-                        if (this.mapl && (this.mapl[this.minusedlevel][cameraLocalTileX][cameraLocalTileZ] & MapFlag.RemoveRoof) !== 0) {
+                        if (hasMapFlag(this.mapl, this.minusedlevel, cameraLocalTileX, cameraLocalTileZ, MapFlag.RemoveRoof)) {
                             top = this.minusedlevel;
                         }
                     }
@@ -5233,7 +5234,7 @@ export class Client extends GameShell {
             }
         }
 
-        if (this.localPlayer && this.mapl && (this.mapl[this.minusedlevel][this.localPlayer.x >> 7][this.localPlayer.z >> 7] & MapFlag.RemoveRoof) !== 0) {
+        if (this.localPlayer && hasMapFlag(this.mapl, this.minusedlevel, this.localPlayer.x >> 7, this.localPlayer.z >> 7, MapFlag.RemoveRoof)) {
             top = this.minusedlevel;
         }
 
