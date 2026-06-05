@@ -143,6 +143,7 @@ class TinyMidiPCM {
     // let renderEndSeconds = 0;
     // let currentMidiBuffer = null;
     let samples = new Float32Array();
+    let soundfontReady = false;
 
     let gainNode = window.audioContext.createGain();
     gainNode.gain.setValueAtTime(0.1, window.audioContext.currentTime);
@@ -170,9 +171,20 @@ class TinyMidiPCM {
 
     await tinyMidiPCM.init();
 
-    const soundfontRes = await fetch(new URL('SCC1_Florestan.sf2', import.meta.url));
-    const soundfontBuffer = new Uint8Array(await soundfontRes.arrayBuffer());
-    tinyMidiPCM.setSoundfont(soundfontBuffer);
+    try {
+        const soundfontRes = await fetch(new URL(/* @vite-ignore */ 'SCC1_Florestan.sf2', import.meta.url));
+        if (soundfontRes.ok) {
+            const soundfontBuffer = new Uint8Array(await soundfontRes.arrayBuffer());
+            tinyMidiPCM.setSoundfont(soundfontBuffer);
+            soundfontReady = Boolean(tinyMidiPCM.soundfontPtr);
+        }
+
+        if (!soundfontReady) {
+            console.debug('midi playback unavailable', new Error(`soundfont unavailable (${soundfontRes.status})`));
+        }
+    } catch (error) {
+        console.debug('midi playback unavailable', error);
+    }
 
     function flush() {
         if (!window.audioContext || !samples.length) {
@@ -249,6 +261,10 @@ class TinyMidiPCM {
     }
 
     function start(vol, midiBuffer) {
+        if (!soundfontReady) {
+            return;
+        }
+
         // vol -1 = reuse last volume level
         if (vol !== -1) {
             window._tinyMidiVolume(vol);
@@ -296,7 +312,16 @@ class TinyMidiPCM {
 
 export function playMidi(data, dB, fade) {
     if (window._tinyMidiPlay) {
-        window._tinyMidiPlay(data, Math.pow(10, dB / 20), fade);
+        try {
+            const result = window._tinyMidiPlay(data, Math.pow(10, dB / 20), fade);
+            if (result && typeof result.catch === 'function') {
+                result.catch(error => {
+                    console.debug('midi playback unavailable', error);
+                });
+            }
+        } catch (error) {
+            console.debug('midi playback unavailable', error);
+        }
     }
 }
 
