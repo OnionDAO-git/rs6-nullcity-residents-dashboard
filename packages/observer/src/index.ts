@@ -66,6 +66,7 @@ export class NullCitySpectatorBridge {
   private filters: SpectatorDisplayFilters = defaultDisplayFilters;
   private started = false;
   private loaded = false;
+  private clientRenderReady = false;
   private pendingSession: SpectatorSession | undefined;
   private statusListener?: (event: MessageEvent) => void;
 
@@ -84,16 +85,24 @@ export class NullCitySpectatorBridge {
     this.statusListener = event => {
       if (event.origin !== window.location.origin) return;
       const data = record(event.data);
+      if (data.type === 'nullcity:spectator-ready') {
+        this.loaded = true;
+        this.sentPackets.clear();
+        this.verifyLoadedDocument();
+        this.flush();
+        return;
+      }
       if (data.type === 'nullcity:spectator-status') {
-        this.setStatus(String(data.text || ''));
+        const text = String(data.text || '');
+        this.clientRenderReady = text === 'RuneScape view live';
+        this.setStatus(text);
       }
     };
     window.addEventListener('message', this.statusListener);
     this.iframe.addEventListener('load', () => {
       if (!this.started) return;
-      this.loaded = true;
+      this.loaded = false;
       this.verifyLoadedDocument();
-      this.flush();
     });
     this.container.replaceChildren(this.fallbackCanvas, this.status);
   }
@@ -102,6 +111,7 @@ export class NullCitySpectatorBridge {
     if (session?.id !== this.currentSessionId) {
       this.currentSessionId = session?.id || '';
       this.sentPackets.clear();
+      this.clientRenderReady = false;
     }
     this.pendingSession = session;
     this.flush();
@@ -153,7 +163,7 @@ export class NullCitySpectatorBridge {
 
     const packetCount = session.packets?.length || 0;
     if (packetCount > 0) {
-      this.setStatus('RuneScape view live');
+      this.setStatus(this.clientRenderReady ? 'RuneScape view live' : 'RuneScape packets loaded; waiting for 3D render');
     } else {
       this.setStatus('following resident; waiting for RuneScape view');
     }
@@ -168,6 +178,7 @@ export class NullCitySpectatorBridge {
       this.post({ type: 'nullcity:spectator-clear' });
       this.started = false;
       this.loaded = false;
+      this.clientRenderReady = false;
       this.iframe.src = 'about:blank';
       this.container.replaceChildren(this.fallbackCanvas, this.status);
     }

@@ -1934,14 +1934,18 @@ export class Client extends GameShell {
             await this.mainLoad();
             GameShell.doneslowupdate();
         } else if (Client.state === ClientMainState.TITLE) {
-            if (this.spectatorMode && !this.spectatorReady) {
+            if (this.spectatorMode) {
                 this.enterSpectatorGame();
             } else {
                 TitleScreen.loop();
             }
         } else if (Client.state === ClientMainState.LOGIN) {
-            TitleScreen.loop();
-            await this.loginPoll();
+            if (this.spectatorMode) {
+                this.enterSpectatorGame();
+            } else {
+                TitleScreen.loop();
+                await this.loginPoll();
+            }
         } else if (Client.state === ClientMainState.MAP_BUILD) {
             this.mapBuildLoop();
         }
@@ -2769,7 +2773,7 @@ export class Client extends GameShell {
         this.locChangeDoQueue();
         await this.soundsDoQueue();
 
-        if (now - this.timeoutTimer > 15_000) {
+        if (!this.spectatorMode && now - this.timeoutTimer > 15_000) {
             // no packets received recently, connection lost
             await this.lostCon();
             return;

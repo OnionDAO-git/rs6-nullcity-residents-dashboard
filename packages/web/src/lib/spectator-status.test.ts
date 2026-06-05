@@ -7,8 +7,12 @@ describe('spectator status copy', () => {
     expect(liveSpectatorStatus({ packetCount: 0, hasMapBootstrap: false, subjectLabel: 'res:qa-cook' })).toBe('following res:qa-cook');
   });
 
-  test('summarizes render progress without opcode chatter once packets replay', () => {
-    expect(liveSpectatorStatus({ packetCount: 7, hasMapBootstrap: true, subjectLabel: 'res:qa-cook' })).toBe('RuneScape view live');
-    expect(liveSpectatorStatus({ packetCount: 1, hasMapBootstrap: false, subjectLabel: 'res:hans' })).toBe('RuneScape view live');
+  test('waits for map bootstrap and resident position before calling the client live', () => {
+    expect(liveSpectatorStatus({ packetCount: 7, hasMapBootstrap: false, subjectLabel: 'res:hans', positionApplied: false })).toBe('following res:hans; waiting for map bootstrap');
+    expect(liveSpectatorStatus({ packetCount: 7, hasMapBootstrap: true, subjectLabel: 'res:hans', positionApplied: false })).toBe('following res:hans; waiting for map position');
+  });
+
+  test('summarizes render progress without opcode chatter once packets replay and position applies', () => {
+    expect(liveSpectatorStatus({ packetCount: 7, hasMapBootstrap: true, subjectLabel: 'res:qa-cook', positionApplied: true })).toBe('RuneScape view live');
   });
 });

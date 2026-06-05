@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { SpectatorSession } from '@nullcity-dashboard/shared';
 import { NullCitySpectatorBridge } from './src/index';
 
-type FakeListener = () => void;
+type FakeListener = (event?: unknown) => void;
+const windowListeners = new Map<string, FakeListener[]>();
 
 class FakeElement {
   readonly tagName: string;
@@ -91,6 +92,7 @@ const originalResizeObserver = globalThis.ResizeObserver;
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 
 beforeEach(() => {
+  windowListeners.clear();
   globalThis.document = {
     createElement(tagName: string): FakeElement {
       if (tagName === 'canvas') return new FakeCanvas();
@@ -101,8 +103,12 @@ beforeEach(() => {
   globalThis.window = {
     devicePixelRatio: 1,
     location: { origin: 'http://127.0.0.1:5174' },
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type: string, listener: FakeListener) {
+      windowListeners.set(type, [...(windowListeners.get(type) || []), listener]);
+    },
+    removeEventListener(type: string, listener: FakeListener) {
+      windowListeners.set(type, (windowListeners.get(type) || []).filter(entry => entry !== listener));
+    },
   } as unknown as Window & typeof globalThis;
   globalThis.ResizeObserver = class {
     observe() {}
@@ -110,6 +116,12 @@ beforeEach(() => {
   } as unknown as typeof ResizeObserver;
   globalThis.requestAnimationFrame = (() => 0) as unknown as typeof requestAnimationFrame;
 });
+
+function dispatchWindowMessage(data: unknown): void {
+  for (const listener of windowListeners.get('message') || []) {
+    listener({ origin: 'http://127.0.0.1:5174', data });
+  }
+}
 
 afterEach(() => {
   globalThis.document = originalDocument;
@@ -153,7 +165,7 @@ describe('NullCitySpectatorBridge', () => {
     expect(container.children.at(1)?.className).toBe('spectator-status');
   });
 
-  test('posts the session position to the RuneScape spectator iframe after it loads', () => {
+  test('posts the session position after the RuneScape spectator iframe reports ready', () => {
     const container = new FakeElement('div');
     const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
     const session: SpectatorSession = {
@@ -169,6 +181,8 @@ describe('NullCitySpectatorBridge', () => {
 
     const iframe = container.children[0] as FakeIframe;
     iframe.dispatch('load');
+    expect(iframe.postedMessages).toEqual([]);
+    dispatchWindowMessage({ type: 'nullcity:spectator-ready' });
 
     expect(iframe.postedMessages).toContainEqual({
       type: 'nullcity:spectator-session',
@@ -197,6 +211,7 @@ describe('NullCitySpectatorBridge', () => {
 
     const iframe = container.children[0] as FakeIframe;
     iframe.dispatch('load');
+    dispatchWindowMessage({ type: 'nullcity:spectator-ready' });
     iframe.postedMessages = [];
 
     bridge.setSession({ ...session, packets: [packetB, packetC] });
@@ -206,7 +221,7 @@ describe('NullCitySpectatorBridge', () => {
     ]);
   });
 
-  test('uses calm visible status copy for packet-rich observe sessions', () => {
+  test('does not call the RuneScape iframe live before it confirms render readiness', () => {
     const container = new FakeElement('div');
     const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
     const session: SpectatorSession = {
@@ -219,6 +234,29 @@ describe('NullCitySpectatorBridge', () => {
     };
 
     bridge.setSession(session);
+
+    expect(container.children.at(1)?.textContent).toBe('RuneScape packets loaded; waiting for 3D render');
+  });
+
+  test('keeps the live status after the RuneScape iframe confirms render readiness', () => {
+    const container = new FakeElement('div');
+    const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
+    const session: SpectatorSession = {
+      id: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      mode: 'follow',
+      connected: true,
+      position: { x: 3222, y: 3218, level: 0 },
+      packets: [packet(166, '2026-06-05T02:00:00.000Z')],
+    };
+
+    bridge.setSession(session);
+    const iframe = container.children[0] as FakeIframe;
+    iframe.dispatch('load');
+    dispatchWindowMessage({ type: 'nullcity:spectator-ready' });
+    dispatchWindowMessage({ type: 'nullcity:spectator-status', text: 'RuneScape view live' });
+
+    bridge.setSession({ ...session, packets: [...session.packets!, packet(82, '2026-06-05T02:00:01.000Z')] });
 
     expect(container.children.at(1)?.textContent).toBe('RuneScape view live');
   });

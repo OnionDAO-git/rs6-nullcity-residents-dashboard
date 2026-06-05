@@ -15,6 +15,8 @@ let lastOpcode = '';
 let hasMapBootstrap = false;
 let subjectLabel = 'subject';
 let targetPosition: { x: number; y: number; level?: number } | undefined;
+let positionApplied = false;
+let positionFollowTimer: number | undefined;
 
 const clientConfig = await loadClientConfig();
 (globalThis as typeof globalThis & { __NULLCITY_RS_HOST__?: string }).__NULLCITY_RS_HOST__ = clientConfig.host;
@@ -22,6 +24,7 @@ const clientConfig = await loadClientConfig();
 
 const client = new Client(10, false, true);
 client.enableSpectatorMode();
+(globalThis as typeof globalThis & { __NULLCITY_SPECTATOR_CLIENT__?: Client }).__NULLCITY_SPECTATOR_CLIENT__ = client;
 setStatus(`waiting for spectator packets via ${clientConfig.secure ? 'wss' : 'ws'}://${clientConfig.host}`);
 
 window.addEventListener('message', event => {
@@ -36,6 +39,8 @@ window.addEventListener('message', event => {
     hasMapBootstrap = false;
     subjectLabel = 'subject';
     targetPosition = undefined;
+    positionApplied = false;
+    stopPositionFollow();
     setStatus('waiting for spectator packets');
     return;
   }
@@ -46,19 +51,19 @@ window.addEventListener('message', event => {
       packetCount = 0;
       lastOpcode = '';
       hasMapBootstrap = false;
+      positionApplied = false;
     }
-    targetPosition = message.position;
-    applyTargetPosition();
+    setTargetPosition(message.position);
     const label = message.subject.kind === 'resident' ? message.subject.name : message.subject.username;
     subjectLabel = label || 'subject';
-    setStatus(liveSpectatorStatus({ packetCount, hasMapBootstrap, subjectLabel }));
+    setStatus(currentLiveStatus());
     return;
   }
 
   if (message.type === 'nullcity:spectator-packet' && message.sessionId === sessionId) {
     if (!shouldReplaySpectatorPacket(message.packet.opcode)) {
-      applyTargetPosition();
-      setStatus(liveSpectatorStatus({ packetCount, hasMapBootstrap, subjectLabel }));
+      schedulePositionFollow();
+      setStatus(currentLiveStatus());
       return;
     }
     packetCount += 1;
@@ -66,14 +71,16 @@ window.addEventListener('message', event => {
     hasMapBootstrap = hasMapBootstrap || message.packet.opcode === 166 || message.packet.opcode === 23;
     try {
       client.pushSpectatorPacket(message.packet);
-      applyTargetPosition();
-      setStatus(liveSpectatorStatus({ packetCount, hasMapBootstrap, subjectLabel }));
+      schedulePositionFollow();
+      setStatus(currentLiveStatus());
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'packet decode failed';
       setStatus(`packet ${lastOpcode} failed: ${detail}`);
     }
   }
 });
+
+window.parent.postMessage({ type: 'nullcity:spectator-ready' }, window.location.origin);
 
 function setStatus(text: string): void {
   if (status.textContent === text) return;
@@ -82,9 +89,57 @@ function setStatus(text: string): void {
   window.parent.postMessage({ type: 'nullcity:spectator-status', text }, window.location.origin);
 }
 
+function setTargetPosition(position: { x: number; y: number; level?: number } | undefined): void {
+  if (!samePosition(targetPosition, position)) {
+    positionApplied = false;
+  }
+  targetPosition = position;
+  schedulePositionFollow();
+}
+
+function currentLiveStatus(): string {
+  return liveSpectatorStatus({
+    packetCount,
+    hasMapBootstrap,
+    subjectLabel,
+    positionApplied: targetPosition ? positionApplied : true,
+  });
+}
+
 function applyTargetPosition(): boolean {
   if (!targetPosition) return false;
-  return client.setSpectatorPosition(targetPosition.x, targetPosition.y, targetPosition.level ?? 0);
+  const applied = client.setSpectatorPosition(targetPosition.x, targetPosition.y, targetPosition.level ?? 0);
+  if (positionApplied !== applied) {
+    positionApplied = applied;
+    setStatus(currentLiveStatus());
+  }
+  return applied;
+}
+
+function schedulePositionFollow(): void {
+  if (!targetPosition || positionFollowTimer !== undefined) return;
+
+  const syncPosition = () => applyTargetPosition();
+
+  syncPosition();
+  positionFollowTimer = window.setInterval(() => {
+    if (!targetPosition) {
+      stopPositionFollow();
+      return;
+    }
+    syncPosition();
+  }, 500);
+}
+
+function stopPositionFollow(): void {
+  if (positionFollowTimer === undefined) return;
+  window.clearInterval(positionFollowTimer);
+  positionFollowTimer = undefined;
+}
+
+function samePosition(a: { x: number; y: number; level?: number } | undefined, b: { x: number; y: number; level?: number } | undefined): boolean {
+  if (!a || !b) return a === b;
+  return a.x === b.x && a.y === b.y && (a.level ?? 0) === (b.level ?? 0);
 }
 
 async function loadClientConfig(): Promise<{ host: string; secure: boolean }> {
