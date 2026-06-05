@@ -50,12 +50,12 @@ describe('buildWorldReadiness', () => {
     expect(summary.headline).toBe('Resident observe mode is ready.');
     expect(summary.detail).toBe('Following res:hans through the live RuneScape spectator client.');
     expect(summary.checks.map(check => [check.id, check.tone, check.value])).toEqual([
-      ['session', 'ok', 'observe mode'],
+      ['session', 'ok', 'guest view'],
       ['gateway', 'ok', 'online'],
       ['residents', 'ok', '1 online'],
       ['client', 'ok', 'ready'],
     ]);
-    expect(summary.nextActions[0]).toBe('Open observe mode to follow res:hans in the RuneScape client.');
+    expect(summary.nextActions).toEqual([]);
     expect(summary.canStartClient).toBe(true);
   });
 
@@ -73,11 +73,12 @@ describe('buildWorldReadiness', () => {
     expect(summary.headline).toBe('Resident observe mode is ready.');
     expect(summary.detail).toBe('Following res:hans through the live RuneScape spectator client.');
     expect(summary.checks.map(check => [check.id, check.tone, check.value])).toEqual([
-      ['session', 'ok', 'observe mode'],
+      ['session', 'ok', 'guest view'],
       ['gateway', 'ok', 'observing'],
       ['residents', 'ok', 'session online'],
       ['client', 'ok', 'ready'],
     ]);
+    expect(summary.nextActions).toEqual([]);
     expect(summary.canStartClient).toBe(true);
   });
 

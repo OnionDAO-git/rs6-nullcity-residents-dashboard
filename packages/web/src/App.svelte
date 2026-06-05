@@ -4849,7 +4849,7 @@
         <small>{cityWorldReadiness.detail}</small>
       </div>
       {#if cityWorldObserveResidentName}
-        <span class="city-world-badge">observe mode</span>
+        <span class="city-world-badge">spectating</span>
       {:else if citySession.authenticated}
         <span class="city-world-badge">session ready</span>
       {:else}
@@ -4890,7 +4890,7 @@
             {#if !cityWorldObserveSession}
               <button disabled={actionBusy || !gatewayStatus?.connected} class="tool-action" onclick={openWorldResidentSpectator}>Open Observe Mode</button>
             {:else}
-              <span class="tool-action passive">following {cityWorldObserveResidentName}</span>
+              <span class="tool-action passive">view active</span>
             {/if}
           </div>
         </div>

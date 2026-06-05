@@ -119,6 +119,20 @@ afterEach(() => {
 });
 
 describe('NullCitySpectatorBridge', () => {
+  const packet = (opcode: number, receivedAt: string) => ({
+    opcode,
+    receivedAt,
+    payload: {
+      opcode,
+      type: 'server',
+      updateTask: false,
+      payloadLength: 0,
+      payloadBase64: '',
+      frameLength: 0,
+      frameBase64: '',
+    },
+  } as const);
+
   test('starts the RuneScape spectator iframe when a session is present', () => {
     const container = new FakeElement('div');
     const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
@@ -162,5 +176,50 @@ describe('NullCitySpectatorBridge', () => {
       subject: { kind: 'resident', name: 'res:hans' },
       position: { x: 3222, y: 3218, level: 0 },
     });
+  });
+
+  test('does not repost packets when a rolling session window changes packet indexes', () => {
+    const container = new FakeElement('div');
+    const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
+    const packetA = packet(23, '2026-06-05T02:00:00.000Z');
+    const packetB = packet(166, '2026-06-05T02:00:01.000Z');
+    const packetC = packet(57, '2026-06-05T02:00:02.000Z');
+    const session: SpectatorSession = {
+      id: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      mode: 'follow',
+      connected: true,
+      position: { x: 3222, y: 3218, level: 0 },
+      packets: [packetA, packetB],
+    };
+
+    bridge.setSession(session);
+
+    const iframe = container.children[0] as FakeIframe;
+    iframe.dispatch('load');
+    iframe.postedMessages = [];
+
+    bridge.setSession({ ...session, packets: [packetB, packetC] });
+
+    expect(iframe.postedMessages.filter(message => (message as { type?: string }).type === 'nullcity:spectator-packet')).toEqual([
+      { type: 'nullcity:spectator-packet', sessionId: 'observe-res-hans', packet: packetC.payload },
+    ]);
+  });
+
+  test('uses calm visible status copy for packet-rich observe sessions', () => {
+    const container = new FakeElement('div');
+    const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
+    const session: SpectatorSession = {
+      id: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      mode: 'follow',
+      connected: true,
+      position: { x: 3222, y: 3218, level: 0 },
+      packets: [packet(23, '2026-06-05T02:00:00.000Z')],
+    };
+
+    bridge.setSession(session);
+
+    expect(container.children.at(1)?.textContent).toBe('RuneScape view live');
   });
 });

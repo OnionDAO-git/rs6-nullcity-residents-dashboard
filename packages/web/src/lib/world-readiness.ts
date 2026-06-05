@@ -64,7 +64,7 @@ function sessionCheck(authenticated: boolean, loginUrlReady: boolean, observeRes
       id: 'session',
       label: 'Session',
       tone: 'ok',
-      value: 'observe mode',
+      value: 'guest view',
       detail: `Resident observe mode follows ${observeResident} without an attendee game ticket.`,
     };
   }
@@ -230,7 +230,6 @@ function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput, obs
 function nextActionsFor(checks: WorldReadinessCheck[], loginUrlReady: boolean, observeResident: string): string[] {
   const actions: string[] = [];
   if (observeResident && !checks.some(check => check.tone === 'fail')) {
-    actions.push(`Open observe mode to follow ${observeResident} in the RuneScape client.`);
     return actions;
   }
   if (checks.find(check => check.id === 'session' && check.tone === 'fail')) {

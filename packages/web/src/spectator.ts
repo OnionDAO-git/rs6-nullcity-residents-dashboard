@@ -1,5 +1,6 @@
 import { Client, type SpectatorRsPacketFrame } from 'client2';
 import { shouldReplaySpectatorPacket } from './lib/spectator-packets';
+import { liveSpectatorStatus, waitingForStableRenderStatus } from './lib/spectator-status';
 
 type SpectatorMessage =
   | { type: 'nullcity:spectator-session'; sessionId: string; subject: { kind: string; name?: string; username?: string }; position?: { x: number; y: number; level?: number } }
@@ -12,6 +13,7 @@ let sessionId = '';
 let packetCount = 0;
 let lastOpcode = '';
 let hasMapBootstrap = false;
+let subjectLabel = 'subject';
 let targetPosition: { x: number; y: number; level?: number } | undefined;
 
 const clientConfig = await loadClientConfig();
@@ -32,6 +34,7 @@ window.addEventListener('message', event => {
     packetCount = 0;
     lastOpcode = '';
     hasMapBootstrap = false;
+    subjectLabel = 'subject';
     targetPosition = undefined;
     setStatus('waiting for spectator packets');
     return;
@@ -47,14 +50,15 @@ window.addEventListener('message', event => {
     targetPosition = message.position;
     applyTargetPosition();
     const label = message.subject.kind === 'resident' ? message.subject.name : message.subject.username;
-    setStatus(`watching ${label || 'subject'} in RuneScape; waiting for stable render packets`);
+    subjectLabel = label || 'subject';
+    setStatus(liveSpectatorStatus({ packetCount, hasMapBootstrap, subjectLabel }));
     return;
   }
 
   if (message.type === 'nullcity:spectator-packet' && message.sessionId === sessionId) {
     if (!shouldReplaySpectatorPacket(message.packet.opcode)) {
       applyTargetPosition();
-      setStatus(`RuneScape client is live; skipped volatile entity packet ${message.packet.opcode} while waiting for a stable render packet`);
+      setStatus(liveSpectatorStatus({ packetCount, hasMapBootstrap, subjectLabel }));
       return;
     }
     packetCount += 1;
@@ -63,8 +67,7 @@ window.addEventListener('message', event => {
     try {
       client.pushSpectatorPacket(message.packet);
       applyTargetPosition();
-      const mapState = hasMapBootstrap ? '' : '; missing map bootstrap';
-      setStatus(`packets ${packetCount}; last opcode ${lastOpcode}${mapState}`);
+      setStatus(liveSpectatorStatus({ packetCount, hasMapBootstrap, subjectLabel }));
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'packet decode failed';
       setStatus(`packet ${lastOpcode} failed: ${detail}`);
@@ -73,6 +76,7 @@ window.addEventListener('message', event => {
 });
 
 function setStatus(text: string): void {
+  if (status.textContent === text) return;
   status.textContent = text;
   status.hidden = text.length === 0;
   window.parent.postMessage({ type: 'nullcity:spectator-status', text }, window.location.origin);

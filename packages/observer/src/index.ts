@@ -1,4 +1,4 @@
-import type { Position, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
+import type { Position, SpectatorPacket, SpectatorSession, SpectatorSubject } from '@nullcity-dashboard/shared';
 
 export interface SpectatorAnchor {
   subject: SpectatorSubject;
@@ -142,7 +142,7 @@ export class NullCitySpectatorBridge {
         ...(session.position ? { position: session.position } : {}),
       });
       for (const [index, packet] of (session.packets || []).entries()) {
-        const key = `${session.id}:${index}:${packet.receivedAt}:${packet.opcode}`;
+        const key = spectatorPacketKey(session.id, packet);
         if (this.sentPackets.has(key)) {
           continue;
         }
@@ -153,9 +153,9 @@ export class NullCitySpectatorBridge {
 
     const packetCount = session.packets?.length || 0;
     if (packetCount > 0) {
-      this.setStatus(`live spectator; ${packetCount} render packet${packetCount === 1 ? '' : 's'} captured`);
+      this.setStatus('RuneScape view live');
     } else {
-      this.setStatus('live spectator from perception; waiting for render packets');
+      this.setStatus('following resident; waiting for RuneScape view');
     }
   }
 
@@ -193,9 +193,18 @@ export class NullCitySpectatorBridge {
   }
 
   private setStatus(text: string): void {
+    if (this.status.textContent === text) return;
     this.status.textContent = text;
     this.status.hidden = text.length === 0;
   }
+}
+
+function spectatorPacketKey(sessionId: string, packet: SpectatorPacket): string {
+  const payload = record(packet.payload);
+  const frameBase64 = typeof payload.frameBase64 === 'string' ? payload.frameBase64 : '';
+  const payloadBase64 = typeof payload.payloadBase64 === 'string' ? payload.payloadBase64 : '';
+  const payloadLength = typeof payload.payloadLength === 'number' ? String(payload.payloadLength) : '';
+  return `${sessionId}:${packet.receivedAt}:${packet.opcode}:${frameBase64 || payloadBase64 || payloadLength}`;
 }
 
 type DrawTheme = {
