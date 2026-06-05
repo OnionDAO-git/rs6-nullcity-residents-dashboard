@@ -327,6 +327,53 @@ describe('routeCityApi points and souls', () => {
     expect(payload.onionWallet).toMatchObject({ currentBalance: 1175 });
   });
 
+  test('merges Null City tier letters into the authenticated inbox', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchCalls: string[] = [];
+    const letter = {
+      kind: 'standing_tier_crossed',
+      recipient: 'alice',
+      senderResident: 'res:fern',
+      subject: 'You are now Acquaintance of embassy',
+      body: 'Alice, your support of res:fern reached the embassy.',
+      dispatchedAt: '2026-06-04T15:00:00.000Z',
+      deliveryChannels: ['web-inbox'],
+    };
+    globalThis.fetch = (async input => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      fetchCalls.push(url);
+      const human = new URL(url).searchParams.get('human');
+      return new Response(JSON.stringify({ letters: human === 'alice' ? [letter] : [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    try {
+      const services = testServices(adminUser, undefined, { nullcityLettersBaseUrl: 'http://letters.test' });
+      const inbox = await route(authedRequest('/api/inbox'), services);
+      const payload = await inbox.json() as { threads: Array<{ id: string; status: string; residentId: string; latestMessage?: { body: string } }> };
+
+      expect(inbox.status).toBe(200);
+      expect(fetchCalls).toContain('http://letters.test/v1/inbox?human=alice');
+      expect(payload.threads).toHaveLength(1);
+      expect(payload.threads[0]).toMatchObject({
+        status: 'letter',
+        residentId: 'res:fern',
+        latestMessage: { body: 'You are now Acquaintance of embassy' },
+      });
+
+      const detail = await route(authedRequest(`/api/inbox/${encodeURIComponent(payload.threads[0].id)}`), services);
+      expect(detail.status).toBe(200);
+      expect(await detail.json()).toMatchObject({
+        thread: { id: payload.threads[0].id, status: 'letter', residentId: 'res:fern' },
+        messages: [{ senderType: 'resident', body: 'Alice, your support of res:fern reached the embassy.' }],
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test('creates resident trade saga entries with idempotent point debits while Null City is mocked', async () => {
     const services = testServices(adminUser);
     await route(jsonRequest('/api/admin/points/grant', { resource: 'GP', amount: 100, sourceId: 'seed-gp' }), services);
@@ -1118,6 +1165,7 @@ function testServices(
     landingCheckins?: LandingCheckinReader;
     nullcityControl?: CityServices['nullcityControl'];
     oniondao?: CityServices['oniondao'];
+    nullcityLettersBaseUrl?: string;
     printBridgeToken?: string;
   } = {},
 ): CityServices {
@@ -1127,6 +1175,7 @@ function testServices(
     CITY_DATABASE_URL: 'postgres://city@example.test/city',
     NODE_ENV: options.csrfEnabled ? 'production' : 'test',
     CITY_PRINT_BRIDGE_TOKEN: options.printBridgeToken,
+    NULLCITY_LETTERS_BASE_URL: options.nullcityLettersBaseUrl,
   });
   return {
     config,

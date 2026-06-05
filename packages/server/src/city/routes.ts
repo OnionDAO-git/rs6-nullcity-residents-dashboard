@@ -16,7 +16,7 @@ import { quoteSoulProposal } from './quote';
 import { runAttentionGrant, initiateOnionAttentionGrant, settleOnionAttentionGrant } from './attention-grant';
 import { verifyOnionCallbackSignature, type OnionApiClient } from './landing-onions';
 import { CityStoreError, type CityStore } from './store';
-import type { CityUser, LandingSessionUser, PointResource } from './types';
+import type { CityUser, InboxMessage, InboxThread, LandingSessionUser, PointResource } from './types';
 import { jsonResponse, notFound } from '../util';
 
 export interface CityApiContext {
@@ -661,14 +661,23 @@ export async function routeCityApi(
     if (method === 'GET' && (pathname === '/api/inbox' || pathname === '/api/city/inbox')) {
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
-      return jsonResponse({ threads: await context.store.listInboxThreads(auth.cityUser.id) });
+      const [threads, letterThreads] = await Promise.all([
+        context.store.listInboxThreads(auth.cityUser.id),
+        listNullCityLetterThreads(context, auth),
+      ]);
+      return jsonResponse({ threads: mergeInboxThreads(threads, letterThreads) });
     }
 
     const inboxDetail = pathname.match(/^\/api\/(?:city\/)?inbox\/([^/]+)$/);
     if (inboxDetail && method === 'GET') {
       const auth = await requireCityUser(request, url, context);
       if (auth instanceof Response) return auth;
-      const thread = await context.store.getInboxThread(auth.cityUser.id, decodeURIComponent(inboxDetail[1] || ''));
+      const threadId = decodeURIComponent(inboxDetail[1] || '');
+      if (isNullCityLetterThreadId(threadId)) {
+        const letterThread = await getNullCityLetterThread(context, auth, threadId);
+        if (letterThread) return jsonResponse(letterThread);
+      }
+      const thread = await context.store.getInboxThread(auth.cityUser.id, threadId);
       return thread ? jsonResponse(thread) : notFound();
     }
 
@@ -847,6 +856,154 @@ function onionCallbackUrl(config: CityConfig): string {
   const url = new URL('/api/onions/callback', config.publicBaseUrl || 'http://localhost:8787');
   if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')) url.hostname = 'localhost';
   return url.toString();
+}
+
+interface NullCityLetter {
+  kind: string;
+  recipient: string;
+  senderResident: string;
+  subject: string;
+  body: string;
+  dispatchedAt: string;
+}
+
+const NULLCITY_LETTER_THREAD_PREFIX = 'nullcity-letter:';
+
+async function listNullCityLetterThreads(
+  context: CityApiContext,
+  auth: AuthenticatedCityRequest,
+): Promise<InboxThread[]> {
+  const letters = await fetchNullCityLetters(context, auth);
+  return letters.map(letter => nullCityLetterThread(auth.cityUser.id, letter));
+}
+
+async function getNullCityLetterThread(
+  context: CityApiContext,
+  auth: AuthenticatedCityRequest,
+  threadId: string,
+): Promise<{ thread: InboxThread; messages: InboxMessage[] } | undefined> {
+  const letters = await fetchNullCityLetters(context, auth);
+  const letter = letters.find(item => nullCityLetterThreadId(item) === threadId);
+  if (!letter) return undefined;
+  const thread = nullCityLetterThread(auth.cityUser.id, letter);
+  return { thread, messages: [nullCityLetterMessage(thread.id, letter, true)] };
+}
+
+async function fetchNullCityLetters(
+  context: CityApiContext,
+  auth: AuthenticatedCityRequest,
+): Promise<NullCityLetter[]> {
+  const baseUrl = context.config.nullcityLettersBaseUrl;
+  if (!baseUrl) return [];
+  const humans = uniqueStrings([
+    auth.landingUser.handle,
+    auth.landingUser.email,
+    auth.landingUser.id,
+    auth.cityUser.landingUserId,
+    auth.cityUser.id,
+  ]);
+  const batches = await Promise.all(humans.map(human => fetchNullCityLettersForHuman(baseUrl, human)));
+  const byId = new Map<string, NullCityLetter>();
+  for (const letter of batches.flat()) {
+    byId.set(nullCityLetterThreadId(letter), letter);
+  }
+  return [...byId.values()].sort((a, b) => b.dispatchedAt.localeCompare(a.dispatchedAt));
+}
+
+async function fetchNullCityLettersForHuman(baseUrl: string, human: string): Promise<NullCityLetter[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch(`${baseUrl}/v1/inbox?human=${encodeURIComponent(human)}`, { signal: controller.signal });
+    if (!response.ok) return [];
+    const payload = await response.json();
+    const record = recordValue(payload);
+    const letters = Array.isArray(record?.letters) ? record.letters : [];
+    return letters.flatMap(letter => {
+      const normalized = normalizeNullCityLetter(letter);
+      return normalized ? [normalized] : [];
+    });
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeNullCityLetter(value: unknown): NullCityLetter | undefined {
+  const record = recordValue(value);
+  const kind = stringValue(record?.kind);
+  const recipient = stringValue(record?.recipient);
+  const senderResident = stringValue(record?.senderResident);
+  const subject = stringValue(record?.subject);
+  const body = stringValue(record?.body);
+  const dispatchedAt = stringValue(record?.dispatchedAt);
+  if (!kind || !recipient || !senderResident || !subject || !body || !dispatchedAt) return undefined;
+  return { kind, recipient, senderResident, subject, body, dispatchedAt };
+}
+
+function nullCityLetterThread(cityUserId: string, letter: NullCityLetter): InboxThread {
+  const id = nullCityLetterThreadId(letter);
+  return {
+    id,
+    cityUserId,
+    residentId: letter.senderResident,
+    status: 'letter',
+    createdAt: letter.dispatchedAt,
+    updatedAt: letter.dispatchedAt,
+    latestMessage: nullCityLetterMessage(id, letter, false),
+  };
+}
+
+function nullCityLetterMessage(threadId: string, letter: NullCityLetter, includeBody: boolean): InboxMessage {
+  return {
+    id: `${threadId}:message`,
+    threadId,
+    senderType: 'resident',
+    senderResidentId: letter.senderResident,
+    body: includeBody ? letter.body : letter.subject,
+    messageType: letter.kind,
+    metadata: {
+      source: 'nullcity_letters',
+      recipient: letter.recipient,
+      subject: letter.subject,
+      dispatchedAt: letter.dispatchedAt,
+    },
+    createdAt: letter.dispatchedAt,
+  };
+}
+
+function nullCityLetterThreadId(letter: NullCityLetter): string {
+  return [
+    NULLCITY_LETTER_THREAD_PREFIX,
+    encodeURIComponent(letter.kind),
+    encodeURIComponent(letter.recipient),
+    encodeURIComponent(letter.senderResident),
+    encodeURIComponent(letter.dispatchedAt),
+    encodeURIComponent(letter.subject),
+  ].join(':');
+}
+
+function isNullCityLetterThreadId(threadId: string): boolean {
+  return threadId.startsWith(NULLCITY_LETTER_THREAD_PREFIX);
+}
+
+function mergeInboxThreads(primary: InboxThread[], synthetic: InboxThread[]): InboxThread[] {
+  const byId = new Map<string, InboxThread>();
+  for (const thread of [...primary, ...synthetic]) byId.set(thread.id, thread);
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function uniqueStrings(values: Array<string | undefined | null>): string[] {
+  return [...new Set(values.map(value => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 async function readJsonBody(request: Request): Promise<Record<string, unknown>> {

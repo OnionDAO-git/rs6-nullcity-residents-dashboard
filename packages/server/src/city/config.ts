@@ -13,6 +13,7 @@ export interface CityConfig {
   printBridgeToken?: string;
   nullcityControlBaseUrl?: string;
   nullcityControlToken?: string;
+  nullcityLettersBaseUrl?: string;
   // Dev's onion consent-spend API (landing). When onionSpendMode === 'real', the
   // support flow creates a burn request the attendee approves; on the callback we
   // credit City. Default 'standin' keeps the labelled non-production stand-in.
@@ -43,6 +44,11 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
     printBridgeToken: clean(env.CITY_PRINT_BRIDGE_TOKEN) || clean(env.PRINT_BRIDGE_CITY_TOKEN),
     nullcityControlBaseUrl: normalizeNullCityControlBaseUrl(clean(env.NULLCITY_CITY_API_URL) || clean(env.CITY_DASHBOARD_NULLCITY_URL)),
     nullcityControlToken: clean(env.NULLCITY_CITY_API_TOKEN) || clean(env.CITY_DASHBOARD_NULLCITY_TOKEN),
+    nullcityLettersBaseUrl: normalizeBaseUrl(
+      clean(env.NULLCITY_LETTERS_BASE_URL) ||
+      clean(env.CITY_DASHBOARD_LETTERS_URL) ||
+      clean(env.CITY_PUBLIC_BASE_URL),
+    ),
     onionApiKey: clean(env.ONION_EXTERNAL_API_KEY),
     onionCallbackSecret: clean(env.ONION_CALLBACK_SECRET),
     onionSpendMode: env.ONION_SPEND_MODE === 'real' ? 'real' : 'standin',
@@ -58,6 +64,10 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
 function clean(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeBaseUrl(value: string | undefined): string | undefined {
+  return value ? value.replace(/\/+$/, '') : undefined;
 }
 
 function normalizeNullCityControlBaseUrl(value: string | undefined): string | undefined {
