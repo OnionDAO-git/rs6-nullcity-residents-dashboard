@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { recommendedDashboardAction, visibleDashboardNavItems } from './end-user-dashboard';
+import { recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav small and action-focused', () => {
@@ -73,5 +73,56 @@ describe('recommendedDashboardAction', () => {
       path: '/live',
       tone: 'teal',
     });
+  });
+});
+
+describe('residentAttentionGuide', () => {
+  test('makes the Onion-to-attention path explicit for signed-in humans', () => {
+    expect(residentAttentionGuide({
+      authenticated: true,
+      residentName: 'Hans',
+      suggestedOnions: 75,
+      currentAttention: 4,
+    })).toEqual({
+      title: 'Give attention to Hans',
+      detail: 'Spend Onions to create an approval request. After approval, Hans receives attention.',
+      amountLabel: '75 Onions suggested',
+      primaryAction: 'Give Attention',
+      tone: 'warn',
+    });
+  });
+
+  test('asks guests to sign in before spending Onions', () => {
+    expect(residentAttentionGuide({
+      authenticated: false,
+      residentName: 'Hans',
+      suggestedOnions: 0,
+    })).toMatchObject({
+      title: 'Give attention to Hans',
+      primaryAction: 'Sign in to Give Attention',
+      amountLabel: 'Choose an Onion amount after sign in',
+      tone: 'gold',
+    });
+  });
+});
+
+describe('residentAttentionResultNotice', () => {
+  test('confirms settled Onion attention in resident terms', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 75,
+      status: 'settled',
+      onionRequestStatus: 'completed',
+      creditedAmount: 75,
+    })).toBe('Onions spent. Hans received 75 attention.');
+  });
+
+  test('keeps pending Onion settlement explicit', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 75,
+      status: 'pending_onion_settlement',
+      onionRequestStatus: 'pending',
+    })).toBe('Approval pending in Onion portal. Hans has not received attention yet.');
   });
 });

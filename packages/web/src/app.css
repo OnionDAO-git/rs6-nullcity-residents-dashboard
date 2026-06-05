@@ -3519,6 +3519,169 @@ pre {
   border-color: rgba(228, 184, 64, 0.5);
 }
 
+.city-simple-residents-grid,
+.city-simple-resident-grid {
+  align-items: stretch;
+}
+
+.resident-simple-directory,
+.resident-simple-help,
+.resident-simple-facts-panel,
+.resident-simple-posts,
+.resident-attention-hero {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.resident-simple-directory > .row,
+.resident-attention-hero > .row {
+  align-items: start;
+}
+
+.resident-simple-directory > .row strong,
+.resident-attention-hero > .row strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: clamp(24px, 2vw, 34px);
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.resident-simple-directory > .row small,
+.resident-attention-hero > .row small,
+.resident-simple-help > small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.resident-attention-hero {
+  border-left: 3px solid var(--s-teal);
+}
+
+.resident-attention-hero.tone-warn {
+  border-left-color: var(--s-amber);
+}
+
+.resident-attention-hero.tone-gold {
+  border-left-color: var(--s-gold);
+}
+
+.resident-attention-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.resident-attention-steps.compact {
+  grid-template-columns: 1fr;
+}
+
+.resident-attention-steps span {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 12px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+}
+
+.resident-attention-steps small {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--ground-0);
+  background: var(--s-gold);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.resident-attention-steps strong {
+  overflow-wrap: anywhere;
+  color: var(--text-0);
+}
+
+.resident-attention-steps em {
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.resident-attention-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.resident-attention-metrics span,
+.simple-facts span {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 12px;
+  background: var(--ground-2);
+  border: 1px solid var(--ground-4);
+}
+
+.resident-attention-metrics small,
+.simple-facts small {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.resident-attention-metrics strong,
+.simple-facts strong {
+  overflow-wrap: anywhere;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.12;
+}
+
+.resident-attention-form {
+  align-items: end;
+}
+
+.city-resident-list button.simple {
+  grid-template-columns: 18px minmax(120px, 1fr) minmax(120px, auto);
+  min-height: 64px;
+  align-items: center;
+}
+
+.city-resident-list button.simple .dot {
+  grid-row: 1 / span 2;
+}
+
+.city-resident-list button.simple small {
+  grid-column: 2;
+  grid-row: 2;
+  white-space: normal;
+}
+
+.city-resident-list button.simple em {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  justify-self: end;
+  padding: 5px 8px;
+  color: var(--s-gold);
+  border: 1px solid rgba(228, 184, 64, 0.38);
+}
+
 .resident-triage-strip {
   display: grid;
   gap: 14px;
@@ -4327,6 +4490,11 @@ pre {
     min-height: 0;
   }
 
+  .resident-attention-steps,
+  .resident-attention-metrics {
+    grid-template-columns: 1fr;
+  }
+
   .city-resident-list .dot,
   .city-resident-list strong,
   .city-resident-list small,
@@ -4344,6 +4512,29 @@ pre {
 
   .city-resident-list em {
     white-space: normal;
+  }
+
+  .city-resident-list button.simple {
+    grid-template-columns: 14px minmax(0, 1fr);
+  }
+
+  .city-resident-list button.simple .dot,
+  .city-resident-list button.simple strong,
+  .city-resident-list button.simple small,
+  .city-resident-list button.simple em {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+
+  .city-resident-list button.simple .dot {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+  }
+
+  .city-resident-list button.simple em {
+    text-align: center;
   }
 
   .resident-liveness-row {

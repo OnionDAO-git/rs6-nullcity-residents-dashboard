@@ -1,4 +1,5 @@
 import { Client, type SpectatorRsPacketFrame } from 'client2';
+import { shouldReplaySpectatorPacket } from './lib/spectator-packets';
 
 type SpectatorMessage =
   | { type: 'nullcity:spectator-session'; sessionId: string; subject: { kind: string; name?: string; username?: string } }
@@ -47,6 +48,10 @@ window.addEventListener('message', event => {
   }
 
   if (message.type === 'nullcity:spectator-packet' && message.sessionId === sessionId) {
+    if (!shouldReplaySpectatorPacket(message.packet.opcode)) {
+      setStatus(`skipping volatile entity packet ${message.packet.opcode}; waiting for stable render packets`);
+      return;
+    }
     packetCount += 1;
     lastOpcode = String(message.packet.opcode);
     hasMapBootstrap = hasMapBootstrap || message.packet.opcode === 166 || message.packet.opcode === 23;

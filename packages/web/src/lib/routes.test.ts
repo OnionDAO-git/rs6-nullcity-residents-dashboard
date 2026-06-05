@@ -14,6 +14,8 @@ import {
   residentRuntimeApiPath,
   isChronicleRoute,
   isProtectedCityRoute,
+  worldObserveResidentFromSearch,
+  worldRouteAllowsGuestObserve,
   toDebugInternalRoute,
 } from './routes';
 
@@ -69,6 +71,16 @@ describe('dashboard route helpers', () => {
     expect(isProtectedCityRoute('/prints/new')).toBe(true);
     expect(isProtectedCityRoute('/')).toBe(false);
     expect(isProtectedCityRoute('/residents')).toBe(false);
+  });
+
+  test('allows public resident observe mode only when the world route names a resident', () => {
+    expect(worldObserveResidentFromSearch('?resident=res%3Ahans')).toBe('res:hans');
+    expect(worldObserveResidentFromSearch('?observe=res%3Apip')).toBe('res:pip');
+    expect(worldObserveResidentFromSearch('?resident=')).toBe('');
+    expect(worldRouteAllowsGuestObserve('/world', '?resident=res%3Ahans')).toBe(true);
+    expect(worldRouteAllowsGuestObserve('/world', '?observe=res%3Ahans')).toBe(true);
+    expect(worldRouteAllowsGuestObserve('/world', '')).toBe(false);
+    expect(worldRouteAllowsGuestObserve('/profile', '?resident=res%3Ahans')).toBe(false);
   });
 
   test('protects Chronicle routes while keeping them independent from the heavy city snapshot', () => {

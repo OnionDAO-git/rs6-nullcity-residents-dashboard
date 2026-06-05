@@ -28,11 +28,13 @@ export interface WorldReadinessInput {
   onlineResidents: ResidentDashboardRow[];
   gameClientStatus: GameClientStatus;
   ticketUser?: string;
+  observeResident?: string;
 }
 
 export function buildWorldReadiness(input: WorldReadinessInput): WorldReadinessSummary {
+  const observeResident = normalizeObserveResident(input.observeResident);
   const checks = [
-    sessionCheck(input.authenticated, input.loginUrlReady ?? true),
+    sessionCheck(input.authenticated, input.loginUrlReady ?? true, observeResident),
     gatewayCheck(input.gateway),
     residentsCheck(input.onlineResidents.length),
     clientCheck(input.gameClientStatus, input.ticketUser),
@@ -40,21 +42,30 @@ export function buildWorldReadiness(input: WorldReadinessInput): WorldReadinessS
   const blockers = checks.filter(check => check.tone === 'fail');
   const status: WorldReadinessStatus = blockers.length ? 'blocked' : checks.some(check => check.tone === 'warn') ? 'watch' : 'ready';
   const canStartClient =
-    input.authenticated &&
+    (input.authenticated || Boolean(observeResident)) &&
     Boolean(input.gateway?.connected) &&
     input.gameClientStatus === 'idle';
 
   return {
     status,
-    headline: headlineFor(status, input),
-    detail: detailFor(status, input),
+    headline: headlineFor(status, input, observeResident),
+    detail: detailFor(status, input, observeResident),
     checks,
-    nextActions: nextActionsFor(checks, input.loginUrlReady ?? true),
+    nextActions: nextActionsFor(checks, input.loginUrlReady ?? true, observeResident),
     canStartClient,
   };
 }
 
-function sessionCheck(authenticated: boolean, loginUrlReady: boolean): WorldReadinessCheck {
+function sessionCheck(authenticated: boolean, loginUrlReady: boolean, observeResident: string): WorldReadinessCheck {
+  if (observeResident) {
+    return {
+      id: 'session',
+      label: 'Session',
+      tone: 'ok',
+      value: 'observe mode',
+      detail: `Resident observe mode follows ${observeResident} without an attendee game ticket.`,
+    };
+  }
   if (!authenticated) {
     if (!loginUrlReady) {
       return {
@@ -166,7 +177,9 @@ function clientCheck(status: GameClientStatus, ticketUser: string | undefined): 
   };
 }
 
-function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput): string {
+function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput, observeResident: string): string {
+  if (observeResident && input.gateway?.connected && status === 'ready') return 'Resident observe mode is ready.';
+  if (observeResident && !input.gateway?.connected) return 'RuneScape gateway unavailable.';
   if (!input.authenticated && input.loginUrlReady === false) return 'World route blocked until attendee login is connected.';
   if (!input.authenticated) return 'Login required to enter the RuneScape client.';
   if (!input.gateway?.connected) return 'RuneScape gateway unavailable.';
@@ -177,7 +190,9 @@ function headlineFor(status: WorldReadinessStatus, input: WorldReadinessInput): 
   return 'World route needs a quick operator check.';
 }
 
-function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput): string {
+function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput, observeResident: string): string {
+  if (observeResident && input.gateway?.connected) return `Following ${observeResident} through the live RuneScape spectator client.`;
+  if (observeResident) return 'Start the Null City game/controller stack before observing a resident in the client.';
   if (!input.authenticated && input.loginUrlReady === false) {
     return 'Ask staff to connect attendee login before using the world route.';
   }
@@ -191,8 +206,12 @@ function detailFor(status: WorldReadinessStatus, input: WorldReadinessInput): st
   return 'The dashboard is connected, but one readiness signal is still warming up.';
 }
 
-function nextActionsFor(checks: WorldReadinessCheck[], loginUrlReady: boolean): string[] {
+function nextActionsFor(checks: WorldReadinessCheck[], loginUrlReady: boolean, observeResident: string): string[] {
   const actions: string[] = [];
+  if (observeResident && !checks.some(check => check.tone === 'fail')) {
+    actions.push(`Open observe mode to follow ${observeResident} in the RuneScape client.`);
+    return actions;
+  }
   if (checks.find(check => check.id === 'session' && check.tone === 'fail')) {
     if (!loginUrlReady) {
       actions.push('Connect attendee login first; world access stays blocked until auth wiring is configured.');
@@ -213,4 +232,8 @@ function nextActionsFor(checks: WorldReadinessCheck[], loginUrlReady: boolean): 
     actions.push('Use Start Client, then switch to a resident detail view if you need their plan/action context.');
   }
   return actions;
+}
+
+function normalizeObserveResident(value: string | undefined): string {
+  return (value || '').trim();
 }

@@ -106,6 +106,52 @@ describe('GatewayClient resident feeds', () => {
     expect(attachCount).toBe(2);
     expect((second.latestPerception as { tick?: number } | undefined)?.tick).toBe(2);
   });
+
+  test('retains a spectator map bootstrap packet for late iframe replays', async () => {
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    servers.push(server);
+    await onceListening(server);
+
+    server.on('connection', socket => {
+      socket.on('message', raw => {
+        const message = JSON.parse(raw.toString()) as { id?: string; kind?: string; payload?: Record<string, unknown> };
+        if (message.kind === 'controller_hello') {
+          socket.send(JSON.stringify({ v: 1, id: message.id, kind: 'ok', payload: { ok: true } }));
+          return;
+        }
+        if (message.kind === 'observe_subject') {
+          const sessionId = 'spectator:test:hans';
+          socket.send(JSON.stringify({
+            v: 1,
+            id: message.id,
+            kind: 'spectator_connected',
+            payload: {
+              sessionId,
+              subject: message.payload?.subject,
+              initialState: { position: { x: 3221, y: 3217, level: 0 }, regionId: 12850 },
+            },
+          }));
+          for (let index = 0; index < 760; index += 1) {
+            const opcode = index === 0 ? 166 : 128;
+            socket.send(JSON.stringify({
+              v: 1,
+              kind: 'spectator_packet',
+              payload: { sessionId, opcode, payload: packetFrame(opcode, index) },
+            }));
+          }
+        }
+      });
+    });
+
+    const port = (server.address() as AddressInfo).port;
+    const client = new GatewayClient(`ws://127.0.0.1:${port}`);
+    await client.observe({ kind: 'resident', name: 'res:hans' }, 'follow');
+    await waitFor(() => (client.getSession('spectator:test:hans')?.packets?.length || 0) >= 750);
+
+    const packets = client.getSession('spectator:test:hans')?.packets || [];
+    expect(packets.some(packet => packet.opcode === 166)).toBe(true);
+    expect(packets.at(-1)?.opcode).toBe(128);
+  });
 });
 
 function perceptionForTick(tick: number): Record<string, unknown> {
@@ -119,6 +165,18 @@ function perceptionForTick(tick: number): Record<string, unknown> {
     nearby: { players: [], npcs: [], objects: [], worldItems: [] },
     events: [],
     availableActions: [],
+  };
+}
+
+function packetFrame(opcode: number, index: number) {
+  return {
+    opcode,
+    type: 'FIXED',
+    updateTask: false,
+    payloadLength: 1,
+    payloadBase64: Buffer.from([index % 256]).toString('base64'),
+    frameLength: 1,
+    frameBase64: Buffer.from([index % 256]).toString('base64'),
   };
 }
 

@@ -132,6 +132,7 @@ export class NullCitySpectatorBridge {
     }
 
     this.fallbackRenderer.setFrame(frameFromSession(session, this.filters));
+    this.startClient();
 
     if (this.started && this.loaded) {
       this.post({ type: 'nullcity:spectator-session', sessionId: session.id, subject: session.subject });
@@ -166,6 +167,15 @@ export class NullCitySpectatorBridge {
       this.container.replaceChildren(this.fallbackCanvas, this.status);
     }
     this.setStatus('waiting for spectator session');
+  }
+
+  private startClient(): void {
+    if (this.started) return;
+    this.started = true;
+    this.loaded = false;
+    this.iframe.src = this.src;
+    this.container.replaceChildren(this.iframe, this.status);
+    this.setStatus('starting RuneScape spectator client');
   }
 
   private verifyLoadedDocument(): void {

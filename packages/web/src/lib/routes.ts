@@ -96,6 +96,19 @@ export function isProtectedCityRoute(route: string): boolean {
     normalized.startsWith('/admin');
 }
 
+export function worldObserveResidentFromSearch(search: string): string {
+  try {
+    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+    return (params.get('resident') || params.get('observe') || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+export function worldRouteAllowsGuestObserve(route: string, search: string): boolean {
+  return normalizePath(route) === '/world' && Boolean(worldObserveResidentFromSearch(search));
+}
+
 export function isChronicleRoute(route: string): boolean {
   const normalized = normalizePath(route);
   return normalized === '/chronicle' || normalized.startsWith('/chronicle/');

@@ -59,7 +59,7 @@
   } from './lib/resident-loop';
   import { residentStoryDigestSignal, residentStoryEvents, storytellerDigestRunList, storytellerDigestSafetyLine, storytellerDigestStatus, storytellerGroundingAudit, storytellerLatestPreview, storytellerLibraryPreview, storytellerMythCard, storytellerMythMoments, storytellerReviewDensity, storytellerRunListPressureLine, type ResidentStoryEvent, type StorytellerDigestRunList } from './lib/resident-story';
   import { residentIsOnline as isResidentOnline } from './lib/resident-status';
-  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isChronicleRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute } from './lib/routes';
+  import { DEBUG_PREFIX, cityPath, cityRouteNeedsSnapshot, cityRouteNeedsStoryDigests, debugPath, isDebugPath, isKnownCityRoute, isProtectedCityRoute, isChronicleRoute, observeResidentDebugRoute, publicEventPath, residentDebugRoute, residentRuntimeApiPath, toDebugInternalRoute, worldObserveResidentFromSearch, worldRouteAllowsGuestObserve } from './lib/routes';
   import { buildStoryOverviewModel, type StoryOverviewListItem, type StoryOverviewModel } from './lib/story-overview';
   import { printQueueInsights } from './lib/print-queue-insights';
   import { printResidentProofSignal } from './lib/print-resident-proof';
@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { recommendedDashboardAction, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -265,6 +265,12 @@
   let cityResidentEconomyReceipts: ResidentEconomyReceipt[] = [];
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentApSupport = residentApSupportRecommendation(undefined);
+  let cityResidentCurrentAttention: number | undefined;
+  let cityResidentAttentionGuide = residentAttentionGuide({
+    authenticated: false,
+    residentName: 'this resident',
+    suggestedOnions: 0,
+  });
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentLoopCoverage: ResidentLoopFact[] = [];
   let cityResidentTriage: ResidentTriageSummary = residentTriageSummary([]);
@@ -287,6 +293,8 @@
   let activeSession: SpectatorSession | undefined;
   let activeObserveSession: SpectatorSession | undefined;
   let activeResidentSession: SpectatorSession | undefined;
+  let cityWorldObserveResidentName = '';
+  let cityWorldObserveSession: SpectatorSession | undefined;
   let liveSelectedRuntime: RuntimeReadModel | undefined;
   let sessionStream: EventSource | undefined;
   let sessionStreamId = '';
@@ -430,6 +438,7 @@
   $: benchmarkRunId = isDebugRoute && parts[0] === 'benchmarks' && parts[1] ? decodeURIComponent(parts[1]) : '';
   $: cityParts = browserPath.split('/').filter(Boolean);
   $: cityResidentId = !isDebugRoute && cityParts[0] === 'residents' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
+  $: cityWorldObserveResidentName = !isDebugRoute && route === '/world' ? worldObserveResidentFromSearch(browserSearch) : '';
   $: cityProposalId = !isDebugRoute && cityParts[0] === 'embassy' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
   $: cityInboxThreadId = !isDebugRoute && cityParts[0] === 'inbox' && cityParts[1] ? decodeURIComponent(cityParts[1]) : '';
   $: cityPrintId = !isDebugRoute && cityParts[0] === 'prints' && cityParts[1] && cityParts[1] !== 'new' ? decodeURIComponent(cityParts[1]) : '';
@@ -460,6 +469,13 @@
     storyteller: cityResidentStorySignal,
   });
   $: cityResidentApSupport = residentApSupportRecommendation(cityResident);
+  $: cityResidentCurrentAttention = cityResident?.attention ?? cityResidentReadModel?.currentAttention;
+  $: cityResidentAttentionGuide = residentAttentionGuide({
+    authenticated: citySession.authenticated,
+    residentName: selectedCityResidentDisplay(),
+    suggestedOnions: cityResidentApSupport.suggestedAp,
+    ...(cityResidentCurrentAttention === undefined ? {} : { currentAttention: cityResidentCurrentAttention }),
+  });
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
   $: cityPrintStorySignal = printStoryDigestSignal({
@@ -489,6 +505,7 @@
     onlineResidents: cityOnlineResidents,
     gameClientStatus,
     ticketUser: gameClientTicketUser,
+    observeResident: cityWorldObserveResidentName,
   });
   $: cityOnlineResidents = cityResidents.filter(row => row.online);
   $: cityControlledResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === true);
@@ -591,6 +608,7 @@
   $: canDeleteResidents = Boolean(gatewayStatus?.allowDelete);
   $: activeObserveSession = findObserveRouteSession(activeSession, sessions);
   $: activeResidentSession = findResidentSession(activeSession, sessions, residentName);
+  $: cityWorldObserveSession = findResidentSession(activeSession, sessions, cityWorldObserveResidentName);
   $: {
     if (
       perceptionFeedLoadingResident &&
@@ -823,6 +841,9 @@
     if (cityRouteNeedsStoryDigests(activeRoute)) {
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
     }
+    if (activeRoute === '/world') {
+      await ensureWorldObserveSession(activeRoute);
+    }
     if (activeRoute === '/') {
       const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload, heartbeatPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
@@ -1038,6 +1059,7 @@
   }
 
   function cityRouteRequiresLogin(activeRoute: string): boolean {
+    if (worldRouteAllowsGuestObserve(activeRoute, browserSearch)) return false;
     return isProtectedCityRoute(activeRoute) && !(activeRoute === '/profile' && publicPatronHandleFromSearch(browserSearch));
   }
 
@@ -1611,6 +1633,48 @@
     return session;
   }
 
+  async function openWorldResidentSpectator() {
+    if (!cityWorldObserveResidentName) return;
+    await runAction(async () => {
+      await openWorldObserveResidentSession(cityWorldObserveResidentName);
+    });
+  }
+
+  async function openWorldObserveResidentSession(name: string): Promise<SpectatorSession | undefined> {
+    const trimmedName = name.trim();
+    if (!trimmedName) return undefined;
+    const existing = findResidentSession(activeSession, sessions, trimmedName);
+    if (existing) {
+      activeSession = existing;
+      openSessionStream(existing);
+      return existing;
+    }
+    const subject: SpectatorSubject = { kind: 'resident', name: trimmedName };
+    const session = await api.observe(subject, 'follow');
+    upsertSession(session);
+    activeSession = session;
+    openSessionStream(session);
+    return session;
+  }
+
+  async function ensureWorldObserveSession(activeRoute = route) {
+    const observeResident = activeRoute === '/world' ? worldObserveResidentFromSearch(browserSearch) : '';
+    if (!observeResident) return;
+    if (!gatewayStatus?.connected) return;
+    if (findResidentSession(activeSession, sessions, observeResident)) {
+      const session = findResidentSession(activeSession, sessions, observeResident);
+      if (session) openSessionStream(session);
+      return;
+    }
+    const onlineResident = residentRowsForCityDirectory(overview?.residents, residents).find(row => row.name.toLowerCase() === observeResident.toLowerCase());
+    if (onlineResident && !onlineResident.online) return;
+    try {
+      await openWorldObserveResidentSession(observeResident);
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : `Unable to observe ${observeResident}`;
+    }
+  }
+
   function residentIsOnline(): boolean {
     return isResidentOnline(selectedRuntime, activeResidentSession);
   }
@@ -1949,12 +2013,19 @@
   async function grantResidentAttention(residentId: string) {
     await runAction(async () => {
       const onionAmount = positiveInt(grantAttentionOnions, 'Onion spend');
-      await cityApi.grantResidentOnionAttention(residentId, {
+      const residentNameForNotice = selectedCityResidentDisplay();
+      const result = await cityApi.grantResidentOnionAttention(residentId, {
         onionAmount,
         memo: grantAttentionMemo.trim(),
         idempotencyKey: crypto.randomUUID(),
       });
-      cityActionNotice = `${onionAmount.toLocaleString()} Onions spent for resident attention`;
+      cityActionNotice = result.message || residentAttentionResultNotice({
+        residentName: residentNameForNotice,
+        onionAmount,
+        status: result.status,
+        onionRequestStatus: result.onionRequest.status,
+        ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
+      });
       await bootstrapSession();
       await loadRoute(false);
     });
@@ -4704,7 +4775,9 @@
         <strong>{cityWorldReadiness.headline}</strong>
         <small>{cityWorldReadiness.detail}</small>
       </div>
-      {#if citySession.authenticated}
+      {#if cityWorldObserveResidentName}
+        <span class="city-world-badge">observe mode</span>
+      {:else if citySession.authenticated}
         <span class="city-world-badge">session ready</span>
       {:else}
         <button class="primary" onclick={() => cityNav('/login')}>Login</button>
@@ -4725,10 +4798,37 @@
       {/each}
     </div>
   </section>
-  {#if !citySession.authenticated}
+  {#if !citySession.authenticated && !cityWorldObserveResidentName}
     {@render CityAuthCta({ label: 'Login to enter the RuneScape client' })}
   {/if}
-  {#if citySession.authenticated}
+  {#if cityWorldObserveResidentName}
+    <section class="city-world-layout">
+      <div class="city-world-frame">
+        <div class="observer-surface large city-world-observer">
+          <div class="spectator-frame" use:spectatorFrame={{ session: cityWorldObserveSession, filters: spectatorFilters }} aria-label={`RuneScape observe client for ${cityWorldObserveResidentName}`}></div>
+          <div class="spectator-tools" aria-label="world observe tools">
+            <button class="icon-button" aria-label="Zoom out spectator" title="Zoom out" disabled={spectatorZoom <= spectatorZoomMin} onclick={() => (spectatorZoom = clampSpectatorZoom(spectatorZoom - spectatorZoomStep))}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+            </button>
+            <span class="zoom-readout">{Math.round(spectatorZoom * 100)}%</span>
+            <button class="icon-button" aria-label="Zoom in spectator" title="Zoom in" disabled={spectatorZoom >= spectatorZoomMax} onclick={() => (spectatorZoom = clampSpectatorZoom(spectatorZoom + spectatorZoomStep))}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
+            {#if !cityWorldObserveSession}
+              <button disabled={actionBusy || !gatewayStatus?.connected} class="tool-action" onclick={openWorldResidentSpectator}>Open Observe Mode</button>
+            {:else}
+              <span class="tool-action passive">following {cityWorldObserveResidentName}</span>
+            {/if}
+          </div>
+        </div>
+        {@render SpectatorControls()}
+      </div>
+      <aside class="city-panel">
+        <div class="panel-title">Nearby Residents</div>
+        {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8) })}
+      </aside>
+    </section>
+  {:else if citySession.authenticated}
     <section class="city-world-layout">
       <div class="city-world-frame">
         <div bind:this={gameClientMount} class:fullscreen-fallback={cityGameFullscreenFallback} class="city-game-mount">
@@ -4886,73 +4986,108 @@
     <p class="kicker">Residents</p>
     <h1>Directory</h1>
   </section>
-  {@render ResidentTriageStrip({ limit: 8 })}
-  <section class="city-dashboard-grid">
-    <div class="city-panel span-2">
-      <div class="panel-title">Resident Loop Coverage</div>
-      {@render ResidentLoopFactGrid({ facts: cityResidentLoopCoverage })}
-    </div>
-    <div class="city-panel span-2 resident-liveness-ledger">
-      <div class="row">
-        <div>
-          <div class="panel-title">Resident Liveness Ledger</div>
-          <strong>{cityResidentProofRollup.headline}</strong>
-          <small>{cityResidentProofRollup.detail}</small>
-        </div>
-        <span class={`tag ${cityResidentProofRollup.tone}`}>{cityResidentProofRollup.healthy}/{cityResidentProofRollup.online}</span>
+  {#if expertMode}
+    {@render ResidentTriageStrip({ limit: 8 })}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="panel-title">Resident Loop Coverage</div>
+        {@render ResidentLoopFactGrid({ facts: cityResidentLoopCoverage })}
       </div>
-      <div class="resident-liveness-list">
-        {#each cityResidentLivenessLedger as entry (entry.residentName)}
-          <button class={`resident-liveness-row tone-${entry.tone}`} onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(entry.residentName))}`)}>
-            <span class={`tag ${entry.tone}`}>{entry.tone}</span>
-            <span class="resident-liveness-main">
-              <strong>{entry.displayName}</strong>
-              <small>{entry.status} · {entry.proof}</small>
-              <em>{entry.detail}</em>
-            </span>
-            <span class="resident-liveness-facts">
-              <small>Soul <strong>{entry.soul}</strong></small>
-              <small>North star <strong>{entry.northStar}</strong></small>
-              <small>AP <strong>{entry.ap}</strong></small>
-              <small>GP <strong>{entry.gp}</strong></small>
-              <small>Stack <strong>{entry.stack}</strong></small>
-              <small>Contract <strong>{entry.contract}</strong></small>
-              <small>Plan <strong>{entry.plan}</strong></small>
-              <small>Story <strong>{entry.story}</strong></small>
-              <small>Memory <strong>{entry.memory}</strong></small>
-            </span>
-            <span class="resident-liveness-next">
-              <small>{entry.nextTarget}</small>
-              <strong>{entry.nextAction}</strong>
-            </span>
-          </button>
-        {:else}
-          <div class="city-empty-state">
-            <strong>No resident liveness rows yet</strong>
-            <span>Live resident proof rows appear once the controller or city snapshot publishes residents.</span>
+      <div class="city-panel span-2 resident-liveness-ledger">
+        <div class="row">
+          <div>
+            <div class="panel-title">Resident Liveness Ledger</div>
+            <strong>{cityResidentProofRollup.headline}</strong>
+            <small>{cityResidentProofRollup.detail}</small>
           </div>
-        {/each}
+          <span class={`tag ${cityResidentProofRollup.tone}`}>{cityResidentProofRollup.healthy}/{cityResidentProofRollup.online}</span>
+        </div>
+        <div class="resident-liveness-list">
+          {#each cityResidentLivenessLedger as entry (entry.residentName)}
+            <button class={`resident-liveness-row tone-${entry.tone}`} onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(entry.residentName))}`)}>
+              <span class={`tag ${entry.tone}`}>{entry.tone}</span>
+              <span class="resident-liveness-main">
+                <strong>{entry.displayName}</strong>
+                <small>{entry.status} · {entry.proof}</small>
+                <em>{entry.detail}</em>
+              </span>
+              <span class="resident-liveness-facts">
+                <small>Soul <strong>{entry.soul}</strong></small>
+                <small>North star <strong>{entry.northStar}</strong></small>
+                <small>AP <strong>{entry.ap}</strong></small>
+                <small>GP <strong>{entry.gp}</strong></small>
+                <small>Stack <strong>{entry.stack}</strong></small>
+                <small>Contract <strong>{entry.contract}</strong></small>
+                <small>Plan <strong>{entry.plan}</strong></small>
+                <small>Story <strong>{entry.story}</strong></small>
+                <small>Memory <strong>{entry.memory}</strong></small>
+              </span>
+              <span class="resident-liveness-next">
+                <small>{entry.nextTarget}</small>
+                <strong>{entry.nextAction}</strong>
+              </span>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No resident liveness rows yet</strong>
+              <span>Live resident proof rows appear once the controller or city snapshot publishes residents.</span>
+            </div>
+          {/each}
+        </div>
       </div>
-    </div>
-    <div class="city-panel">
-      <div class="panel-title">City Records</div>
-      <div class="city-card-list compact">
-        {#each cityDirectoryResidents as resident (resident.id)}
-          <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.nullcityResidentId)}`)}>
-            <span class={`tag ${statusTone(resident.status)}`}>{resident.status}</span>
-            <strong>{resident.displayName}</strong>
-            <small>{resident.goal || resident.latestThought || resident.updatedAt}</small>
-          </button>
+      <div class="city-panel">
+        <div class="panel-title">City Records</div>
+        <div class="city-card-list compact">
+          {#each cityDirectoryResidents as resident (resident.id)}
+            <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.nullcityResidentId)}`)}>
+              <span class={`tag ${statusTone(resident.status)}`}>{resident.status}</span>
+              <strong>{resident.displayName}</strong>
+              <small>{resident.goal || resident.latestThought || resident.updatedAt}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state"><strong>No city resident records</strong><span>Live operations data is still available from the dashboard snapshot.</span></div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel span-2">
+        <div class="panel-title">Live Residents</div>
+        {@render CityResidentList({ rows: cityResidents })}
+      </div>
+    </section>
+  {:else}
+    <section class="city-dashboard-grid city-simple-residents-grid">
+      <div class="city-panel span-2 resident-simple-directory">
+        <div class="row">
+          <div>
+            <div class="panel-title">Choose a Resident</div>
+            <strong>Pick someone to support</strong>
+            <small>Open a resident, choose how many Onions to spend, then approve the request.</small>
+          </div>
+          <span class="tag gold">{cityResidents.length}</span>
+        </div>
+        {@render CityResidentList({ rows: cityResidents, simple: true })}
+      </div>
+      <div class="city-panel resident-simple-help">
+        <div class="panel-title">How Onion Attention Works</div>
+        <div class="resident-attention-steps compact" aria-label="How Onion attention works">
+          <span><small>1</small><strong>Choose Onions</strong><em>Pick an amount on a resident page.</em></span>
+          <span><small>2</small><strong>Approve Request</strong><em>The Onion portal confirms the spend.</em></span>
+          <span><small>3</small><strong>Attention Arrives</strong><em>After approval, Null City gives that resident attention.</em></span>
+        </div>
+      </div>
+      <div class="city-panel resident-simple-help">
+        <div class="panel-title">Your Onions</div>
+        {#if citySession.authenticated}
+          <div class="city-balance-grid single">
+            <span><small>Available</small><strong>{citySession.onions.toLocaleString()}</strong></span>
+          </div>
+          <small>Use Onions when you want a resident to receive more attention from the city.</small>
         {:else}
-          <div class="city-empty-state"><strong>No city resident records</strong><span>Live operations data is still available from the dashboard snapshot.</span></div>
-        {/each}
+          {@render CityAuthCta({ label: 'Sign in to Give Attention' })}
+        {/if}
       </div>
-    </div>
-    <div class="city-panel span-2">
-      <div class="panel-title">Live Residents</div>
-      {@render CityResidentList({ rows: cityResidents })}
-    </div>
-  </section>
+    </section>
+  {/if}
 {/snippet}
 
 {#snippet ResidentTriageStrip({ limit }: { limit: number })}
@@ -5014,7 +5149,79 @@
     <h1>{selectedCityResidentDisplay()}</h1>
   </section>
   {#if cityResident || cityResidentReadModel}
-    <section class="city-dashboard-grid">
+    {#if !expertMode}
+      <section class="city-dashboard-grid city-simple-resident-grid">
+        <div class={`city-panel span-2 resident-attention-hero tone-${cityResidentAttentionGuide.tone}`}>
+          <div class="row">
+            <div>
+              <div class="panel-title">Give Attention</div>
+              <strong>{cityResidentAttentionGuide.title}</strong>
+              <small>{cityResidentAttentionGuide.detail}</small>
+            </div>
+            <span class={`tag ${cityResidentAttentionGuide.tone}`}>{cityResidentAttentionGuide.amountLabel}</span>
+          </div>
+          <div class="resident-attention-steps" aria-label="How Onion attention works">
+            <span><small>1</small><strong>Choose Onions</strong><em>Pick how many Onions you want to spend.</em></span>
+            <span><small>2</small><strong>Approve Request</strong><em>The Onion portal asks you to approve the spend.</em></span>
+            <span><small>3</small><strong>Resident Gets Attention</strong><em>After approval, Null City sends attention to this resident.</em></span>
+          </div>
+          <div class="resident-attention-metrics" aria-label="Attention summary">
+            <span><small>Your Onions</small><strong>{citySession.authenticated ? citySession.onions.toLocaleString() : 'Sign in'}</strong></span>
+            <span><small>Current Attention</small><strong>{cityResident?.attention ?? cityResidentReadModel?.currentAttention ?? '-'}</strong></span>
+            <span><small>Suggested</small><strong>{cityResidentApSupport.suggestedAp > 0 ? `${cityResidentApSupport.suggestedAp.toLocaleString()} Onions` : 'Any amount'}</strong></span>
+          </div>
+          {#if citySession.authenticated}
+            <div class="city-form-grid resident-attention-form">
+              <label>Onions to spend <input bind:value={grantAttentionOnions} inputmode="numeric" /></label>
+              <label>Note <input bind:value={grantAttentionMemo} placeholder="optional" /></label>
+              <button class="primary span-2" disabled={actionBusy} onclick={() => grantResidentAttention(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>
+                {cityResidentAttentionGuide.primaryAction}
+              </button>
+            </div>
+            {#if cityResidentApSupport.suggestedAp > 0}
+              <div class="resident-ap-support-actions">
+                <button type="button" onclick={() => applyApSupportSuggestion(cityResidentApSupport)}>Use {cityResidentApSupport.suggestedAp.toLocaleString()} Onion suggestion</button>
+              </div>
+            {/if}
+          {:else}
+            {@render CityAuthCta({ label: cityResidentAttentionGuide.primaryAction })}
+          {/if}
+        </div>
+        <div class="city-panel resident-simple-facts-panel">
+          <div class="panel-title">Resident Now</div>
+          <div class="city-resident-profile-grid simple-facts">
+            <span><small>Attention</small><strong>{cityResident?.attention ?? cityResidentReadModel?.currentAttention ?? '-'}</strong></span>
+            <span><small>Status</small><strong>{cityResident?.online ? 'Online now' : cityResidentReadModel?.status || 'Syncing'}</strong></span>
+            <span><small>Goal</small><strong>{cityResidentReadModel?.goal || cityResident?.thinking?.activePlan || 'No public goal yet'}</strong></span>
+            <span><small>Last update</small><strong>{cityResident ? residentFeedLabel(cityResident) : cityResidentPosts[0]?.createdAt ? `${timeAgo(cityResidentPosts[0].createdAt)} ago` : '-'}</strong></span>
+          </div>
+        </div>
+        <div class="city-panel resident-simple-help">
+          <div class="panel-title">What Attention Means</div>
+          <div class="city-copy-block">
+            <strong>Onions are what you spend. Attention is what the resident receives.</strong>
+            <p>Nothing is final until the Onion approval completes. Once approved, Null City gives this resident attention.</p>
+          </div>
+        </div>
+        <div class="city-panel span-2 resident-simple-posts">
+          <div class="panel-title">Latest From This Resident</div>
+          <div class="city-record-list compact">
+            {#each cityResidentPosts.slice(0, 3) as post (post.id)}
+              <article>
+                <span class="tag">{post.source}</span>
+                <div>
+                  <strong>{post.body}</strong>
+                  <small>{post.createdAt ? timeAgo(post.createdAt) : 'undated'}</small>
+                </div>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No public posts yet</strong><span>Open the live view to watch residents while the city syncs updates.</span></div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {:else}
+      <section class="city-dashboard-grid">
       <div class="city-panel span-2">
         <div class="panel-title">Public State</div>
         <div class="city-resident-profile-grid">
@@ -5357,6 +5564,7 @@
         </div>
       </div>
     </section>
+    {/if}
   {:else}
     {@const missingState = residentDetailEmptyState({
       loading,
@@ -5370,7 +5578,9 @@
         <span>{missingState.detail}</span>
         <div class="resident-sync-actions">
           <button onclick={() => cityNav('/chronicle')}>Story</button>
-          <button onclick={() => debugNav('/residents')}>Ops Roster</button>
+          {#if expertMode}
+            <button onclick={() => debugNav('/residents')}>Ops Roster</button>
+          {/if}
         </div>
       </div>
     </section>
@@ -6052,23 +6262,28 @@
   </section>
 {/snippet}
 
-{#snippet CityResidentList({ rows }: { rows: ResidentDashboardRow[] })}
+{#snippet CityResidentList({ rows, simple = false }: { rows: ResidentDashboardRow[]; simple?: boolean })}
   <div class="city-resident-list">
     {#each rows as row (row.name)}
       {@const benchmark = residentBenchmarkLabel(row)}
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
       {@const economyGp = residentLiveEconomyGpEvidence(cityLiveEconomy, row.name)}
       {@const scanLines = residentRosterScanLines(row, { benchmark, economyGp, storyteller: storySignal })}
-      <button onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
+      <button class:simple={simple} onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
         <span class:ok={row.online} class="dot"></span>
         <strong>{residentDisplayName(row.name)}</strong>
-        <small>
-          {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
-        </small>
-        {#each scanLines as line}
-          <small class={`city-resident-loop-line tone-${line.tone} priority-${line.priority}`}>{line.label}: {residentLoopLine(line.text, line.limit)}</small>
-        {/each}
-        <em class:warn={residentNeedsApSupportSoon(row)}>{row.attention ?? '-'} AP</em>
+        {#if simple}
+          <small>{row.online ? 'Online now' : 'Offline'} · Attention {row.attention ?? '-'}</small>
+          <em class:warn={residentNeedsApSupportSoon(row)}>{residentNeedsApSupportSoon(row) ? 'Needs attention' : 'Give attention'}</em>
+        {:else}
+          <small>
+            {residentStoryArcLabel(row)} · {residentFeedLabel(row)}
+          </small>
+          {#each scanLines as line}
+            <small class={`city-resident-loop-line tone-${line.tone} priority-${line.priority}`}>{line.label}: {residentLoopLine(line.text, line.limit)}</small>
+          {/each}
+          <em class:warn={residentNeedsApSupportSoon(row)}>{row.attention ?? '-'} AP</em>
+        {/if}
       </button>
     {:else}
       {@const rosterHeartbeat = cityEconomyHeartbeat.heartbeat}
@@ -6086,7 +6301,9 @@
         <span>{rosterState.detail}</span>
         <div class="resident-sync-actions">
           <button onclick={() => cityNav('/chronicle')}>Story</button>
-          <button onclick={() => debugNav('/residents')}>Ops Roster</button>
+          {#if expertMode}
+            <button onclick={() => debugNav('/residents')}>Ops Roster</button>
+          {/if}
         </div>
       </div>
     {/each}

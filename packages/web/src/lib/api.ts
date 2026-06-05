@@ -16,14 +16,13 @@ import type {
   SpectatorSession,
   SpectatorSubject,
 } from '@nullcity-dashboard/shared';
+import { currentCityCsrfToken } from './city-api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...init?.headers,
-    },
+    credentials: 'same-origin',
+    headers: dashboardApiHeaders(init),
   });
   if (!response.ok) {
     const text = await response.text();
@@ -49,11 +48,21 @@ async function requestArrayBuffer(path: string, init?: RequestInit): Promise<Arr
 function fetchJson(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, {
     ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...init?.headers,
-    },
+    credentials: 'same-origin',
+    headers: dashboardApiHeaders(init),
   });
+}
+
+export function dashboardApiHeaders(init: RequestInit = {}, csrfToken = currentCityCsrfToken()): Headers {
+  const headers = new Headers(init.headers);
+  headers.set('content-type', headers.get('content-type') || 'application/json');
+  if (csrfToken && isUnsafeMethod(init.method)) headers.set('x-csrf-token', csrfToken);
+  return headers;
+}
+
+function isUnsafeMethod(method: string | undefined): boolean {
+  const normalized = (method || 'GET').toUpperCase();
+  return normalized !== 'GET' && normalized !== 'HEAD' && normalized !== 'OPTIONS';
 }
 
 function isFetchFailure(error: unknown): boolean {

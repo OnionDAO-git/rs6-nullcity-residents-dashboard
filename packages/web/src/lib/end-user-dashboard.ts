@@ -31,6 +31,29 @@ export interface RecommendedDashboardAction {
   tone: DashboardTone;
 }
 
+export interface ResidentAttentionGuideInput {
+  authenticated: boolean;
+  residentName: string;
+  suggestedOnions: number;
+  currentAttention?: number;
+}
+
+export interface ResidentAttentionGuide {
+  title: string;
+  detail: string;
+  amountLabel: string;
+  primaryAction: string;
+  tone: DashboardTone;
+}
+
+export interface ResidentAttentionResultNoticeInput {
+  residentName: string;
+  onionAmount: number;
+  status: string;
+  onionRequestStatus?: string;
+  creditedAmount?: number;
+}
+
 export const dashboardNavItems: DashboardNavItem[] = [
   { label: 'Home', path: '/', match: '/', glyph: 'HM' },
   { label: 'Watch', path: '/live', match: '/live', glyph: 'WT' },
@@ -109,4 +132,38 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
       : 'Open the public live view while the city syncs resident activity.',
     tone: 'teal',
   };
+}
+
+export function residentAttentionGuide(input: ResidentAttentionGuideInput): ResidentAttentionGuide {
+  const resident = input.residentName || 'this resident';
+  const suggested = Math.max(0, Math.floor(input.suggestedOnions || 0));
+
+  if (!input.authenticated) {
+    return {
+      title: `Give attention to ${resident}`,
+      detail: 'Sign in to spend Onions and support this resident.',
+      amountLabel: 'Choose an Onion amount after sign in',
+      primaryAction: 'Sign in to Give Attention',
+      tone: 'gold',
+    };
+  }
+
+  const lowAttention = input.currentAttention !== undefined && input.currentAttention <= 10;
+  return {
+    title: `Give attention to ${resident}`,
+    detail: `Spend Onions to create an approval request. After approval, ${resident} receives attention.`,
+    amountLabel: suggested > 0 ? `${suggested.toLocaleString()} Onions suggested` : 'Choose how many Onions to spend',
+    primaryAction: 'Give Attention',
+    tone: lowAttention || suggested > 0 ? 'warn' : 'teal',
+  };
+}
+
+export function residentAttentionResultNotice(input: ResidentAttentionResultNoticeInput): string {
+  const resident = input.residentName || 'This resident';
+  const settled = input.status === 'settled' || input.onionRequestStatus === 'completed';
+  if (settled) {
+    const amount = Math.max(0, Math.floor(input.creditedAmount ?? input.onionAmount));
+    return `Onions spent. ${resident} received ${amount.toLocaleString()} attention.`;
+  }
+  return `Approval pending in Onion portal. ${resident} has not received attention yet.`;
 }

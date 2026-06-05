@@ -37,6 +37,28 @@ describe('buildWorldReadiness', () => {
     expect(summary.canStartClient).toBe(false);
   });
 
+  test('lets guests observe a named resident without an attendee game ticket', () => {
+    const summary = buildWorldReadiness({
+      authenticated: false,
+      gateway: connectedGateway,
+      onlineResidents: [resident()],
+      gameClientStatus: 'idle',
+      observeResident: 'res:hans',
+    });
+
+    expect(summary.status).toBe('ready');
+    expect(summary.headline).toBe('Resident observe mode is ready.');
+    expect(summary.detail).toBe('Following res:hans through the live RuneScape spectator client.');
+    expect(summary.checks.map(check => [check.id, check.tone, check.value])).toEqual([
+      ['session', 'ok', 'observe mode'],
+      ['gateway', 'ok', 'online'],
+      ['residents', 'ok', '1 online'],
+      ['client', 'ok', 'ready'],
+    ]);
+    expect(summary.nextActions[0]).toBe('Open observe mode to follow res:hans in the RuneScape client.');
+    expect(summary.canStartClient).toBe(true);
+  });
+
   test('blocks when the AgentGateway is offline', () => {
     const summary = buildWorldReadiness({
       authenticated: true,

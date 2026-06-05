@@ -348,6 +348,14 @@ export interface NullCityApGpExchangeBridgeResponse {
   error?: string;
 }
 
+export interface NullCityCreditAttentionResult {
+  ok: boolean;
+  resident: string;
+  attentionBefore: number;
+  attentionAfter: number;
+  creditedAmount: number;
+}
+
 export interface SoulProposalInput {
   residentName?: string;
   displayName: string;
@@ -543,6 +551,10 @@ export function setCityCsrfToken(token: string | undefined): void {
   csrfToken = token || '';
 }
 
+export function currentCityCsrfToken(): string {
+  return csrfToken;
+}
+
 export async function optionalCityRead<T>(request: Promise<T>): Promise<T | undefined> {
   try {
     return await request;
@@ -723,7 +735,7 @@ export const cityApi = {
       { method: 'POST', body: jsonBody(body) },
     ),
   grantResidentOnionAttention: (residentId: string, body: { onionAmount: number; attentionAmount?: number; memo?: string; idempotencyKey?: string }) =>
-    request<{ status: string; residentId: string; onionRequest: { id: string; status: string; amount: number; currencyMode?: string | null }; onionWallet?: OnionWallet; onionWalletError?: string; city?: unknown }>(
+    request<{ status: string; residentId: string; message?: string; onionRequest: { id: string; status: string; amount: number; currencyMode?: string | null }; onionWallet?: OnionWallet; onionWalletError?: string; city?: NullCityCreditAttentionResult }>(
       `/api/city/residents/${encodeURIComponent(residentId)}/onion-attention-grants`,
       { method: 'POST', body: jsonBody(body) },
     ),

@@ -6,6 +6,7 @@ import type {
   ResidentSummary,
   ServerMessage,
   SpectatorMode,
+  SpectatorPacket,
   SpectatorSession,
   SpectatorSubject,
 } from '@nullcity-dashboard/shared';
@@ -21,6 +22,8 @@ type Pending = {
 type SessionListener = (session: SpectatorSession) => void;
 type ResidentFeedListener = (feed: ResidentFeedSnapshot) => void;
 const STALE_RESIDENT_FEED_REATTACH_MS = 15_000;
+const SPECTATOR_PACKET_LIMIT = 750;
+const SPECTATOR_MAP_BOOTSTRAP_OPCODES = new Set([23, 166]);
 
 export interface ResidentFeedSnapshot {
   resident: string;
@@ -373,16 +376,14 @@ export class GatewayClient {
     if (message.kind === 'spectator_packet') {
       const session = this.sessions.get(message.payload.sessionId);
       if (session) {
+        const packet = {
+          opcode: message.payload.opcode,
+          payload: message.payload.payload,
+          receivedAt: new Date().toISOString(),
+        };
         this.setSession(session.id, {
           ...session,
-          packets: [
-            ...(session.packets || []).slice(-749),
-            {
-              opcode: message.payload.opcode,
-              payload: message.payload.payload,
-              receivedAt: new Date().toISOString(),
-            },
-          ],
+          packets: appendSpectatorPacket(session.packets || [], packet),
           lastEventAt: new Date().toISOString(),
         });
       }
@@ -468,6 +469,24 @@ function residentFeedNeedsAttach(feed: ResidentFeedSnapshot): boolean {
   if (!feed.lastFeedAt) return true;
   const lastFeedAt = Date.parse(feed.lastFeedAt);
   return !Number.isFinite(lastFeedAt) || Date.now() - lastFeedAt > STALE_RESIDENT_FEED_REATTACH_MS;
+}
+
+function appendSpectatorPacket(existing: SpectatorPacket[], packet: SpectatorPacket): SpectatorPacket[] {
+  const next = [...existing, packet];
+  if (next.length <= SPECTATOR_PACKET_LIMIT) return next;
+  const bootstrap = newestMapBootstrap(next);
+  const tail = next
+    .filter(candidate => candidate !== bootstrap)
+    .slice(-(SPECTATOR_PACKET_LIMIT - (bootstrap ? 1 : 0)));
+  return bootstrap ? [bootstrap, ...tail] : tail;
+}
+
+function newestMapBootstrap(packets: SpectatorPacket[]): SpectatorPacket | undefined {
+  for (let index = packets.length - 1; index >= 0; index -= 1) {
+    const packet = packets[index];
+    if (packet && SPECTATOR_MAP_BOOTSTRAP_OPCODES.has(packet.opcode)) return packet;
+  }
+  return undefined;
 }
 
 function assertAgentGatewayUrl(value: string): void {
