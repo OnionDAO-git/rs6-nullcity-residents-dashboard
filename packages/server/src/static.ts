@@ -63,9 +63,7 @@ function isRetiredOperationsRoute(pathname: string): boolean {
     pathname === '/wall' ||
     pathname === '/wall/' ||
     pathname === '/patron' ||
-    pathname === '/patron/' ||
-    pathname === '/graveyard' ||
-    pathname === '/graveyard/'
+    pathname === '/patron/'
   );
 }
 

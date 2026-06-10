@@ -21,6 +21,8 @@ describe('dashboard copy hygiene', () => {
 
   test('keeps the legacy debug rail behind admin access', () => {
     expect(appSource).not.toContain("<button onclick={() => debugNav('/')}>DB Debug</button>");
+    expect(appSource).toContain('{#if isDebugRoute && !expertMode}');
+    expect(appSource).toContain("{@render CityShell({ forceExpertGate: true })}");
     expect(appSource).toContain('{#if expertMode && citySession.admin}');
     expect(dashboardNavSource).toContain("{ label: 'Admin', path: '/admin', match: '/admin', glyph: 'AD', expertOnly: true, adminOnly: true }");
     expect(dashboardNavSource).toContain("{ label: 'Debug', path: '/debug', match: '/debug', glyph: 'DG', expertOnly: true, adminOnly: true }");
@@ -72,9 +74,12 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.');
   });
 
-  test('keeps simple New Souls copy Onion-funded instead of vote-jargon or AP-facing', () => {
-    expect(appSource).toContain('Funding is the vote: add Onions to the souls you want born.');
-    expect(appSource).toContain('Add Onions');
+  test('keeps simple New Souls honest about Onion funding while the backend action is unfinished', () => {
+    expect(appSource).toContain('Onion funding will decide which souls are born next.');
+    expect(appSource).toContain('Onion funding is being wired');
+    expect(appSource).toContain('For MVP, funding should use Onions and record patrons.');
+    expect(appSource).toContain('Funding will be the vote once the Onion-backed birth flow is connected.');
+    expect(appSource).not.toContain('Add Onions');
     expect(appSource).not.toContain('up/down voting and automatic Onion birth thresholds');
     expect(appSource).not.toContain('Attention to pledge');
     expect(appSource).not.toContain('Onion funding and up/down votes are queued for design.');
@@ -94,6 +99,8 @@ describe('dashboard copy hygiene', () => {
 
   test('labels homepage economy activity as event-window activity, not resident liveness', () => {
     expect(appSource).not.toContain("active · GP Δ");
+    expect(appSource).not.toContain('Watch live or choose one to support.');
+    expect(appSource).toContain('Open Residents and choose someone to support.');
     expect(appSource).toContain('<span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>');
     expect(appSource).toContain("<span><small>GP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString() : '-'}</strong></span>");
   });
@@ -115,19 +122,21 @@ describe('dashboard copy hygiene', () => {
 
   test('keeps public profile empty states endpoint-free', () => {
     expect(appSource).not.toContain('public event endpoints are running');
-    expect(appSource).toContain('This profile will appear after the attendee handle has public AP, resident, or letter history.');
+    expect(appSource).toContain('This profile will appear after the attendee handle has public resident or letter history.');
   });
 
-  test('keeps public profile inbox links in attendee routes instead of debug APIs', () => {
+  test('keeps public profile inbox behind Expert instead of exposing it as a Simple direct route', () => {
     expect(appSource).not.toContain('Public profile from `/v1/patron/*` and `/v1/inbox`');
     expect(appSource).not.toContain('/debug/inbox/?human=');
     expect(appSource).toContain('Public AP, Embassy standing, resident relationships, and inbox readiness.');
-    expect(appSource).toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
+    expect(appSource).not.toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
+    expect(appSource).toContain("onclick={() => openExpertRoute('/inbox')}>Open Your Inbox</button>");
   });
 
   test('keeps simple profile messages out of the expert-only inbox route', () => {
-    expect(appSource).toContain('Open Expert Inbox');
-    expect(appSource).toContain('Switch to Expert mode to open the full inbox.');
+    expect(appSource).not.toContain('Open Expert Inbox');
+    expect(appSource).not.toContain('Switch to Expert mode to open the full inbox.');
+    expect(appSource).toContain('Full message tools are still being simplified. Important resident updates will surface here.');
   });
 
   test('surfaces the NCRI marketplace without making GP the simple-mode payment plan', () => {

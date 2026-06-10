@@ -202,14 +202,26 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
   }
 
   return {
-    label: 'Watch live overview',
-    path: '/live',
+    label: 'Choose a resident',
+    path: '/residents',
     detail: input.onlineResidents > 0
-      ? `${input.onlineResidents} resident${input.onlineResidents === 1 ? '' : 's'} online right now.`
-      : 'Open the public live view while the city syncs resident activity.',
+      ? `${input.onlineResidents} resident${input.onlineResidents === 1 ? '' : 's'} available. Pick someone to support with Onions.`
+      : 'Browse residents and choose who should receive attention when the city is quiet.',
     tone: 'teal',
-    actionLabel: 'Watch',
+    actionLabel: 'Open Residents',
   };
+}
+
+export function simpleModeRouteRequiresExpert(route: string, search = ''): boolean {
+  const normalized = normalizeDashboardPath(route);
+  if (normalized === '/world') return !hasWorldObserveTarget(search);
+  if (normalized === '/inbox' || normalized.startsWith('/inbox/')) return true;
+  if (normalized === '/chronicle' || normalized.startsWith('/chronicle/')) return true;
+  if (normalized === '/economy') return true;
+  if (normalized === '/library') return true;
+  if (normalized === '/debug' || normalized.startsWith('/debug/')) return true;
+  if (normalized === '/admin' || normalized.startsWith('/admin/')) return true;
+  return false;
 }
 
 function proposalFundingStatusRank(status: SoulProposal['status']): number {
@@ -238,6 +250,21 @@ function timestampValue(value: string | undefined): number {
   if (!value) return 0;
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : 0;
+}
+
+function normalizeDashboardPath(route: string): string {
+  const [pathOnly = '/'] = route.split(/[?#]/);
+  const withSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
+  return withSlash.length > 1 ? withSlash.replace(/\/+$/, '') : '/';
+}
+
+function hasWorldObserveTarget(search: string): boolean {
+  try {
+    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+    return Boolean((params.get('resident') || params.get('observe') || '').trim());
+  } catch {
+    return false;
+  }
 }
 
 export function residentAttentionGuide(input: ResidentAttentionGuideInput): ResidentAttentionGuide {

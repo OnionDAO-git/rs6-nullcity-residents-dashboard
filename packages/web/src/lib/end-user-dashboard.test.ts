@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { SoulProposal } from './city-api';
-import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
+import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav small and action-focused', () => {
@@ -91,7 +91,7 @@ describe('recommendedDashboardAction', () => {
     });
   });
 
-  test('falls back to the live overview when there is no personal queue', () => {
+  test('falls back to choosing residents when there is no personal queue', () => {
     expect(recommendedDashboardAction({
       authenticated: true,
       loginReady: true,
@@ -101,8 +101,8 @@ describe('recommendedDashboardAction', () => {
       pendingPrints: 0,
       proposalCount: 0,
     })).toMatchObject({
-      label: 'Watch live overview',
-      path: '/live',
+      label: 'Choose a resident',
+      path: '/residents',
       tone: 'teal',
     });
   });
@@ -118,8 +118,8 @@ describe('recommendedDashboardAction', () => {
       proposalCount: 2,
       expertMode: false,
     })).toMatchObject({
-      label: 'Watch live overview',
-      path: '/live',
+      label: 'Choose a resident',
+      path: '/residents',
       tone: 'teal',
     });
   });
@@ -212,6 +212,35 @@ describe('recommendedDashboardAction', () => {
       actionLabel: 'Pick a Resident',
       tone: 'gold',
     });
+  });
+});
+
+describe('simpleModeRouteRequiresExpert', () => {
+  test('gates direct expert-only city routes while Simple mode is active', () => {
+    expect(simpleModeRouteRequiresExpert('/inbox')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/inbox/thread-1')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/chronicle')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/chronicle/run-1')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/economy')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/library')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/debug')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/debug/residents')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/admin')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/admin/economy')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/world')).toBe(true);
+  });
+
+  test('keeps the human action routes and resident world observe links Simple-safe', () => {
+    expect(simpleModeRouteRequiresExpert('/')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/residents')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/residents/res%3Ahans')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/embassy')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/prints')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/graveyard')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/profile')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/live')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/world', '?resident=res%3Ahans')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/world', '?observe=res%3Ahans')).toBe(false);
   });
 });
 

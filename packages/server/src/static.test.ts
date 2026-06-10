@@ -66,6 +66,15 @@ describe('serveDashboardWeb', () => {
     });
   });
 
+  test('serves the Simple graveyard route from the Svelte app shell', async () => {
+    await withStaticRoots(async roots => {
+      const response = await serveDashboardWeb(new URL('http://dashboard.local/graveyard'), roots);
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('svelte app shell');
+    });
+  });
+
   test('returns 404 for retired operations routes that are not new city routes', async () => {
     await withStaticRoots(async roots => {
       const response = await serveDashboardWeb(new URL('http://dashboard.local/observe'), roots);
