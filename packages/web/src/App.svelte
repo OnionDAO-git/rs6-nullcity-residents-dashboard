@@ -434,7 +434,7 @@
     { label: 'Wall', path: publicEventPath('/wall/', browserOrigin) },
     { label: 'Inbox', path: publicEventPath('/inbox/', browserOrigin) },
     { label: 'Patron', path: publicEventPath('/patron/', browserOrigin) },
-    { label: 'Graveyard', path: publicEventPath('/graveyard/', browserOrigin) },
+    { label: 'Soul Library', path: publicEventPath('/graveyard/', browserOrigin) },
     { label: 'Library', path: publicEventPath('/library/', browserOrigin) },
   ];
 
@@ -858,6 +858,7 @@
     closeRuntimeStream();
     closeSessionStream();
     const routePublicProfileHandle = activeRoute === '/profile' ? publicPatronHandleFromSearch(browserSearch) : '';
+    const routeNeedsHomePayload = activeRoute === '/' || activeRoute === '/board';
     if (isChronicleRoute(activeRoute)) {
       closeCityEconomyStream();
       cityStoryDigests = (await cityLoad(api.storytellerDigests(20), { items: [] })).items;
@@ -887,7 +888,7 @@
       sessions = await api.sessions().catch(() => sessions);
       await ensureWorldObserveSession(activeRoute);
     }
-    if (activeRoute === '/') {
+    if (routeNeedsHomePayload) {
       const ownPatronHandle = citySession.handle || citySession.email || citySession.name;
       const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload, heartbeatPayload, libraryPayload, patronPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
@@ -925,7 +926,7 @@
         cityPublicPatronProfile = patronPayload;
         seedProfileDraft();
       }
-    } else if (activeRoute !== '/') {
+    } else if (!routeNeedsHomePayload) {
       cityPublicPatronProfile = undefined;
     }
     if (activeRoute === '/embassy') {
@@ -971,7 +972,7 @@
       if (activeRoute === '/residents') {
         cityResidentGoalContracts = await loadResidentGoalContracts(residentRowsForCityDirectory(overview?.residents, residents));
       }
-    } else if (activeRoute !== '/') {
+    } else if (!routeNeedsHomePayload) {
       cityBenchmarkRuns = [];
       cityResidentGoalContracts = {};
     }
@@ -1295,8 +1296,24 @@
     const patronResidents = cityPublicPatronProfile?.residentCount ?? cityPublicPatronProfile?.residents.length ?? 0;
     return [
       {
-        label: 'Give Attention',
-        path: lowAp > 0 ? '/residents?focus=needs-attention' : '/residents',
+        label: 'Live',
+        path: '/live',
+        tone: 'teal',
+        metric: online > 0 ? `${online.toLocaleString()} online` : 'watch',
+        detail: gatewayStatus?.connected ? 'See what residents are doing now' : 'Open the live city overview',
+        simple: true,
+      },
+      {
+        label: 'Board',
+        path: '/board',
+        tone: 'gold',
+        metric: `${(lowAp + cityProposals.length + activePrints).toLocaleString()} open`,
+        detail: 'Find attention needs, resident goals, new souls, and requests',
+        simple: true,
+      },
+      {
+        label: 'Residents',
+        path: lowAp > 0 ? '/residents?triage=attention' : '/residents',
         tone: 'gold',
         metric: session.authenticated && session.onions > 0 ? `${session.onions.toLocaleString()} Onions` : `${rows.length.toLocaleString()} residents`,
         detail: lowAp > 0
@@ -1310,7 +1327,6 @@
         tone: 'green',
         metric: `${cityProposals.length.toLocaleString()} idea${cityProposals.length === 1 ? '' : 's'}`,
         detail: 'Create or support future residents',
-        simple: true,
       },
       {
         label: 'Items',
@@ -1318,14 +1334,13 @@
         tone: 'amber',
         metric: activePrints > 0 ? `${activePrints.toLocaleString()} active` : 'trophies',
         detail: 'Request prints and watch item quests come online',
-        simple: true,
       },
       {
-        label: 'Graveyard',
+        label: 'Soul Library',
         path: '/graveyard',
         tone: 'mauve',
         metric: `${remembered.toLocaleString()} remembered`,
-        detail: 'See residents who died and what they left behind',
+        detail: 'Read remembered residents and what they left behind',
         simple: true,
       },
       {
@@ -1335,13 +1350,6 @@
         metric: session.authenticated ? `${patronResidents.toLocaleString()} supported` : 'sign in',
         detail: 'See your Onions and residents you support',
         simple: true,
-      },
-      {
-        label: 'Watch Live Overview',
-        path: '/live',
-        tone: 'teal',
-        metric: online > 0 ? `${online.toLocaleString()} online` : 'live view',
-        detail: gatewayStatus?.connected ? 'Residents are visible in the live city view' : 'Open the watch view while the city syncs',
       },
       {
         label: 'Open Your Inbox',
@@ -3914,6 +3922,8 @@
         {@render CityExpertRouteGate()}
       {:else if route === '/profile'}
         {@render CityProfile()}
+      {:else if route === '/board'}
+        {@render CityBoard()}
       {:else if route === '/world'}
         {@render CityWorld()}
       {:else if route === '/chronicle' || route.startsWith('/chronicle/')}
@@ -3963,7 +3973,7 @@
   <section class="city-page-head">
     <p class="kicker">Expert View</p>
     <h1>Advanced City Page</h1>
-    <p class="city-lede">Simple mode keeps the dashboard focused on residents, Onions, new souls, items, and the graveyard.</p>
+    <p class="city-lede">Simple mode keeps the dashboard focused on Live, Board, Residents, Soul Library, and Me.</p>
   </section>
   <section class="city-dashboard-grid">
     <div class="city-panel span-2">
@@ -3985,8 +3995,8 @@
       <div class="panel-title">Simple Actions</div>
       <div class="city-card-list compact">
         <button onclick={() => cityNav('/residents')}><strong>Give Attention</strong><small>Spend Onions on living residents.</small></button>
-        <button onclick={() => cityNav('/embassy')}><strong>New Souls</strong><small>Create or support future residents.</small></button>
-        <button onclick={() => cityNav('/prints')}><strong>Items</strong><small>Request trophies and follow item quests.</small></button>
+        <button onclick={() => cityNav('/board')}><strong>Board</strong><small>Find shared work and requests.</small></button>
+        <button onclick={() => cityNav('/live')}><strong>Live</strong><small>Watch the city overview.</small></button>
       </div>
     </div>
   </section>
@@ -4061,7 +4071,7 @@
     <article>
       <small>Online Residents</small>
       <strong>{cityOnlineResidents.length.toLocaleString()}</strong>
-      <span>Open Residents and choose someone to support.</span>
+      <span>Open Live to watch, or Residents to support someone.</span>
     </article>
     <article>
       <small>Attention</small>
@@ -4383,42 +4393,32 @@
     {:else}
       <div class="city-panel city-simple-loop-panel">
         <div class="row">
-          <div class="panel-title">New Souls</div>
-          <button onclick={() => cityNav('/embassy')}>Open</button>
+          <div class="panel-title">Board</div>
+          <button onclick={() => cityNav('/board')}>Open</button>
         </div>
         <div class="city-copy-block">
-          <strong>Future residents are born from human-backed souls.</strong>
-          <p>Create a soul idea, help fund one that feels worth protecting, and see which ones are close to birth.</p>
-          <small>Onion funding will decide which souls are born next.</small>
+          <strong>Use the Board when you want something to do.</strong>
+          <p>It gathers residents who need attention, resident goals that could earn trophies, future souls, and your item requests.</p>
+          <small>Start here when the Home page feels too quiet.</small>
         </div>
-        <div class="city-card-list compact">
-          {#each citySoulFundingQueue.slice(0, 2) as proposal (proposal.id)}
-            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
-              <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
-              <strong>{proposal.displayName}</strong>
-              <small>{proposalProgress(proposal)}% funded · {proposal.goal}</small>
-            </button>
-          {:else}
-            <div class="city-empty-state">
-              <strong>No future residents yet</strong>
-              <span>Open New Souls when you want to propose the next resident.</span>
-            </div>
-          {/each}
+        <div class="city-resident-profile-grid">
+          <span><small>Needs attention</small><strong>{cityLowAttentionResidents.length}</strong></span>
+          <span><small>New souls</small><strong>{citySoulFundingQueue.length}</strong></span>
+          <span><small>Your requests</small><strong>{activePrintCount()}</strong></span>
         </div>
       </div>
       <div class="city-panel city-simple-loop-panel">
         <div class="row">
-          <div class="panel-title">Items</div>
-          <button onclick={() => cityNav('/prints')}>Open</button>
+          <div class="panel-title">Live</div>
+          <button onclick={() => cityNav('/live')}>Open</button>
         </div>
         <div class="city-copy-block">
-          <strong>Items and trophies are the physical side of the city.</strong>
-          <p>Request a print, track active item work, and watch for resident-earned trophy quests as that loop comes online.</p>
-          <small>Quest-earned NCRIs are not fully wired yet.</small>
+          <strong>Watch the city before you act.</strong>
+          <p>Live shows who is online, what changed recently, and which resident stories are worth following.</p>
         </div>
         <div class="city-resident-profile-grid">
-          <span><small>Active requests</small><strong>{activePrintCount()}</strong></span>
-          <span><small>Resident signals</small><strong>{cityPrintResidentSignals.length}</strong></span>
+          <span><small>Online</small><strong>{cityOnlineResidents.length}</strong></span>
+          <span><small>Latest story</small><strong>{cityStoryDigests[0] ? 'ready' : 'syncing'}</strong></span>
         </div>
       </div>
       <div class="city-panel city-simple-loop-panel">
@@ -4443,7 +4443,7 @@
       </div>
       <div class="city-panel city-simple-loop-panel">
         <div class="row">
-          <div class="panel-title">Graveyard</div>
+          <div class="panel-title">Soul Library</div>
           <button onclick={() => cityNav('/graveyard')}>Open</button>
         </div>
         <div class="city-card-list compact">
@@ -4455,13 +4455,139 @@
             </button>
           {:else}
             <div class="city-empty-state">
-              <strong>No residents in the graveyard</strong>
+              <strong>No remembered residents yet</strong>
               <span>When a resident dies, their legacy belongs here instead of disappearing.</span>
             </div>
           {/each}
         </div>
       </div>
     {/if}
+  </section>
+{/snippet}
+
+{#snippet CityBoard()}
+  <section class="city-page-head">
+    <p class="kicker">Shared Work</p>
+    <h1>Board</h1>
+    <p class="city-lede">Use the Board to decide what to do next: give attention, support resident goals, follow future souls, and track item requests.</p>
+  </section>
+  <section class="city-dashboard-grid">
+    <div class="city-panel span-2">
+      <div class="row">
+        <div>
+          <div class="panel-title">Needs Attention</div>
+          <strong>{cityLowAttentionResidents.length > 0 ? `${cityLowAttentionResidents.length} resident${cityLowAttentionResidents.length === 1 ? '' : 's'} may need help` : 'Residents are steady'}</strong>
+          <small>Spend Onions on residents you want to keep active and responsive.</small>
+        </div>
+        <button class="primary" onclick={() => cityNav('/residents?triage=attention')}>Give Attention</button>
+      </div>
+      <div class="city-card-list compact">
+        {#each cityResidentAttentionRows.slice(0, 4) as row (row.name)}
+          <button onclick={() => cityNav(`/residents/${encodeURIComponent(row.name)}`)}>
+            <span class={`tag ${row.online ? 'ok' : ''}`}>{row.online ? 'online' : 'resident'}</span>
+            <strong>{residentDisplayName(row.name)}</strong>
+            <small>{(row.attention ?? 999) <= 2 ? 'May need attention soon' : 'Available to support'}.</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No resident list yet</strong>
+            <span>Live residents will appear here when the city snapshot is ready.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">Resident Goals & Rewards</div>
+        <button onclick={() => cityNav('/prints')}>Requests</button>
+      </div>
+      <div class="city-copy-block">
+        <strong>Back residents whose goals should become trophies.</strong>
+        <p>Support a resident now; special item and trophy rewards can be attached as that loop matures.</p>
+      </div>
+      <div class="city-card-list compact">
+        {#each cityPrintResidentSignals.slice(0, 3) as signal (signal.residentId)}
+          <button onclick={() => cityNav(`/residents/${encodeURIComponent(signal.resident?.name || signal.residentId)}`)}>
+            <span class={`tag ${printResidentSignalTone(signal)}`}>{printResidentSignalTone(signal)}</span>
+            <strong>{printResidentSignalLabel(signal)}</strong>
+            <small>{printResidentSignalDetail(signal)}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No trophy goals yet</strong>
+            <span>Follow resident goals here, then use attention to help one happen.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">New Souls</div>
+        <button onclick={() => cityNav('/embassy')}>Open</button>
+      </div>
+      <div class="city-card-list compact">
+        {#each citySoulFundingQueue.slice(0, 4) as proposal (proposal.id)}
+          <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+            <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
+            <strong>{proposal.displayName}</strong>
+            <small>{proposalProgress(proposal)}% supported · {proposal.goal}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No future residents yet</strong>
+            <span>Open New Souls to propose the next resident.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="city-panel">
+      <div class="row">
+        <div class="panel-title">My Requests</div>
+        <button onclick={() => citySession.authenticated ? cityNav('/prints') : cityNav('/login')}>{citySession.authenticated ? 'Open' : 'Login'}</button>
+      </div>
+      {#if citySession.authenticated}
+        <div class="city-card-list compact">
+          {#each cityPrintRequests.slice(0, 4) as request (request.id)}
+            <button onclick={() => cityNav(`/prints/${encodeURIComponent(request.id)}`)}>
+              <span class={`tag ${statusTone(request.status)}`}>{proposalStatusLabel(request.status)}</span>
+              <strong>{request.title}</strong>
+              <small>{request.requestedMaterial || 'material open'} · updated {timeAgo(request.updatedAt)}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No item requests yet</strong>
+              <span>Request a trophy when you want a physical object from the city.</span>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="city-empty-state">
+          <strong>Sign in to see your requests</strong>
+          <span>Your item requests and resident support history appear after login.</span>
+        </div>
+      {/if}
+    </div>
+
+    <div class="city-panel span-2">
+      <div class="row">
+        <div class="panel-title">What Changed</div>
+        <button onclick={() => cityNav('/live')}>Live</button>
+      </div>
+      {#if cityStoryDigests[0]}
+        <div class="city-copy-block">
+          <strong>{cityStoryDigests[0].dispatch?.publicTitle || cityStoryDigests[0].digestId}</strong>
+          <p>{cityStoryDigests[0].dispatch?.publicBody || cityStoryDigests[0].summary || 'A city update is ready.'}</p>
+        </div>
+      {:else}
+        <div class="city-empty-state">
+          <strong>No city update yet</strong>
+          <span>Open Live to watch residents while new updates arrive.</span>
+        </div>
+      {/if}
+    </div>
   </section>
 {/snippet}
 
@@ -5206,7 +5332,7 @@
     <p class="kicker">{expertMode ? 'Embassy' : 'Resident Birth Queue'}</p>
     <h1>{route === '/embassy/new' ? 'New Soul' : citySelectedProposal ? citySelectedProposal.displayName : expertMode ? 'Soul Proposals' : 'New Souls'}</h1>
     {#if !expertMode}
-      <p class="city-lede">Create future residents and follow the souls closest to birth. Onion funding is being wired; nearly funded souls rise to the top.</p>
+      <p class="city-lede">Create future residents and follow the souls closest to birth. The strongest ideas rise through human support.</p>
     {/if}
   </section>
   {#if !citySession.authenticated && route !== '/embassy'}
@@ -5348,7 +5474,7 @@
           <div class="city-balance-grid single">
             <span><small>Needed</small><strong>{cityProposalQuote.threshold.toLocaleString()}</strong></span>
           </div>
-          <small>This becomes the Onion funding target once birth funding is connected.</small>
+          <small>Use this preview to compare how much support a soul needs before birth.</small>
         {:else}
           <div class="city-empty-state">
             <strong>No preview yet</strong>
@@ -5383,8 +5509,8 @@
         <div class="panel-title">Support This Soul</div>
         {#if citySession.authenticated}
           <div class="city-empty-state">
-            <strong>Onion funding is being wired</strong>
-            <span>For MVP, funding should use Onions and record patrons. Until that flow is connected, support living residents with attention.</span>
+            <strong>Support is not available here yet</strong>
+            <span>For now, support living residents with attention while this soul waits in the birth queue.</span>
           </div>
           <button class="primary" type="button" onclick={() => cityNav('/residents')}>Support Residents</button>
         {:else}
@@ -5407,7 +5533,7 @@
             <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
               <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
               <strong>{proposal.displayName}</strong>
-              <small>{proposalProgress(proposal)}% funded · {proposal.goal}</small>
+              <small>{proposalProgress(proposal)}% supported · {proposal.goal}</small>
             </button>
           {:else}
             <div class="city-empty-state">
@@ -5434,7 +5560,7 @@
             <span class="tag warn">Next</span>
             <div>
               <strong>Onion funding</strong>
-              <small>Funding will be the vote once the Onion-backed birth flow is connected.</small>
+              <small>Human support will decide which souls are ready for birth.</small>
             </div>
           </article>
         </div>
@@ -6400,7 +6526,7 @@
           <div>
             <div class="panel-title">Items & Trophies</div>
             <strong>Null City rewards should become real objects.</strong>
-            <small>Sign in to request trophies, support resident item quests, and claim patron rewards when NCRIs are ready.</small>
+            <small>Sign in to request trophies, support resident goals, and claim patron rewards when trophies are ready.</small>
           </div>
         </div>
         {@render CityAuthCta({ label: 'Login to request items' })}
@@ -6429,8 +6555,8 @@
       <div class="city-panel">
         <div class="panel-title">Trophy Quests</div>
         <div class="city-empty-state">
-          <strong>Quest-earned NCRIs are next</strong>
-          <span>NCRI trophies are the physical swag loop: support residents whose goals could become trophies later.</span>
+          <strong>Resident-earned trophies are next</strong>
+          <span>Support residents whose goals could become trophies later.</span>
         </div>
       </div>
     </section>
@@ -6501,36 +6627,36 @@
 
 {#snippet CitySimpleItemLoopPanels()}
   <div class="city-panel">
-    <div class="panel-title">Quest Board</div>
+    <div class="panel-title">Resident Goals & Rewards</div>
     <div class="city-record-list compact">
       <article>
-        <span class="tag warn">Designing</span>
+        <span class="tag warn">Next</span>
         <div>
-          <strong>Resident item missions</strong>
+          <strong>Resident item goals</strong>
           <small>Humans will be able to back residents trying to earn meaningful RuneScape items.</small>
         </div>
       </article>
       <article>
-        <span class="tag warn">Designing</span>
+        <span class="tag warn">Next</span>
         <div>
-          <strong>SOUL goal trophies</strong>
+          <strong>Soul goal trophies</strong>
           <small>A resident who achieves a worthy goal may unlock a trophy for patrons.</small>
         </div>
       </article>
     </div>
   </div>
   <div class="city-panel">
-    <div class="panel-title">NCRI Marketplace</div>
+    <div class="panel-title">Trophy Rewards</div>
     <div class="city-record-list compact">
       <article>
-        <span class="tag warn">Designing</span>
+        <span class="tag warn">Next</span>
         <div>
           <strong>3D trophy rewards</strong>
-          <small>NCRI trophies are the physical swag loop. Humans will be able to back residents, claim rewards, and request prints here.</small>
+          <small>Trophies are the physical swag loop. Humans will be able to back residents, claim rewards, and request prints here.</small>
         </div>
       </article>
       <article>
-        <span class="tag warn">Designing</span>
+        <span class="tag warn">Next</span>
         <div>
           <strong>Patron copies</strong>
           <small>When a resident earns a worthy trophy, qualifying patrons should be able to receive a copy.</small>
@@ -6542,9 +6668,9 @@
 
 {#snippet CityGraveyard()}
   <section class="city-page-head">
-    <p class="kicker">Graveyard</p>
-    <h1>Resident Graveyard</h1>
-    <p class="city-lede">Residents who die stay part of the city. Their goals, patrons, and remembered moments belong here.</p>
+    <p class="kicker">Soul Library</p>
+    <h1>Library of Souls</h1>
+    <p class="city-lede">Residents who are gone stay part of the city. Their goals, patrons, and remembered moments belong here.</p>
   </section>
   <section class="city-dashboard-grid">
     <div class="city-panel span-2">
@@ -6564,7 +6690,7 @@
           </button>
         {:else}
           <div class="city-empty-state">
-            <strong>No residents in the graveyard</strong>
+            <strong>No remembered residents yet</strong>
             <span>When a resident dies, this page will preserve their public legacy in the dashboard.</span>
           </div>
         {/each}

@@ -2,9 +2,40 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const appSource = readFileSync(new URL('../App.svelte', import.meta.url), 'utf8');
+const appCss = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 const dashboardNavSource = readFileSync(new URL('./end-user-dashboard.ts', import.meta.url), 'utf8');
 
+function cssRule(source: string, selector: string, after: string): string {
+  const afterIndex = source.indexOf(after);
+  const selectorIndex = source.indexOf(`${selector} {`, afterIndex);
+  if (afterIndex === -1 || selectorIndex === -1) return '';
+  const bodyStart = source.indexOf('{', selectorIndex) + 1;
+  const bodyEnd = source.indexOf('\n  }', bodyStart);
+  return bodyEnd === -1 ? '' : source.slice(bodyStart, bodyEnd);
+}
+
+function sourceBetween(source: string, startMarker: string, endMarker: string): string {
+  const startIndex = source.indexOf(startMarker);
+  if (startIndex === -1) return '';
+  const endIndex = source.indexOf(endMarker, startIndex + startMarker.length);
+  return endIndex === -1 ? source.slice(startIndex) : source.slice(startIndex, endIndex);
+}
+
 describe('dashboard copy hygiene', () => {
+  test('lets Simple mobile bottom navigation scroll when the IA has more than six items', () => {
+    const mobileBottomNav = cssRule(appCss, '.city-bottom-nav', '@media (max-width: 760px)');
+    const mobileBottomNavButton = cssRule(appCss, '.city-bottom-nav button', '@media (max-width: 760px)');
+
+    expect(mobileBottomNav).toContain('grid-template-columns: none;');
+    expect(mobileBottomNav).toContain('grid-auto-flow: column;');
+    expect(mobileBottomNav).toContain('grid-auto-columns: minmax(72px, 1fr);');
+    expect(mobileBottomNav).toContain('overflow-x: auto;');
+    expect(mobileBottomNav).toContain('overscroll-behavior-x: contain;');
+    expect(mobileBottomNav).not.toContain('grid-template-columns: repeat(6');
+    expect(mobileBottomNavButton).toContain('overflow-wrap: anywhere;');
+    expect(mobileBottomNavButton).not.toContain('overflow: hidden;');
+  });
+
   test('keeps guest session copy attendee-facing instead of naming API internals', () => {
     expect(appSource).not.toContain('`/api/session`');
     expect(appSource).toContain('Sign in to spend Onions, support residents, create new souls, request items, and see your messages.');
@@ -45,9 +76,36 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain("route === '/story'");
     expect(appSource).not.toContain("cityNav('/story')");
     expect(appSource).toContain("route === '/live'");
-    expect(dashboardNavSource).toContain("{ label: 'Watch', path: '/live', match: '/live', glyph: 'WT', expertOnly: true }");
+    expect(dashboardNavSource).toContain("path: '/live'");
+    expect(dashboardNavSource).not.toMatch(/\{[^}]*path: '\/live'[^}]*expertOnly: true[^}]*\}/);
     expect(appSource).toContain("route === '/chronicle'");
     expect(dashboardNavSource).toContain("{ label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true }");
+  });
+
+  test('keeps the Simple Quest Board route human-facing instead of dev-heavy', () => {
+    const boardSource = sourceBetween(appSource, '{#snippet CityBoard()}', '{#snippet CityEconomy()}');
+
+    expect(appSource).toContain("route === '/board'");
+    expect(appSource).toContain("cityNav('/board')");
+    expect(dashboardNavSource).toContain("path: '/board'");
+    expect(dashboardNavSource).not.toMatch(/\{[^}]*path: '\/board'[^}]*expertOnly: true[^}]*\}/);
+    expect(boardSource).toContain('<h1>Board</h1>');
+    expect(boardSource).toContain('Use the Board to decide what to do next');
+    expect(boardSource).toContain("cityNav('/residents?triage=attention')");
+    expect(appSource).not.toContain('/residents?focus=needs-attention');
+    expect(boardSource).not.toMatch(/\b(Designing|wired|API|bridge|backend|MVP|operator|dev)\b/i);
+  });
+
+  test('renames the human-facing Graveyard surface to Soul Library while keeping /graveyard compatible', () => {
+    expect(appSource).toContain("{:else if route === '/graveyard'}");
+    expect(appSource).toContain("cityNav('/graveyard')");
+    expect(dashboardNavSource).toContain("label: 'Soul Library', path: '/graveyard'");
+    expect(dashboardNavSource).not.toContain("label: 'Graveyard', path: '/graveyard'");
+    expect(appSource).toContain('<p class="kicker">Soul Library</p>');
+    expect(appSource).toContain('<h1>Library of Souls</h1>');
+    expect(appSource).not.toContain('<h1>Resident Graveyard</h1>');
+    expect(appSource).not.toContain('<p class="kicker">Graveyard</p>');
+    expect(appSource).not.toContain('<div class="panel-title">Graveyard</div>');
   });
 
   test('keeps the live page title separate from the latest Storyteller headline', () => {
@@ -75,10 +133,13 @@ describe('dashboard copy hygiene', () => {
   });
 
   test('keeps simple New Souls honest about Onion funding while the backend action is unfinished', () => {
-    expect(appSource).toContain('Onion funding will decide which souls are born next.');
-    expect(appSource).toContain('Onion funding is being wired');
-    expect(appSource).toContain('For MVP, funding should use Onions and record patrons.');
-    expect(appSource).toContain('Funding will be the vote once the Onion-backed birth flow is connected.');
+    expect(appSource).toContain('Create future residents and follow the souls closest to birth. The strongest ideas rise through human support.');
+    expect(appSource).toContain('Support is not available here yet');
+    expect(appSource).toContain('For now, support living residents with attention while this soul waits in the birth queue.');
+    expect(appSource).toContain('Human support will decide which souls are ready for birth.');
+    expect(appSource).not.toContain('Onion funding is being wired');
+    expect(appSource).not.toContain('For MVP, funding should use Onions and record patrons.');
+    expect(appSource).not.toContain('Funding will be the vote once the Onion-backed birth flow is connected.');
     expect(appSource).not.toContain('Add Onions');
     expect(appSource).not.toContain('up/down voting and automatic Onion birth thresholds');
     expect(appSource).not.toContain('Attention to pledge');
@@ -100,7 +161,7 @@ describe('dashboard copy hygiene', () => {
   test('labels homepage economy activity as event-window activity, not resident liveness', () => {
     expect(appSource).not.toContain("active · GP Δ");
     expect(appSource).not.toContain('Watch live or choose one to support.');
-    expect(appSource).toContain('Open Residents and choose someone to support.');
+    expect(appSource).toContain('Open Live to watch, or Residents to support someone.');
     expect(appSource).toContain('<span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>');
     expect(appSource).toContain("<span><small>GP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString() : '-'}</strong></span>");
   });
@@ -140,9 +201,13 @@ describe('dashboard copy hygiene', () => {
   });
 
   test('surfaces the NCRI marketplace without making GP the simple-mode payment plan', () => {
-    expect(appSource).toContain('NCRI Marketplace');
-    expect(appSource).toContain('NCRI trophies are the physical swag loop');
-    expect(appSource).not.toContain('GP/payment flow');
+    const simpleItemsSource = sourceBetween(appSource, '{#snippet CitySimpleItemLoopPanels()}', '{#snippet CityGraveyard()}');
+
+    expect(simpleItemsSource).toContain('Trophy Rewards');
+    expect(simpleItemsSource).toContain('Trophies are the physical swag loop');
+    expect(simpleItemsSource).not.toContain('NCRI Marketplace');
+    expect(simpleItemsSource).not.toContain('NCRI trophies are the physical swag loop');
+    expect(simpleItemsSource).not.toContain('GP/payment flow');
   });
 
   test('keeps the projector overview rails public-readable instead of dashboard-internal', () => {

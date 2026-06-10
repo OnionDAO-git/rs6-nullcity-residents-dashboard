@@ -106,6 +106,13 @@ describe('dashboard route helpers', () => {
     expect(isKnownCityRoute('/overview')).toBe(false);
   });
 
+  test('keeps the Simple board public with snapshot and story context', () => {
+    expect(isKnownCityRoute('/board')).toBe(true);
+    expect(isProtectedCityRoute('/board')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/board')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/board')).toBe(true);
+  });
+
   test('keeps the resident graveyard as a public dashboard route with city context', () => {
     expect(isKnownCityRoute('/graveyard')).toBe(true);
     expect(isProtectedCityRoute('/graveyard')).toBe(false);

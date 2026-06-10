@@ -4,21 +4,22 @@ import type { SoulProposal } from './city-api';
 import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
-  test('keeps the default attendee nav small and action-focused', () => {
-    expect(visibleDashboardNavItems({ expertMode: false }).map(item => item.label)).toEqual([
-      'Home',
-      'Residents',
-      'New Souls',
-      'Items',
-      'Graveyard',
-      'Me',
+  test('keeps the default attendee nav to the Simple IA destinations', () => {
+    expect(visibleDashboardNavItems({ expertMode: false }).map(item => [item.label, item.path])).toEqual([
+      ['Home', '/'],
+      ['Live', '/live'],
+      ['Board', '/board'],
+      ['Residents', '/residents'],
+      ['Soul Library', '/graveyard'],
+      ['Me', '/profile'],
     ]);
   });
 
   test('reveals diagnostic and staff destinations only in expert mode', () => {
     const labels = visibleDashboardNavItems({ expertMode: true, admin: true }).map(item => item.label);
 
-    expect(labels).toContain('Watch');
+    expect(labels).toContain('Live');
+    expect(labels).toContain('Board');
     expect(labels).toContain('Inbox');
     expect(labels).toContain('World');
     expect(labels).toContain('Stories');
@@ -33,20 +34,21 @@ describe('visibleDashboardNavItems', () => {
 
 describe('primaryDashboardNavItems', () => {
   test('keeps mobile simple mode to the six main human actions', () => {
-    expect(primaryDashboardNavItems({ expertMode: false }).map(item => item.label)).toEqual([
-      'Home',
-      'Residents',
-      'New Souls',
-      'Items',
-      'Graveyard',
-      'Me',
+    expect(primaryDashboardNavItems({ expertMode: false }).map(item => [item.label, item.path])).toEqual([
+      ['Home', '/'],
+      ['Live', '/live'],
+      ['Board', '/board'],
+      ['Residents', '/residents'],
+      ['Soul Library', '/graveyard'],
+      ['Me', '/profile'],
     ]);
   });
 
   test('keeps expert destinations discoverable on mobile in expert mode', () => {
     const labels = primaryDashboardNavItems({ expertMode: true, admin: true }).map(item => item.label);
 
-    expect(labels).toContain('Watch');
+    expect(labels).toContain('Live');
+    expect(labels).toContain('Board');
     expect(labels).toContain('Inbox');
     expect(labels).toContain('World');
     expect(labels).toContain('Stories');
@@ -236,6 +238,7 @@ describe('simpleModeRouteRequiresExpert', () => {
     expect(simpleModeRouteRequiresExpert('/residents/res%3Ahans')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/embassy')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/prints')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/board')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/graveyard')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/profile')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/live')).toBe(false);

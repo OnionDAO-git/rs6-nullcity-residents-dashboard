@@ -59,10 +59,13 @@ describe('serveDashboardWeb', () => {
 
   test('falls back to the Svelte app shell for non-public app routes', async () => {
     await withStaticRoots(async roots => {
-      const response = await serveDashboardWeb(new URL('http://dashboard.local/residents/res-agent'), roots);
+      const residentResponse = await serveDashboardWeb(new URL('http://dashboard.local/residents/res-agent'), roots);
+      const boardResponse = await serveDashboardWeb(new URL('http://dashboard.local/board'), roots);
 
-      expect(response.status).toBe(200);
-      expect(await response.text()).toContain('svelte app shell');
+      expect(residentResponse.status).toBe(200);
+      expect(await residentResponse.text()).toContain('svelte app shell');
+      expect(boardResponse.status).toBe(200);
+      expect(await boardResponse.text()).toContain('svelte app shell');
     });
   });
 

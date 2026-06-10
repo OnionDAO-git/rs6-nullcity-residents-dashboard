@@ -76,12 +76,13 @@ export function dismissDashboardNotice(dismissed: ReadonlySet<string>, kind: str
 
 export const dashboardNavItems: DashboardNavItem[] = [
   { label: 'Home', path: '/', match: '/', glyph: 'HM' },
+  { label: 'Live', path: '/live', match: '/live', glyph: 'LV' },
+  { label: 'Board', path: '/board', match: '/board', glyph: 'BD' },
   { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
-  { label: 'New Souls', path: '/embassy', match: '/embassy', glyph: 'SO' },
-  { label: 'Items', path: '/prints', match: '/prints', glyph: 'IT' },
-  { label: 'Graveyard', path: '/graveyard', match: '/graveyard', glyph: 'GY' },
+  { label: 'Soul Library', path: '/graveyard', match: '/graveyard', glyph: 'SL' },
   { label: 'Me', path: '/profile', match: '/profile', glyph: 'ME' },
-  { label: 'Watch', path: '/live', match: '/live', glyph: 'WT', expertOnly: true },
+  { label: 'New Souls', path: '/embassy', match: '/embassy', glyph: 'SO', expertOnly: true },
+  { label: 'Items', path: '/prints', match: '/prints', glyph: 'IT', expertOnly: true },
   { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN', expertOnly: true },
   { label: 'World', path: '/world', match: '/world', glyph: 'WO', expertOnly: true },
   { label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true },
