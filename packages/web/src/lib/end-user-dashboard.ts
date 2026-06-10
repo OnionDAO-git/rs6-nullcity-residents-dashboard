@@ -1,3 +1,6 @@
+import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { SoulProposal } from './city-api';
+
 export type DashboardTone = 'gold' | 'teal' | 'green' | 'blue' | 'mauve' | 'amber' | 'warn';
 
 export interface DashboardNavItem {
@@ -97,9 +100,32 @@ export function visibleDashboardNavItems(options: VisibleDashboardNavOptions): D
 }
 
 export function primaryDashboardNavItems(options: VisibleDashboardNavOptions): DashboardNavItem[] {
-  const items = visibleDashboardNavItems(options);
-  if (options.expertMode) return items;
-  return items.filter(item => item.path !== '/graveyard');
+  return visibleDashboardNavItems(options);
+}
+
+export function sortSoulProposalsForFunding(proposals: readonly SoulProposal[]): SoulProposal[] {
+  return [...proposals].sort((a, b) => {
+    const statusDelta = proposalFundingStatusRank(a.status) - proposalFundingStatusRank(b.status);
+    if (statusDelta !== 0) return statusDelta;
+
+    const progressDelta = proposalFundingProgress(b) - proposalFundingProgress(a);
+    if (progressDelta !== 0) return progressDelta;
+
+    const remainingDelta = proposalFundingRemaining(a) - proposalFundingRemaining(b);
+    if (remainingDelta !== 0) return remainingDelta;
+
+    return timestampValue(b.updatedAt) - timestampValue(a.updatedAt);
+  });
+}
+
+export function sortResidentsForAttention(rows: readonly ResidentDashboardRow[]): ResidentDashboardRow[] {
+  return [...rows].sort((a, b) => {
+    const attentionDelta = residentAttentionValue(a) - residentAttentionValue(b);
+    if (attentionDelta !== 0) return attentionDelta;
+
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export function recommendedDashboardAction(input: RecommendedDashboardActionInput): RecommendedDashboardAction {
@@ -116,7 +142,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
   }
 
   if (input.authenticated && (input.onionBalance ?? 0) > 0 && (input.residentCount ?? 0) > 0) {
-    const path = input.lowAttentionResidents > 0 ? '/residents?focus=needs-attention' : '/residents';
+    const path = input.lowAttentionResidents > 0 ? '/residents?triage=attention' : '/residents';
     return {
       label: `Use your ${(input.onionBalance ?? 0).toLocaleString()} Onions`,
       path,
@@ -129,7 +155,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
   if (input.lowAttentionResidents > 0) {
     return {
       label: 'Choose a resident',
-      path: '/residents?focus=needs-attention',
+      path: '/residents?triage=attention',
       detail: `${input.lowAttentionResidents} resident${input.lowAttentionResidents === 1 ? '' : 's'} may need attention soon.`,
       tone: 'warn',
       actionLabel: 'Give Attention',
@@ -184,6 +210,34 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
     tone: 'teal',
     actionLabel: 'Watch',
   };
+}
+
+function proposalFundingStatusRank(status: SoulProposal['status']): number {
+  if (status === 'ready_to_birth' || status === 'birthing') return 0;
+  if (status === 'funding') return 1;
+  if (status === 'submitted') return 2;
+  if (status === 'draft') return 3;
+  if (status === 'born') return 4;
+  return 5;
+}
+
+function proposalFundingProgress(proposal: SoulProposal): number {
+  if (proposal.attentionThreshold <= 0) return 0;
+  return proposal.contributedAttention / proposal.attentionThreshold;
+}
+
+function proposalFundingRemaining(proposal: SoulProposal): number {
+  return Math.max(0, proposal.attentionThreshold - proposal.contributedAttention);
+}
+
+function residentAttentionValue(row: ResidentDashboardRow): number {
+  return Number.isFinite(row.attention) ? row.attention ?? Number.POSITIVE_INFINITY : Number.POSITIVE_INFINITY;
+}
+
+function timestampValue(value: string | undefined): number {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 export function residentAttentionGuide(input: ResidentAttentionGuideInput): ResidentAttentionGuide {

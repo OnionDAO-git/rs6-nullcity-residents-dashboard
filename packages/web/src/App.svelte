@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -169,6 +169,7 @@
   let rawVisibleResidents: ResidentDashboardRow[] = [];
   let visibleResidents: ResidentDashboardRow[] = [];
   let cityResidents: ResidentDashboardRow[] = [];
+  let cityResidentAttentionRows: ResidentDashboardRow[] = [];
   let cityOnlineResidents: ResidentDashboardRow[] = [];
   let cityLowAttentionResidents: ResidentDashboardRow[] = [];
   let cityFeaturedResidents: ResidentDashboardRow[] = [];
@@ -195,6 +196,7 @@
   let cityLedger: PointLedgerEntry[] = [];
   let cityLedgerFilter: PointResource | 'all' = 'all';
   let cityProposals: SoulProposal[] = [];
+  let citySoulFundingQueue: SoulProposal[] = [];
   let citySelectedProposal: SoulProposal | undefined;
   let cityNullcityBridgeAvailable = false;
   let cityNullcityBridgeError = '';
@@ -534,7 +536,9 @@
   $: cityPausedOnlineResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === false);
   $: cityHasCohortSignals = cityControlledResidents.length > 0 || cityPausedOnlineResidents.length > 0;
   $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
+  $: cityResidentAttentionRows = sortResidentsForAttention(cityResidents);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
+  $: citySoulFundingQueue = sortSoulProposalsForFunding(cityProposals);
   $: cityUnreadThreads = cityInboxThreads.filter(thread => !thread.latestMessage?.readAt).length;
   $: cityPendingPrints = cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
@@ -4287,7 +4291,7 @@
       <div class="city-panel">
         <div class="panel-title">Soul Proposals</div>
         <div class="city-card-list compact">
-          {#each cityProposals.slice(0, 3) as proposal (proposal.id)}
+          {#each citySoulFundingQueue.slice(0, 3) as proposal (proposal.id)}
             <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
               <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
               <strong>{proposal.displayName}</strong>
@@ -4332,10 +4336,10 @@
         <div class="city-copy-block">
           <strong>Future residents are born from human-backed souls.</strong>
           <p>Create a soul idea, help fund one that feels worth protecting, and see which ones are close to birth.</p>
-          <small>Up/down voting and automatic Onion birth thresholds are still being designed.</small>
+          <small>Funding is the vote: add Onions to the souls you want born.</small>
         </div>
         <div class="city-card-list compact">
-          {#each cityProposals.slice(0, 2) as proposal (proposal.id)}
+          {#each citySoulFundingQueue.slice(0, 2) as proposal (proposal.id)}
             <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
               <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
               <strong>{proposal.displayName}</strong>
@@ -4957,7 +4961,8 @@
             <span>Resident replies and city notes will appear after you start supporting residents.</span>
           </div>
         {/if}
-        <button onclick={() => cityNav('/inbox')}>Open Inbox</button>
+        <button onclick={() => setExpertMode(true)}>Open Expert Inbox</button>
+        <small>Switch to Expert mode to open the full inbox.</small>
       </div>
     {:else}
     <div class={`city-panel span-2 city-economy-health tone-${cityProfileEconomy.tone}`}>
@@ -5144,7 +5149,7 @@
     <p class="kicker">{expertMode ? 'Embassy' : 'Resident Birth Queue'}</p>
     <h1>{route === '/embassy/new' ? 'New Soul' : citySelectedProposal ? citySelectedProposal.displayName : expertMode ? 'Soul Proposals' : 'New Souls'}</h1>
     {#if !expertMode}
-      <p class="city-lede">Create future residents and support the souls you want to see born. Funding is live; up/down voting and automatic Onion birth thresholds are still being designed.</p>
+      <p class="city-lede">Create future residents and add Onions to the souls you want born. Funding is the vote, and nearly funded souls rise to the top.</p>
     {/if}
   </section>
   {#if !citySession.authenticated && route !== '/embassy'}
@@ -5230,7 +5235,7 @@
           <button class="primary" onclick={() => cityNav('/embassy/new')}>New Proposal</button>
         </div>
         <div class="city-card-list">
-          {#each cityProposals as proposal (proposal.id)}
+          {#each citySoulFundingQueue as proposal (proposal.id)}
             <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
               <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
               <strong>{proposal.displayName}</strong>
@@ -5286,7 +5291,7 @@
           <div class="city-balance-grid single">
             <span><small>Needed</small><strong>{cityProposalQuote.threshold.toLocaleString()}</strong></span>
           </div>
-          <small>Funding currently uses the attention balance behind the scenes. Onion-based voting is not wired yet.</small>
+          <small>Use this as the Onion funding target for birth. Funding is the vote for MVP.</small>
         {:else}
           <div class="city-empty-state">
             <strong>No preview yet</strong>
@@ -5321,10 +5326,10 @@
         <div class="panel-title">Support This Soul</div>
         {#if citySession.authenticated}
           <div class="city-form-grid single">
-            <label>Attention to pledge <input bind:value={contributionAp} inputmode="numeric" /></label>
-            <button class="primary" disabled={actionBusy} onclick={() => citySelectedProposal && contributeToSoulProposal(citySelectedProposal.id)}>Support Soul</button>
+            <label>Onions to add <input bind:value={contributionAp} inputmode="numeric" /></label>
+            <button class="primary" disabled={actionBusy} onclick={() => citySelectedProposal && contributeToSoulProposal(citySelectedProposal.id)}>Add Onions</button>
           </div>
-          <small>This build uses attention funding for birth. Onion funding and up/down votes are queued for design.</small>
+          <small>Your funding helps move this soul toward birth and records you as a patron.</small>
         {:else}
           {@render CityAuthCta({ label: 'Login to support this soul' })}
         {/if}
@@ -5341,7 +5346,7 @@
           <button class="primary" onclick={() => cityNav('/embassy/new')}>Create Soul</button>
         </div>
         <div class="city-card-list">
-          {#each cityProposals as proposal (proposal.id)}
+          {#each citySoulFundingQueue as proposal (proposal.id)}
             <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
               <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
               <strong>{proposal.displayName}</strong>
@@ -5365,14 +5370,14 @@
             <span class="tag ok">Live</span>
             <div>
               <strong>Create and fund souls</strong>
-              <small>Submitted souls can move toward birth through funding.</small>
+              <small>Submitted souls move toward birth as humans add Onions.</small>
             </div>
           </article>
           <article>
-            <span class="tag warn">Next</span>
+            <span class="tag ok">MVP</span>
             <div>
-              <strong>Voting and Onion thresholds</strong>
-              <small>Up/down ranking and automatic birth-on-Onions are still product decisions.</small>
+              <strong>Funding is the vote</strong>
+              <small>Nearly funded souls appear first so humans can push them over the line.</small>
             </div>
           </article>
         </div>
@@ -5461,11 +5466,11 @@
           <div>
             <div class="panel-title">Choose a Resident</div>
             <strong>Pick someone to support</strong>
-            <small>Open a resident, choose how many Onions to spend, then approve the request.</small>
+            <small>Lowest-attention residents are first. Open one, choose how many Onions to spend, then approve the request.</small>
           </div>
           <span class="tag gold">{cityResidents.length}</span>
         </div>
-        {@render CityResidentList({ rows: cityResidents, simple: true })}
+        {@render CityResidentList({ rows: cityResidentAttentionRows, simple: true })}
       </div>
       <div class="city-panel resident-simple-help">
         <div class="panel-title">How Onion Attention Works</div>
@@ -6332,7 +6337,19 @@
 
 {#snippet CitySimpleItems()}
   {#if !citySession.authenticated}
-    {@render CityAuthCta({ label: 'Login to request items' })}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">Items & Trophies</div>
+            <strong>Null City rewards should become real objects.</strong>
+            <small>Sign in to request trophies, support resident item quests, and claim patron rewards when NCRIs are ready.</small>
+          </div>
+        </div>
+        {@render CityAuthCta({ label: 'Login to request items' })}
+      </div>
+      {@render CitySimpleItemLoopPanels()}
+    </section>
   {:else if route === '/prints/new'}
     <section class="city-dashboard-grid">
       <div class="city-panel span-2">
@@ -6356,7 +6373,7 @@
         <div class="panel-title">Trophy Quests</div>
         <div class="city-empty-state">
           <strong>Quest-earned NCRIs are next</strong>
-          <span>For now, request an item here or support residents whose goals could become trophies later.</span>
+          <span>NCRI trophies are the physical swag loop: support residents whose goals could become trophies later.</span>
         </div>
       </div>
     </section>
@@ -6386,7 +6403,7 @@
         {#if citySelectedPrint.quoteGp && !citySelectedPrint.gpLedgerEntryId}
           <div class="city-empty-state">
             <strong>Staff quote is ready</strong>
-            <span>Confirm in Expert mode when the GP/payment flow is ready for this request.</span>
+            <span>Open Expert mode only if staff needs to finish the quote flow for this request.</span>
           </div>
           <button onclick={() => setExpertMode(true)}>Open Expert</button>
         {:else if citySelectedPrint.gpLedgerEntryId}
@@ -6421,27 +6438,50 @@
           {/each}
         </div>
       </div>
-      <div class="city-panel">
-        <div class="panel-title">Quest Board</div>
-        <div class="city-record-list compact">
-          <article>
-            <span class="tag warn">Designing</span>
-            <div>
-              <strong>Resident item missions</strong>
-              <small>Humans will be able to back residents trying to earn meaningful RuneScape items.</small>
-            </div>
-          </article>
-          <article>
-            <span class="tag warn">Designing</span>
-            <div>
-              <strong>SOUL goal trophies</strong>
-              <small>A resident who achieves a worthy goal may unlock a trophy for patrons.</small>
-            </div>
-          </article>
-        </div>
-      </div>
+      {@render CitySimpleItemLoopPanels()}
     </section>
   {/if}
+{/snippet}
+
+{#snippet CitySimpleItemLoopPanels()}
+  <div class="city-panel">
+    <div class="panel-title">Quest Board</div>
+    <div class="city-record-list compact">
+      <article>
+        <span class="tag warn">Designing</span>
+        <div>
+          <strong>Resident item missions</strong>
+          <small>Humans will be able to back residents trying to earn meaningful RuneScape items.</small>
+        </div>
+      </article>
+      <article>
+        <span class="tag warn">Designing</span>
+        <div>
+          <strong>SOUL goal trophies</strong>
+          <small>A resident who achieves a worthy goal may unlock a trophy for patrons.</small>
+        </div>
+      </article>
+    </div>
+  </div>
+  <div class="city-panel">
+    <div class="panel-title">NCRI Marketplace</div>
+    <div class="city-record-list compact">
+      <article>
+        <span class="tag warn">Designing</span>
+        <div>
+          <strong>3D trophy rewards</strong>
+          <small>NCRI trophies are the physical swag loop. Humans will be able to back residents, claim rewards, and request prints here.</small>
+        </div>
+      </article>
+      <article>
+        <span class="tag warn">Designing</span>
+        <div>
+          <strong>Patron copies</strong>
+          <small>When a resident earns a worthy trophy, qualifying patrons should be able to receive a copy.</small>
+        </div>
+      </article>
+    </div>
+  </div>
 {/snippet}
 
 {#snippet CityGraveyard()}

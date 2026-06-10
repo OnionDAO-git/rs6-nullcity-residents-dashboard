@@ -72,6 +72,14 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Proposal filters will sort by Needs AP, Ready to birth, Born, and Mine once attendee proposals arrive.');
   });
 
+  test('keeps simple New Souls copy Onion-funded instead of vote-jargon or AP-facing', () => {
+    expect(appSource).toContain('Funding is the vote: add Onions to the souls you want born.');
+    expect(appSource).toContain('Add Onions');
+    expect(appSource).not.toContain('up/down voting and automatic Onion birth thresholds');
+    expect(appSource).not.toContain('Attention to pledge');
+    expect(appSource).not.toContain('Onion funding and up/down votes are queued for design.');
+  });
+
   test('offers a resident fallback when the Embassy has no proposals to fund', () => {
     expect(appSource).toContain('Watch a resident while the Embassy queue is empty.');
     expect(appSource).toContain("onclick={() => cityNav(cityResidentDemoPick.path)}>Watch resident instead</button>");
@@ -115,6 +123,17 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain('/debug/inbox/?human=');
     expect(appSource).toContain('Public AP, Embassy standing, resident relationships, and inbox readiness.');
     expect(appSource).toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
+  });
+
+  test('keeps simple profile messages out of the expert-only inbox route', () => {
+    expect(appSource).toContain('Open Expert Inbox');
+    expect(appSource).toContain('Switch to Expert mode to open the full inbox.');
+  });
+
+  test('surfaces the NCRI marketplace without making GP the simple-mode payment plan', () => {
+    expect(appSource).toContain('NCRI Marketplace');
+    expect(appSource).toContain('NCRI trophies are the physical swag loop');
+    expect(appSource).not.toContain('GP/payment flow');
   });
 
   test('keeps the projector overview rails public-readable instead of dashboard-internal', () => {

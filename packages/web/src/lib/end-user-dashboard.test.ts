@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems } from './end-user-dashboard';
+import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
+import type { SoulProposal } from './city-api';
+import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav small and action-focused', () => {
@@ -30,12 +32,13 @@ describe('visibleDashboardNavItems', () => {
 });
 
 describe('primaryDashboardNavItems', () => {
-  test('keeps mobile simple mode to the five main human actions', () => {
+  test('keeps mobile simple mode to the six main human actions', () => {
     expect(primaryDashboardNavItems({ expertMode: false }).map(item => item.label)).toEqual([
       'Home',
       'Residents',
       'New Souls',
       'Items',
+      'Graveyard',
       'Me',
     ]);
   });
@@ -83,7 +86,7 @@ describe('recommendedDashboardAction', () => {
       proposalCount: 2,
     })).toMatchObject({
       label: 'Choose a resident',
-      path: '/residents?focus=needs-attention',
+      path: '/residents?triage=attention',
       tone: 'warn',
     });
   });
@@ -205,10 +208,66 @@ describe('recommendedDashboardAction', () => {
       residentCount: 23,
     })).toMatchObject({
       label: 'Use your 1,009 Onions',
-      path: '/residents?focus=needs-attention',
+      path: '/residents?triage=attention',
       actionLabel: 'Pick a Resident',
       tone: 'gold',
     });
+  });
+});
+
+describe('sortSoulProposalsForFunding', () => {
+  function proposal(input: Partial<SoulProposal> & Pick<SoulProposal, 'id' | 'displayName' | 'attentionThreshold' | 'contributedAttention' | 'status'>): SoulProposal {
+    return {
+      proposerCityUserId: 'user-1',
+      residentName: input.displayName.toLowerCase(),
+      goal: 'Goal',
+      personality: '',
+      vices: '',
+      virtues: '',
+      fears: '',
+      voice: '',
+      firstMemory: '',
+      secret: '',
+      appearance: {},
+      startingLevels: {},
+      startingEquipment: [],
+      startingInventory: [],
+      quote: { threshold: input.attentionThreshold, breakdown: { base: 0, levels: 0, equipment: 0, inventory: 0, complexity: 0 } },
+      createdAt: input.createdAt || '2026-01-01T00:00:00.000Z',
+      updatedAt: input.updatedAt || '2026-01-01T00:00:00.000Z',
+      ...input,
+    };
+  }
+
+  test('puts threshold-crossed and nearly-funded souls first', () => {
+    const sorted = sortSoulProposalsForFunding([
+      proposal({ id: 'new', displayName: 'New Idea', status: 'submitted', attentionThreshold: 100, contributedAttention: 20, updatedAt: '2026-01-03T00:00:00.000Z' }),
+      proposal({ id: 'nearly', displayName: 'Nearly Ready', status: 'funding', attentionThreshold: 100, contributedAttention: 90, updatedAt: '2026-01-01T00:00:00.000Z' }),
+      proposal({ id: 'ready', displayName: 'Ready Soul', status: 'ready_to_birth', attentionThreshold: 100, contributedAttention: 100, updatedAt: '2026-01-02T00:00:00.000Z' }),
+    ]);
+
+    expect(sorted.map(item => item.id)).toEqual(['ready', 'nearly', 'new']);
+  });
+});
+
+describe('sortResidentsForAttention', () => {
+  function resident(input: Partial<ResidentDashboardRow> & Pick<ResidentDashboardRow, 'name'>): ResidentDashboardRow {
+    return {
+      name: input.name,
+      online: input.online ?? false,
+      attention: input.attention,
+    } as ResidentDashboardRow;
+  }
+
+  test('puts lowest-attention residents first for simple support decisions', () => {
+    const sorted = sortResidentsForAttention([
+      resident({ name: 'Steady', online: true, attention: 20 }),
+      resident({ name: 'Unknown', online: true }),
+      resident({ name: 'Critical', online: false, attention: 0 }),
+      resident({ name: 'Low', online: true, attention: 2 }),
+    ]);
+
+    expect(sorted.map(item => item.name)).toEqual(['Critical', 'Low', 'Steady', 'Unknown']);
   });
 });
 
