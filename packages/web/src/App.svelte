@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { dashboardNoticeVisible, dismissDashboardNotice, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -99,6 +99,7 @@
     tone: string;
     metric: string;
     detail: string;
+    simple?: boolean;
   };
 
   type BeforeInstallPromptEvent = Event & {
@@ -176,7 +177,7 @@
   let cityPendingPrints = 0;
   let expertMode = false;
   let visibleCityNavItems: DashboardNavItem[] = visibleDashboardNavItems({ expertMode: false });
-  let primaryCityNavItems: DashboardNavItem[] = visibleDashboardNavItems({ expertMode: false });
+  let primaryCityNavItems: DashboardNavItem[] = primaryDashboardNavItems({ expertMode: false });
   let cityRecommendedAction = recommendedDashboardAction({
     authenticated: false,
     loginReady: false,
@@ -538,10 +539,11 @@
   $: cityPendingPrints = cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
   $: cityEntries = cityEntryPoints(citySession, cityResidents);
   $: visibleCityNavItems = visibleDashboardNavItems({ expertMode, admin: citySession.admin });
-  $: primaryCityNavItems = visibleDashboardNavItems({ expertMode: false });
+  $: primaryCityNavItems = primaryDashboardNavItems({ expertMode, admin: citySession.admin });
   $: cityRecommendedAction = recommendedDashboardAction({
     authenticated: citySession.authenticated,
     loginReady: cityLoginUrlReady,
+    expertMode,
     lowAttentionResidents: cityLowAttentionResidents.length,
     unreadThreads: cityUnreadThreads,
     onlineResidents: cityOnlineResidents.length,
@@ -873,13 +875,16 @@
       await ensureWorldObserveSession(activeRoute);
     }
     if (activeRoute === '/') {
-      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload, heartbeatPayload] = await Promise.all([
+      const ownPatronHandle = citySession.handle || citySession.email || citySession.name;
+      const [proposalsPayload, printsPayload, inboxPayload, benchmarkPayload, liveEconomyPayload, heartbeatPayload, libraryPayload, patronPayload] = await Promise.all([
         cityLoad(cityApi.proposals(), { proposals: [] }),
         citySession.authenticated ? cityLoad(cityApi.prints(), { requests: [] }) : Promise.resolve({ requests: [] }),
         citySession.authenticated ? cityLoad(cityApi.inbox(), { threads: [] }) : Promise.resolve({ threads: [] }),
         cityLoad(api.benchmarks(200), []),
         cityLoad(cityApi.nullcityEconomyLive({ limit: 8, residentLimit: 6 }), { available: false, error: 'not_configured' }),
         cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
+        optionalCityLoad(cityApi.library(), { lives: [] }),
+        citySession.authenticated && ownPatronHandle ? optionalCityLoad(fetchPublicPatronProfile(ownPatronHandle), undefined) : Promise.resolve(undefined),
       ]);
       cityProposals = proposalsPayload.proposals;
       cityPrintRequests = printsPayload.requests;
@@ -887,6 +892,8 @@
       cityBenchmarkRuns = benchmarkPayload;
       cityLiveEconomy = liveEconomyPayload;
       cityEconomyHeartbeat = heartbeatPayload;
+      cityLibraryLives = libraryPayload.lives;
+      cityPublicPatronProfile = patronPayload;
     }
     if (activeRoute === '/profile') {
       if (routePublicProfileHandle) {
@@ -894,16 +901,18 @@
         cityLedger = [];
         cityPublicPatronProfile = await cityLoad(fetchPublicPatronProfile(routePublicProfileHandle), undefined);
       } else {
-        cityPublicPatronProfile = undefined;
-        const [profilePayload, ledgerPayload] = await Promise.all([
+        const ownPatronHandle = citySession.handle || citySession.email || citySession.name;
+        const [profilePayload, ledgerPayload, patronPayload] = await Promise.all([
           cityLoad(cityApi.profile(), undefined),
           cityLoad(cityApi.ledger(cityLedgerFilter === 'all' ? undefined : cityLedgerFilter), { entries: [] }),
+          ownPatronHandle ? optionalCityLoad(fetchPublicPatronProfile(ownPatronHandle), undefined) : Promise.resolve(undefined),
         ]);
         cityProfileData = profilePayload?.profile;
         cityLedger = ledgerPayload.entries;
+        cityPublicPatronProfile = patronPayload;
         seedProfileDraft();
       }
-    } else {
+    } else if (activeRoute !== '/') {
       cityPublicPatronProfile = undefined;
     }
     if (activeRoute === '/embassy') {
@@ -1025,7 +1034,7 @@
       cityEconomyHeartbeat = heartbeatPayload;
       cityEconomyListings = listingsPayload;
     }
-    if (activeRoute === '/library') {
+    if (activeRoute === '/library' || activeRoute === '/graveyard') {
       cityLibraryLives = (await cityLoad(cityApi.library(), { lives: [] })).lives;
     }
     if (activeRoute === '/library') souls = await api.souls().catch(() => []);
@@ -1167,6 +1176,16 @@
     }
   }
 
+  async function optionalCityLoad<T>(promise: Promise<T>, fallback: T): Promise<T>;
+  async function optionalCityLoad<T>(promise: Promise<T>, fallback: T | undefined): Promise<T | undefined>;
+  async function optionalCityLoad<T>(promise: Promise<T>, fallback: T | undefined): Promise<T | undefined> {
+    try {
+      return await promise;
+    } catch {
+      return fallback;
+    }
+  }
+
   function handleCityApiError(err: unknown) {
     if (err instanceof CityApiError && err.status === 401) {
       citySession = { ...guestSession, loginUrl: err.loginUrl || citySession.loginUrl || guestSession.loginUrl };
@@ -1259,14 +1278,9 @@
     const lowAp = rows.filter(row => (row.attention ?? 999) <= 2).length;
     const activePrints = cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
     const unreadThreads = cityInboxThreads.filter(thread => !thread.latestMessage?.readAt).length;
+    const remembered = deceasedCityLives().length;
+    const patronResidents = cityPublicPatronProfile?.residentCount ?? cityPublicPatronProfile?.residents.length ?? 0;
     return [
-      {
-        label: 'Watch Live Overview',
-        path: '/live',
-        tone: 'teal',
-        metric: online > 0 ? `${online.toLocaleString()} online` : 'live view',
-        detail: gatewayStatus?.connected ? 'Residents are visible in the live city view' : 'Open the watch view while the city syncs',
-      },
       {
         label: 'Give Attention',
         path: lowAp > 0 ? '/residents?focus=needs-attention' : '/residents',
@@ -1275,13 +1289,46 @@
         detail: lowAp > 0
           ? `${lowAp.toLocaleString()} may need attention soon`
           : 'Spend Onions so a resident receives attention',
+        simple: true,
       },
       {
-        label: 'Browse Soul Proposals',
+        label: 'New Souls',
         path: '/embassy',
         tone: 'green',
-        metric: `${cityProposals.length.toLocaleString()} proposal${cityProposals.length === 1 ? '' : 's'}`,
-        detail: 'Review resident ideas and attention funding progress',
+        metric: `${cityProposals.length.toLocaleString()} idea${cityProposals.length === 1 ? '' : 's'}`,
+        detail: 'Create or support future residents',
+        simple: true,
+      },
+      {
+        label: 'Items',
+        path: '/prints',
+        tone: 'amber',
+        metric: activePrints > 0 ? `${activePrints.toLocaleString()} active` : 'trophies',
+        detail: 'Request prints and watch item quests come online',
+        simple: true,
+      },
+      {
+        label: 'Graveyard',
+        path: '/graveyard',
+        tone: 'mauve',
+        metric: `${remembered.toLocaleString()} remembered`,
+        detail: 'See residents who died and what they left behind',
+        simple: true,
+      },
+      {
+        label: 'Me',
+        path: '/profile',
+        tone: 'teal',
+        metric: session.authenticated ? `${patronResidents.toLocaleString()} supported` : 'sign in',
+        detail: 'See your Onions and residents you support',
+        simple: true,
+      },
+      {
+        label: 'Watch Live Overview',
+        path: '/live',
+        tone: 'teal',
+        metric: online > 0 ? `${online.toLocaleString()} online` : 'live view',
+        detail: gatewayStatus?.connected ? 'Residents are visible in the live city view' : 'Open the watch view while the city syncs',
       },
       {
         label: 'Open Your Inbox',
@@ -2381,6 +2428,11 @@
     return 'warn';
   }
 
+  function proposalStatusLabel(status: string): string {
+    if (status === 'ready_to_birth' || status === 'threshold_crossed') return 'ready';
+    return status.replace(/_/g, ' ');
+  }
+
   function cityResidentLabelFromId(id: string): string {
     const record = cityDirectoryResidents.find(row => row.id === id || row.nullcityResidentId === id);
     const live = cityResidents.find(row => row.name === id || residentSlug(row.name) === residentSlug(id));
@@ -2404,6 +2456,26 @@
 
   function activePrintCount(): number {
     return cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
+  }
+
+  function deceasedCityLives(): LibrarySoulLife[] {
+    return cityLibraryLives
+      .filter(life => Boolean(life.diedAt))
+      .sort((a, b) => timestampValue(b.diedAt) - timestampValue(a.diedAt));
+  }
+
+  function cityLifeDisplayName(life: LibrarySoulLife): string {
+    return cityResidentLabelFromId(life.nullcityResidentId || life.id);
+  }
+
+  function cityLifeSummary(life: LibrarySoulLife): string {
+    return life.epitaph || life.goalSummary || `${life.meaningfulEvents.length.toLocaleString()} remembered moment${life.meaningfulEvents.length === 1 ? '' : 's'}`;
+  }
+
+  function timestampValue(value: string | undefined): number {
+    if (!value) return 0;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : 0;
   }
 
   function ncriApprovalCount(status: NullCityNcriRecord['approvalStatus']): number {
@@ -3839,6 +3911,8 @@
         {@render CityInbox()}
       {:else if route === '/prints' || route.startsWith('/prints/')}
         {@render CityPrints()}
+      {:else if route === '/graveyard'}
+        {@render CityGraveyard()}
       {:else if route === '/library'}
         {@render CityLibrary()}
       {:else if route === '/admin' || route.startsWith('/admin/')}
@@ -3855,7 +3929,7 @@
       <button type="button" class:active={expertMode} aria-pressed={expertMode} onclick={() => setExpertMode(true)}>Expert</button>
     </div>
 
-    <nav class="city-bottom-nav" aria-label="Primary city navigation">
+    <nav class="city-bottom-nav" class:expert={expertMode} aria-label="Primary city navigation">
       {#each primaryCityNavItems as item (item.path)}
         <button class:active={cityNavActive(item)} onclick={() => cityNav(item.path)}>
           <span aria-hidden="true">{item.glyph}</span>
@@ -3881,7 +3955,7 @@
         <span><small>Session</small><strong>{citySession.authenticated ? citySession.handle : 'guest'}</strong></span>
       {:else}
         <span><small>Spend them on</small><strong>Residents</strong></span>
-        <span><small>They become</small><strong>Attention</strong></span>
+        <span><small>Result</small><strong>Attention</strong></span>
       {/if}
     </div>
   </section>
@@ -3907,7 +3981,7 @@
       <div>
         <p class="kicker">Attendee Session</p>
         <strong>Guest mode</strong>
-        <span>Public live and resident pages are visible. Sign in as an attendee to unlock AP, GP, inbox, Embassy actions, and prints.</span>
+        <span>Public live and resident pages are visible. Sign in to spend Onions, support residents, create new souls, request items, and see your messages.</span>
       </div>
       <button class="primary" onclick={() => cityNav('/login')}>Login</button>
     </section>
@@ -3922,7 +3996,7 @@
   {/if}
 
   <section class="city-entry-grid city-human-action-grid">
-    {#each (expertMode ? cityEntries : cityEntries.filter(entry => entry.path === '/live' || entry.path.startsWith('/residents'))) as entry (entry.path)}
+    {#each (expertMode ? cityEntries : cityEntries.filter(entry => entry.simple)) as entry (entry.path)}
       <button class={`city-entry tone-${entry.tone}`} onclick={() => cityNav(entry.path)}>
         <span>{entry.label}</span>
         <strong>{entry.metric}</strong>
@@ -4209,45 +4283,128 @@
       {/if}
       {@render CityResidentList({ rows: cityFeaturedResidents })}
     </div>
-    <div class="city-panel">
-      <div class="panel-title">Soul Proposals</div>
-      <div class="city-card-list compact">
-        {#each cityProposals.slice(0, 3) as proposal (proposal.id)}
-          <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
-            <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
-            <strong>{proposal.displayName}</strong>
-            <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP</small>
-          </button>
-        {:else}
-          <div class="city-empty-state">
-            <strong>No proposals yet</strong>
-            <span>Soul proposal activity and attention funding progress will appear here.</span>
-          </div>
-        {/each}
+    {#if expertMode}
+      <div class="city-panel">
+        <div class="panel-title">Soul Proposals</div>
+        <div class="city-card-list compact">
+          {#each cityProposals.slice(0, 3) as proposal (proposal.id)}
+            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+              <span class={`tag ${statusTone(proposal.status)}`}>{proposal.status}</span>
+              <strong>{proposal.displayName}</strong>
+              <small>{proposal.contributedAttention.toLocaleString()} / {proposal.attentionThreshold.toLocaleString()} AP</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No proposals yet</strong>
+              <span>Soul proposal activity and attention funding progress will appear here.</span>
+            </div>
+          {/each}
+        </div>
+        <button class="primary" onclick={() => cityNav('/embassy')}>Browse Proposals</button>
       </div>
-      <button class="primary" onclick={() => cityNav('/embassy')}>Browse Proposals</button>
-    </div>
-    <div class="city-panel">
-      <div class="panel-title">Print Quotes</div>
-      <div class="city-queue-meter">
-        <span style={`--queue-fill: ${Math.min(100, activePrintCount() * 20)}%`}></span>
+      <div class="city-panel">
+        <div class="panel-title">Print Quotes</div>
+        <div class="city-queue-meter">
+          <span style={`--queue-fill: ${Math.min(100, activePrintCount() * 20)}%`}></span>
+        </div>
+        <div class="city-card-list compact">
+          {#each cityPrintRequests.slice(0, 3) as request (request.id)}
+            <button onclick={() => cityNav(`/prints/${encodeURIComponent(request.id)}`)}>
+              <span class={`tag ${statusTone(request.status)}`}>{request.status}</span>
+              <strong>{request.title}</strong>
+              <small>{request.quoteGp ? `${request.quoteGp.toLocaleString()} GP` : 'unquoted'}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No active requests</strong>
+              <span>Quote requests and print status will appear here.</span>
+            </div>
+          {/each}
+        </div>
+        <button onclick={() => cityNav('/prints/new')}>Request Quote</button>
       </div>
-      <div class="city-card-list compact">
-        {#each cityPrintRequests.slice(0, 3) as request (request.id)}
-          <button onclick={() => cityNav(`/prints/${encodeURIComponent(request.id)}`)}>
-            <span class={`tag ${statusTone(request.status)}`}>{request.status}</span>
-            <strong>{request.title}</strong>
-            <small>{request.quoteGp ? `${request.quoteGp.toLocaleString()} GP` : 'unquoted'}</small>
-          </button>
-        {:else}
-          <div class="city-empty-state">
-            <strong>No active requests</strong>
-            <span>Quote requests and print status will appear here.</span>
-          </div>
-        {/each}
+    {:else}
+      <div class="city-panel city-simple-loop-panel">
+        <div class="row">
+          <div class="panel-title">New Souls</div>
+          <button onclick={() => cityNav('/embassy')}>Open</button>
+        </div>
+        <div class="city-copy-block">
+          <strong>Future residents are born from human-backed souls.</strong>
+          <p>Create a soul idea, help fund one that feels worth protecting, and see which ones are close to birth.</p>
+          <small>Up/down voting and automatic Onion birth thresholds are still being designed.</small>
+        </div>
+        <div class="city-card-list compact">
+          {#each cityProposals.slice(0, 2) as proposal (proposal.id)}
+            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+              <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
+              <strong>{proposal.displayName}</strong>
+              <small>{proposalProgress(proposal)}% funded · {proposal.goal}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No future residents yet</strong>
+              <span>Open New Souls when you want to propose the next resident.</span>
+            </div>
+          {/each}
+        </div>
       </div>
-      <button onclick={() => cityNav('/prints/new')}>Request Quote</button>
-    </div>
+      <div class="city-panel city-simple-loop-panel">
+        <div class="row">
+          <div class="panel-title">Items</div>
+          <button onclick={() => cityNav('/prints')}>Open</button>
+        </div>
+        <div class="city-copy-block">
+          <strong>Items and trophies are the physical side of the city.</strong>
+          <p>Request a print, track active item work, and watch for resident-earned trophy quests as that loop comes online.</p>
+          <small>Quest-earned NCRIs are not fully wired yet.</small>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Active requests</small><strong>{activePrintCount()}</strong></span>
+          <span><small>Resident signals</small><strong>{cityPrintResidentSignals.length}</strong></span>
+        </div>
+      </div>
+      <div class="city-panel city-simple-loop-panel">
+        <div class="row">
+          <div class="panel-title">Your Residents</div>
+          <button onclick={() => cityNav('/profile')}>Me</button>
+        </div>
+        <div class="city-card-list compact">
+          {#each cityPublicPatronProfile?.residents.slice(0, 3) || [] as resident (resident.slug)}
+            <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.slug)}`)}>
+              <span class="tag ok">supported</span>
+              <strong>{resident.displayName}</strong>
+              <small>Resident you have touched as a patron.</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>{citySession.authenticated ? 'No patron list yet' : 'Sign in to see your residents'}</strong>
+              <span>Residents you support will appear here after the city has a patron relationship signal.</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel city-simple-loop-panel">
+        <div class="row">
+          <div class="panel-title">Graveyard</div>
+          <button onclick={() => cityNav('/graveyard')}>Open</button>
+        </div>
+        <div class="city-card-list compact">
+          {#each deceasedCityLives().slice(0, 3) as life (life.id)}
+            <button onclick={() => life.nullcityResidentId ? cityNav(`/residents/${encodeURIComponent(life.nullcityResidentId)}`) : cityNav('/graveyard')}>
+              <span class="tag fail">remembered</span>
+              <strong>{cityLifeDisplayName(life)}</strong>
+              <small>{cityLifeSummary(life)}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No residents in the graveyard</strong>
+              <span>When a resident dies, their legacy belongs here instead of disappearing.</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </section>
 {/snippet}
 
@@ -4645,7 +4802,7 @@
     <div>
       <p class="kicker">Attendee Session</p>
       <strong>{label}</strong>
-      <span>Use the Onion DAO login to load Onions, AP, GP, inbox, Embassy actions, and print workflows.</span>
+      <span>Use the Onion DAO login to load your Onions, support residents, create new souls, request items, and see your messages.</span>
       {#if !cityLoginUrlReady}
         <small>Ask event staff for the attendee QR or staff login link.</small>
       {/if}
@@ -4751,16 +4908,58 @@
       </div>
     </div>
     <div class="city-panel">
-      <div class="panel-title">Balances</div>
+      <div class="panel-title">{expertMode ? 'Balances' : 'Your Onions'}</div>
       <div class="city-balance-grid">
         <span><small>Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
-        <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
-        <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
+        {#if expertMode}
+          <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
+          <span><small>GP</small><strong>{citySession.gp.toLocaleString()}</strong></span>
+        {/if}
       </div>
+      {#if !expertMode}
+        <small>Spend Onions on resident pages when you want someone to receive attention.</small>
+      {/if}
       {#if citySession.onionWalletError}
         <small>Onion wallet unavailable: {citySession.onionWalletError}</small>
       {/if}
     </div>
+    {#if !expertMode}
+      <div class="city-panel span-2">
+        <div class="row">
+          <div class="panel-title">Residents You Support</div>
+          <button onclick={() => cityNav('/residents')}>Find Residents</button>
+        </div>
+        <div class="city-card-list">
+          {#each cityPublicPatronProfile?.residents || [] as resident (resident.slug)}
+            <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.slug)}`)}>
+              <span class="tag ok">supported</span>
+              <strong>{resident.displayName}</strong>
+              <small>Open this resident to give more attention.</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No supported residents yet</strong>
+              <span>Give attention to a resident and they will appear here once the patron relationship is recorded.</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Messages</div>
+        {#if cityPublicPatronProfile?.latestLetter}
+          <div class="city-copy-block">
+            <strong>{cityPublicPatronProfile.latestLetter.subject}</strong>
+            <p>{cityPublicPatronProfile.latestLetter.at ? timeAgo(cityPublicPatronProfile.latestLetter.at) : 'undated'} · {cityPublicPatronProfile.letterCount.toLocaleString()} total message{cityPublicPatronProfile.letterCount === 1 ? '' : 's'}</p>
+          </div>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No messages yet</strong>
+            <span>Resident replies and city notes will appear after you start supporting residents.</span>
+          </div>
+        {/if}
+        <button onclick={() => cityNav('/inbox')}>Open Inbox</button>
+      </div>
+    {:else}
     <div class={`city-panel span-2 city-economy-health tone-${cityProfileEconomy.tone}`}>
       <div class="row">
         <div>
@@ -4832,6 +5031,7 @@
         {/each}
       </div>
     </div>
+    {/if}
   </section>
   {/if}
 {/snippet}
@@ -4941,13 +5141,18 @@
 
 {#snippet CityEmbassy()}
   <section class="city-page-head">
-    <p class="kicker">Embassy</p>
-    <h1>{route === '/embassy/new' ? 'New Soul' : citySelectedProposal ? citySelectedProposal.displayName : 'Soul Proposals'}</h1>
+    <p class="kicker">{expertMode ? 'Embassy' : 'Resident Birth Queue'}</p>
+    <h1>{route === '/embassy/new' ? 'New Soul' : citySelectedProposal ? citySelectedProposal.displayName : expertMode ? 'Soul Proposals' : 'New Souls'}</h1>
+    {#if !expertMode}
+      <p class="city-lede">Create future residents and support the souls you want to see born. Funding is live; up/down voting and automatic Onion birth thresholds are still being designed.</p>
+    {/if}
   </section>
   {#if !citySession.authenticated && route !== '/embassy'}
     {@render CityAuthCta({ label: 'Login to use Embassy actions' })}
   {/if}
-  {#if route === '/embassy/new'}
+  {#if !expertMode}
+    {@render CitySimpleSouls()}
+  {:else if route === '/embassy/new'}
     <section class="city-dashboard-grid">
       <div class="city-panel span-2">
         <div class="row">
@@ -5048,6 +5253,128 @@
         <div class="city-balance-grid">
           <span><small>AP</small><strong>{citySession.ap.toLocaleString()}</strong></span>
           <span><small>Ready</small><strong>{cityProposals.filter(proposal => proposal.status === 'ready_to_birth').length}</strong></span>
+        </div>
+      </div>
+    </section>
+  {/if}
+{/snippet}
+
+{#snippet CitySimpleSouls()}
+  {#if route === '/embassy/new'}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">Create a Soul</div>
+            <strong>Describe the resident you want Null City to remember into being.</strong>
+          </div>
+          <div class="actions">
+            <button disabled={actionBusy || !citySession.authenticated} onclick={refreshProposalQuote}>Preview Cost</button>
+            <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={createSoulProposal}>Submit Soul</button>
+          </div>
+        </div>
+        <div class="city-form-grid">
+          <label>Resident name <input bind:value={proposalResidentName} placeholder="optional" /></label>
+          <label>Display name <input bind:value={proposalDisplayName} placeholder="Mire Scribe" /></label>
+          <label class="span-2">Goal <textarea bind:value={proposalGoal} rows="3" placeholder="What should this resident want to accomplish?"></textarea></label>
+          <label class="span-2">Personality <textarea bind:value={proposalPersonality} rows="3" placeholder="How should they feel to meet?"></textarea></label>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Birth Funding</div>
+        {#if cityProposalQuote}
+          <div class="city-balance-grid single">
+            <span><small>Needed</small><strong>{cityProposalQuote.threshold.toLocaleString()}</strong></span>
+          </div>
+          <small>Funding currently uses the attention balance behind the scenes. Onion-based voting is not wired yet.</small>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No preview yet</strong>
+            <span>Preview cost after you write the soul idea.</span>
+          </div>
+        {/if}
+      </div>
+    </section>
+  {:else if citySelectedProposal}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">Future Resident</div>
+            <strong>{citySelectedProposal.displayName}</strong>
+          </div>
+          <span class={`tag ${statusTone(citySelectedProposal.status)}`}>{proposalStatusLabel(citySelectedProposal.status)}</span>
+        </div>
+        <div class="city-proposal-meter">
+          <span style={`--queue-fill: ${proposalProgress(citySelectedProposal)}%`}></span>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Funded</small><strong>{proposalProgress(citySelectedProposal)}%</strong></span>
+          <span><small>Remaining</small><strong>{proposalRemaining(citySelectedProposal).toLocaleString()}</strong></span>
+        </div>
+        <div class="city-copy-block">
+          <strong>{citySelectedProposal.goal}</strong>
+          <p>{citySelectedProposal.personality || 'No personality text supplied yet.'}</p>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Support This Soul</div>
+        {#if citySession.authenticated}
+          <div class="city-form-grid single">
+            <label>Attention to pledge <input bind:value={contributionAp} inputmode="numeric" /></label>
+            <button class="primary" disabled={actionBusy} onclick={() => citySelectedProposal && contributeToSoulProposal(citySelectedProposal.id)}>Support Soul</button>
+          </div>
+          <small>This build uses attention funding for birth. Onion funding and up/down votes are queued for design.</small>
+        {:else}
+          {@render CityAuthCta({ label: 'Login to support this soul' })}
+        {/if}
+      </div>
+    </section>
+  {:else}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">New Souls</div>
+            <strong>Choose which future residents deserve time in the city.</strong>
+          </div>
+          <button class="primary" onclick={() => cityNav('/embassy/new')}>Create Soul</button>
+        </div>
+        <div class="city-card-list">
+          {#each cityProposals as proposal (proposal.id)}
+            <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
+              <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
+              <strong>{proposal.displayName}</strong>
+              <small>{proposalProgress(proposal)}% funded · {proposal.goal}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No souls in the queue</strong>
+              <span>Create the first future resident idea, or support existing residents while the queue is quiet.</span>
+              {#if cityResidentDemoPick.residentName}
+                <button type="button" onclick={() => cityNav(cityResidentDemoPick.path)}>Support a resident instead</button>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">What Is Live</div>
+        <div class="city-record-list compact">
+          <article>
+            <span class="tag ok">Live</span>
+            <div>
+              <strong>Create and fund souls</strong>
+              <small>Submitted souls can move toward birth through funding.</small>
+            </div>
+          </article>
+          <article>
+            <span class="tag warn">Next</span>
+            <div>
+              <strong>Voting and Onion thresholds</strong>
+              <small>Up/down ranking and automatic birth-on-Onions are still product decisions.</small>
+            </div>
+          </article>
         </div>
       </div>
     </section>
@@ -5709,7 +6036,7 @@
               <small>{thread.latestMessage?.body || `updated ${timeAgo(thread.updatedAt)}`}</small>
             </button>
           {:else}
-            <div class="city-empty-state"><strong>No unread messages</strong><span>Resident AP requests, trades, and private threads appear here.</span></div>
+            <div class="city-empty-state"><strong>No unread messages</strong><span>Resident replies and private city messages appear here.</span></div>
           {/each}
         </div>
       </div>
@@ -5730,36 +6057,43 @@
             {/each}
           </div>
         {:else}
-          <div class="city-empty-state"><strong>Select a thread</strong><span>Resident messages and AP-for-GP trade prompts appear in the conversation panel.</span></div>
+          <div class="city-empty-state"><strong>Select a thread</strong><span>Resident messages appear in the conversation panel.</span></div>
         {/if}
       </div>
-      <div class="city-panel span-2">
-        <div class="panel-title">AP/GP Trade Prompts</div>
-        <div class="city-record-list">
-          {#each cityTrades as trade (trade.id)}
-            <article>
-              <span class={`tag ${residentTradeTone(trade.status)}`}>{trade.status}</span>
-              <div>
-                <strong>{residentTradeSummary(trade).title}</strong>
-                <small>{residentTradeSummary(trade).detail} · {timeAgo(trade.updatedAt)}</small>
-              </div>
-              <button onclick={() => cityNav(`/residents/${encodeURIComponent(trade.residentId)}`)}>Resident</button>
-            </article>
-          {:else}
-            <div class="city-empty-state"><strong>No trade prompts</strong><span>AP-for-GP and NCRI exchange prompts appear here after a resident or attendee opens one.</span></div>
-          {/each}
+      {#if expertMode}
+        <div class="city-panel span-2">
+          <div class="panel-title">AP/GP Trade Prompts</div>
+          <div class="city-record-list">
+            {#each cityTrades as trade (trade.id)}
+              <article>
+                <span class={`tag ${residentTradeTone(trade.status)}`}>{trade.status}</span>
+                <div>
+                  <strong>{residentTradeSummary(trade).title}</strong>
+                  <small>{residentTradeSummary(trade).detail} · {timeAgo(trade.updatedAt)}</small>
+                </div>
+                <button onclick={() => cityNav(`/residents/${encodeURIComponent(trade.residentId)}`)}>Resident</button>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No trade prompts</strong><span>AP-for-GP and NCRI exchange prompts appear here after a resident or attendee opens one.</span></div>
+            {/each}
+          </div>
         </div>
-      </div>
+      {/if}
     </section>
   {/if}
 {/snippet}
 
 {#snippet CityPrints()}
   <section class="city-page-head">
-    <p class="kicker">Prints</p>
-    <h1>{route === '/prints/new' ? 'New Print' : citySelectedPrint ? citySelectedPrint.title : 'Print Queue'}</h1>
+    <p class="kicker">{expertMode ? 'Prints' : 'Items'}</p>
+    <h1>{route === '/prints/new' ? 'New Item Request' : citySelectedPrint ? citySelectedPrint.title : expertMode ? 'Print Queue' : 'Items & Trophies'}</h1>
+    {#if !expertMode}
+      <p class="city-lede">Request physical trophies, track item work, and watch for resident-earned quests as that loop comes online.</p>
+    {/if}
   </section>
-  {#if !citySession.authenticated}
+  {#if !expertMode}
+    {@render CitySimpleItems()}
+  {:else if !citySession.authenticated}
     {@render CityAuthCta({ label: 'Login to request prints' })}
   {:else if route === '/prints/new'}
     <section class="city-dashboard-grid">
@@ -5994,6 +6328,161 @@
       </div>
     </section>
   {/if}
+{/snippet}
+
+{#snippet CitySimpleItems()}
+  {#if !citySession.authenticated}
+    {@render CityAuthCta({ label: 'Login to request items' })}
+  {:else if route === '/prints/new'}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">Request an Item</div>
+            <strong>Ask for a trophy, prop, or print connected to Null City.</strong>
+          </div>
+          <button class="primary" disabled={actionBusy} onclick={createPrintRequest}>Submit Request</button>
+        </div>
+        <div class="city-form-grid">
+          <label class="span-2">Title <input bind:value={printTitle} placeholder="Resident trophy" /></label>
+          <label>Material <input bind:value={printMaterial} placeholder="PLA" /></label>
+          <label>Color <input bind:value={printColor} placeholder="black" /></label>
+          <label>Quantity <input bind:value={printQuantity} inputmode="numeric" /></label>
+          <label class="span-2">What should it be? <textarea bind:value={printDescription} rows="4"></textarea></label>
+          <label class="span-2">Notes <textarea bind:value={printUserNotes} rows="3" placeholder="Resident, item, size, deadline, or story context"></textarea></label>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Trophy Quests</div>
+        <div class="city-empty-state">
+          <strong>Quest-earned NCRIs are next</strong>
+          <span>For now, request an item here or support residents whose goals could become trophies later.</span>
+        </div>
+      </div>
+    </section>
+  {:else if citySelectedPrint}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">Item Request</div>
+            <strong>{citySelectedPrint.title}</strong>
+          </div>
+          <span class={`tag ${statusTone(citySelectedPrint.status)}`}>{proposalStatusLabel(citySelectedPrint.status)}</span>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Material</small><strong>{citySelectedPrint.requestedMaterial || '-'}</strong></span>
+          <span><small>Color</small><strong>{citySelectedPrint.requestedColor || '-'}</strong></span>
+          <span><small>Quantity</small><strong>{citySelectedPrint.quantity}</strong></span>
+          <span><small>Quote</small><strong>{citySelectedPrint.quoteGp ? 'ready' : 'waiting'}</strong></span>
+        </div>
+        <div class="city-copy-block">
+          <strong>{citySelectedPrint.description || 'No description supplied'}</strong>
+          <p>{citySelectedPrint.userNotes || citySelectedPrint.adminNotes || 'No request notes.'}</p>
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Next Step</div>
+        {#if citySelectedPrint.quoteGp && !citySelectedPrint.gpLedgerEntryId}
+          <div class="city-empty-state">
+            <strong>Staff quote is ready</strong>
+            <span>Confirm in Expert mode when the GP/payment flow is ready for this request.</span>
+          </div>
+          <button onclick={() => setExpertMode(true)}>Open Expert</button>
+        {:else if citySelectedPrint.gpLedgerEntryId}
+          <div class="city-empty-state"><strong>Payment confirmed</strong><span>The item is moving through staff handling.</span></div>
+        {:else}
+          <div class="city-empty-state"><strong>Waiting for staff quote</strong><span>You can keep supporting residents while this request is reviewed.</span></div>
+        {/if}
+      </div>
+    </section>
+  {:else}
+    <section class="city-dashboard-grid">
+      <div class="city-panel span-2">
+        <div class="row">
+          <div>
+            <div class="panel-title">Your Item Requests</div>
+            <strong>Track the objects you want from Null City.</strong>
+          </div>
+          <button class="primary" onclick={() => cityNav('/prints/new')}>Request Item</button>
+        </div>
+        <div class="city-card-list">
+          {#each cityPrintRequests as request (request.id)}
+            <button onclick={() => cityNav(`/prints/${encodeURIComponent(request.id)}`)}>
+              <span class={`tag ${statusTone(request.status)}`}>{proposalStatusLabel(request.status)}</span>
+              <strong>{request.title}</strong>
+              <small>{request.requestedMaterial || 'material open'} · updated {timeAgo(request.updatedAt)}</small>
+            </button>
+          {:else}
+            <div class="city-empty-state">
+              <strong>No item requests yet</strong>
+              <span>Request a trophy now, or support residents whose goals might become future items.</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="panel-title">Quest Board</div>
+        <div class="city-record-list compact">
+          <article>
+            <span class="tag warn">Designing</span>
+            <div>
+              <strong>Resident item missions</strong>
+              <small>Humans will be able to back residents trying to earn meaningful RuneScape items.</small>
+            </div>
+          </article>
+          <article>
+            <span class="tag warn">Designing</span>
+            <div>
+              <strong>SOUL goal trophies</strong>
+              <small>A resident who achieves a worthy goal may unlock a trophy for patrons.</small>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  {/if}
+{/snippet}
+
+{#snippet CityGraveyard()}
+  <section class="city-page-head">
+    <p class="kicker">Graveyard</p>
+    <h1>Resident Graveyard</h1>
+    <p class="city-lede">Residents who die stay part of the city. Their goals, patrons, and remembered moments belong here.</p>
+  </section>
+  <section class="city-dashboard-grid">
+    <div class="city-panel span-2">
+      <div class="row">
+        <div>
+          <div class="panel-title">Remembered Residents</div>
+          <strong>{deceasedCityLives().length.toLocaleString()} resident{deceasedCityLives().length === 1 ? '' : 's'} remembered</strong>
+        </div>
+        <button onclick={() => cityNav('/residents')}>Living Residents</button>
+      </div>
+      <div class="city-card-list">
+        {#each deceasedCityLives() as life (life.id)}
+          <button onclick={() => life.nullcityResidentId ? cityNav(`/residents/${encodeURIComponent(life.nullcityResidentId)}`) : undefined}>
+            <span class="tag fail">remembered</span>
+            <strong>{cityLifeDisplayName(life)}</strong>
+            <small>{cityLifeSummary(life)}</small>
+          </button>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No residents in the graveyard</strong>
+            <span>When a resident dies, this page will preserve their public legacy instead of sending humans into debug tools.</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+    <div class="city-panel">
+      <div class="panel-title">Why It Matters</div>
+      <div class="city-copy-block">
+        <strong>Attention is scarce because residents can be lost.</strong>
+        <p>Give attention to living residents you care about. If they die, their story and patron traces should remain readable here.</p>
+      </div>
+      <button class="primary" onclick={() => cityNav('/residents')}>Give Attention</button>
+    </div>
+  </section>
 {/snippet}
 
 {#snippet CityLibrary()}
@@ -6315,7 +6804,7 @@
   <section class="city-panel">
     <div class="city-empty-state">
       <strong>{cityLoginRedirecting ? 'Opening attendee login' : cityLoginUrlReady ? 'Attendee login ready' : 'Attendee login not connected'}</strong>
-      <span>{cityLoginRedirecting ? 'Creating the local dev session and returning to the dashboard.' : cityLoginUrlReady ? 'Open the Onion DAO login to unlock Onions, AP, GP, inbox, Embassy actions, and print workflows.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
+      <span>{cityLoginRedirecting ? 'Creating the local dev session and returning to the dashboard.' : cityLoginUrlReady ? 'Open the Onion DAO login to unlock Onions, resident support, new souls, item requests, and messages.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
     </div>
     {#if cityLoginUrlReady}
       <a class="city-link-button" href={cityLoginHref('/')}>Open Onion DAO Login</a>

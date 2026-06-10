@@ -7,7 +7,7 @@ const dashboardNavSource = readFileSync(new URL('./end-user-dashboard.ts', impor
 describe('dashboard copy hygiene', () => {
   test('keeps guest session copy attendee-facing instead of naming API internals', () => {
     expect(appSource).not.toContain('`/api/session`');
-    expect(appSource).toContain('Sign in as an attendee to unlock AP, GP, inbox, Embassy actions, and prints.');
+    expect(appSource).toContain('Sign in to spend Onions, support residents, create new souls, request items, and see your messages.');
     expect(appSource).toContain('This dashboard remains in guest mode until attendee login is connected.');
   });
 
@@ -43,7 +43,7 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).not.toContain("route === '/story'");
     expect(appSource).not.toContain("cityNav('/story')");
     expect(appSource).toContain("route === '/live'");
-    expect(dashboardNavSource).toContain("{ label: 'Watch', path: '/live', match: '/live', glyph: 'WT' }");
+    expect(dashboardNavSource).toContain("{ label: 'Watch', path: '/live', match: '/live', glyph: 'WT', expertOnly: true }");
     expect(appSource).toContain("route === '/chronicle'");
     expect(dashboardNavSource).toContain("{ label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true }");
   });

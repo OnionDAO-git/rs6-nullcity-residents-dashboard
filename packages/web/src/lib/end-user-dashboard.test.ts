@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems } from './end-user-dashboard';
+import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav small and action-focused', () => {
     expect(visibleDashboardNavItems({ expertMode: false }).map(item => item.label)).toEqual([
       'Home',
-      'Watch',
       'Residents',
-      'Inbox',
+      'New Souls',
+      'Items',
+      'Graveyard',
       'Me',
     ]);
   });
@@ -15,11 +16,38 @@ describe('visibleDashboardNavItems', () => {
   test('reveals diagnostic and staff destinations only in expert mode', () => {
     const labels = visibleDashboardNavItems({ expertMode: true, admin: true }).map(item => item.label);
 
+    expect(labels).toContain('Watch');
+    expect(labels).toContain('Inbox');
     expect(labels).toContain('World');
     expect(labels).toContain('Stories');
     expect(labels).toContain('Economy');
-    expect(labels).toContain('Soul Proposals');
-    expect(labels).toContain('Print Quotes');
+    expect(labels).toContain('New Souls');
+    expect(labels).toContain('Items');
+    expect(labels).toContain('Library');
+    expect(labels).toContain('Admin');
+    expect(labels).toContain('Debug');
+  });
+});
+
+describe('primaryDashboardNavItems', () => {
+  test('keeps mobile simple mode to the five main human actions', () => {
+    expect(primaryDashboardNavItems({ expertMode: false }).map(item => item.label)).toEqual([
+      'Home',
+      'Residents',
+      'New Souls',
+      'Items',
+      'Me',
+    ]);
+  });
+
+  test('keeps expert destinations discoverable on mobile in expert mode', () => {
+    const labels = primaryDashboardNavItems({ expertMode: true, admin: true }).map(item => item.label);
+
+    expect(labels).toContain('Watch');
+    expect(labels).toContain('Inbox');
+    expect(labels).toContain('World');
+    expect(labels).toContain('Stories');
+    expect(labels).toContain('Economy');
     expect(labels).toContain('Library');
     expect(labels).toContain('Admin');
     expect(labels).toContain('Debug');
@@ -39,6 +67,7 @@ describe('recommendedDashboardAction', () => {
     })).toMatchObject({
       label: 'Sign in to participate',
       path: '/login',
+      detail: 'Unlock Onion spending, resident messages, new souls, and item requests.',
       tone: 'gold',
     });
   });
@@ -72,6 +101,74 @@ describe('recommendedDashboardAction', () => {
       label: 'Watch live overview',
       path: '/live',
       tone: 'teal',
+    });
+  });
+
+  test('keeps unfinished proposal and print loops out of the simple-mode recommendation', () => {
+    expect(recommendedDashboardAction({
+      authenticated: true,
+      loginReady: true,
+      lowAttentionResidents: 0,
+      unreadThreads: 0,
+      onlineResidents: 3,
+      pendingPrints: 1,
+      proposalCount: 2,
+      expertMode: false,
+    })).toMatchObject({
+      label: 'Watch live overview',
+      path: '/live',
+      tone: 'teal',
+    });
+  });
+
+  test('routes unread messages to Me instead of the expert-only inbox in simple mode', () => {
+    expect(recommendedDashboardAction({
+      authenticated: true,
+      loginReady: true,
+      lowAttentionResidents: 0,
+      unreadThreads: 3,
+      onlineResidents: 3,
+      pendingPrints: 0,
+      proposalCount: 0,
+      expertMode: false,
+    })).toMatchObject({
+      label: 'Check your messages',
+      path: '/profile',
+      tone: 'mauve',
+    });
+  });
+
+  test('can still recommend inbox directly in expert mode', () => {
+    expect(recommendedDashboardAction({
+      authenticated: true,
+      loginReady: true,
+      lowAttentionResidents: 0,
+      unreadThreads: 3,
+      onlineResidents: 3,
+      pendingPrints: 0,
+      proposalCount: 0,
+      expertMode: true,
+    })).toMatchObject({
+      label: 'Open your inbox',
+      path: '/inbox',
+      tone: 'mauve',
+    });
+  });
+
+  test('can still recommend proposal review in expert mode', () => {
+    expect(recommendedDashboardAction({
+      authenticated: true,
+      loginReady: true,
+      lowAttentionResidents: 0,
+      unreadThreads: 0,
+      onlineResidents: 3,
+      pendingPrints: 0,
+      proposalCount: 2,
+      expertMode: true,
+    })).toMatchObject({
+      label: 'Review new souls',
+      path: '/embassy',
+      tone: 'green',
     });
   });
 

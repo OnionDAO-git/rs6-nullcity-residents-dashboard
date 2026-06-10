@@ -120,6 +120,7 @@ export function cityRouteNeedsStoryDigests(route: string): boolean {
     normalized === '/live' ||
     normalized === '/residents' ||
     normalized.startsWith('/residents/') ||
+    normalized === '/graveyard' ||
     normalized === '/library' ||
     isChronicleRoute(normalized);
 }
@@ -132,6 +133,7 @@ export function cityRouteNeedsSnapshot(route: string): boolean {
     normalized === '/world' ||
     normalized === '/embassy' ||
     normalized.startsWith('/embassy/') ||
+    normalized === '/graveyard' ||
     normalized === '/residents' ||
     normalized.startsWith('/residents/') ||
     normalized === '/inbox' ||
@@ -147,7 +149,7 @@ export function isKnownCityRoute(route: string): boolean {
   if (normalized === '/' || normalized === '/login') return true;
   if (normalized === '/live') return true;
   if (normalized === '/economy') return true;
-  if (normalized === '/profile' || normalized === '/world' || normalized === '/library') return true;
+  if (normalized === '/profile' || normalized === '/world' || normalized === '/graveyard' || normalized === '/library') return true;
   if (isChronicleRoute(normalized)) return true;
   if (normalized === '/residents') return true;
   if (normalized.startsWith('/residents/') && normalized !== '/residents/new') return true;

@@ -4160,7 +4160,7 @@ pre {
 
   .city-main {
     width: auto;
-    padding: 18px 12px 24px;
+    padding: 18px 12px 104px;
   }
 
   .city-hero-band,
@@ -4281,6 +4281,15 @@ pre {
     border-top: 1px solid var(--ground-4);
   }
 
+  .city-bottom-nav.expert {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(72px, 1fr);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
   .city-bottom-nav button {
     min-width: 0;
     min-height: 48px;
@@ -4296,6 +4305,10 @@ pre {
     width: 21px;
     min-width: 21px;
     height: 21px;
+  }
+
+  .city-bottom-nav.expert button {
+    min-width: 72px;
   }
 
   .topbar {
@@ -4547,7 +4560,7 @@ pre {
   }
 
   .city-main {
-    padding: 14px 8px 20px;
+    padding: 14px 8px 112px;
   }
 
   .city-brand {

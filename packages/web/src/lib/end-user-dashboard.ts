@@ -17,6 +17,7 @@ export interface VisibleDashboardNavOptions {
 export interface RecommendedDashboardActionInput {
   authenticated: boolean;
   loginReady: boolean;
+  expertMode?: boolean;
   lowAttentionResidents: number;
   unreadThreads: number;
   onlineResidents: number;
@@ -72,15 +73,16 @@ export function dismissDashboardNotice(dismissed: ReadonlySet<string>, kind: str
 
 export const dashboardNavItems: DashboardNavItem[] = [
   { label: 'Home', path: '/', match: '/', glyph: 'HM' },
-  { label: 'Watch', path: '/live', match: '/live', glyph: 'WT' },
   { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
-  { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
+  { label: 'New Souls', path: '/embassy', match: '/embassy', glyph: 'SO' },
+  { label: 'Items', path: '/prints', match: '/prints', glyph: 'IT' },
+  { label: 'Graveyard', path: '/graveyard', match: '/graveyard', glyph: 'GY' },
   { label: 'Me', path: '/profile', match: '/profile', glyph: 'ME' },
+  { label: 'Watch', path: '/live', match: '/live', glyph: 'WT', expertOnly: true },
+  { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN', expertOnly: true },
   { label: 'World', path: '/world', match: '/world', glyph: 'WO', expertOnly: true },
   { label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true },
   { label: 'Economy', path: '/economy', match: '/economy', glyph: 'EC', expertOnly: true },
-  { label: 'Soul Proposals', path: '/embassy', match: '/embassy', glyph: 'SO', expertOnly: true },
-  { label: 'Print Quotes', path: '/prints', match: '/prints', glyph: 'PR', expertOnly: true },
   { label: 'Library', path: '/library', match: '/library', glyph: 'LB', expertOnly: true },
   { label: 'Admin', path: '/admin', match: '/admin', glyph: 'AD', expertOnly: true, adminOnly: true },
   { label: 'Debug', path: '/debug', match: '/debug', glyph: 'DG', expertOnly: true, adminOnly: true },
@@ -94,12 +96,20 @@ export function visibleDashboardNavItems(options: VisibleDashboardNavOptions): D
   });
 }
 
+export function primaryDashboardNavItems(options: VisibleDashboardNavOptions): DashboardNavItem[] {
+  const items = visibleDashboardNavItems(options);
+  if (options.expertMode) return items;
+  return items.filter(item => item.path !== '/graveyard');
+}
+
 export function recommendedDashboardAction(input: RecommendedDashboardActionInput): RecommendedDashboardAction {
+  const expertMode = input.expertMode === true;
+
   if (!input.authenticated && input.loginReady) {
     return {
       label: 'Sign in to participate',
       path: '/login',
-      detail: 'Unlock attention, inbox, Soul proposal, and print quote actions.',
+      detail: 'Unlock Onion spending, resident messages, new souls, and item requests.',
       tone: 'gold',
       actionLabel: 'Sign In',
     };
@@ -127,6 +137,15 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
   }
 
   if (input.unreadThreads > 0) {
+    if (!expertMode) {
+      return {
+        label: 'Check your messages',
+        path: '/profile',
+        detail: `${input.unreadThreads} unread update${input.unreadThreads === 1 ? '' : 's'} can be reached from Me.`,
+        tone: 'mauve',
+        actionLabel: 'Open Me',
+      };
+    }
     return {
       label: 'Open your inbox',
       path: '/inbox',
@@ -136,21 +155,21 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
     };
   }
 
-  if (input.proposalCount > 0) {
+  if (expertMode && input.proposalCount > 0) {
     return {
-      label: 'Browse Soul proposals',
+      label: 'Review new souls',
       path: '/embassy',
-      detail: `${input.proposalCount} proposal${input.proposalCount === 1 ? '' : 's'} can be reviewed or funded.`,
+      detail: `${input.proposalCount} future resident${input.proposalCount === 1 ? '' : 's'} can be reviewed or funded.`,
       tone: 'green',
       actionLabel: 'Browse',
     };
   }
 
-  if (input.pendingPrints > 0) {
+  if (expertMode && input.pendingPrints > 0) {
     return {
-      label: 'Check print quotes',
+      label: 'Check item requests',
       path: '/prints',
-      detail: `${input.pendingPrints} print request${input.pendingPrints === 1 ? '' : 's'} in progress.`,
+      detail: `${input.pendingPrints} item or print request${input.pendingPrints === 1 ? '' : 's'} in progress.`,
       tone: 'amber',
       actionLabel: 'Check Quotes',
     };

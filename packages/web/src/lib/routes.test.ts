@@ -106,6 +106,13 @@ describe('dashboard route helpers', () => {
     expect(isKnownCityRoute('/overview')).toBe(false);
   });
 
+  test('keeps the resident graveyard as a public dashboard route with city context', () => {
+    expect(isKnownCityRoute('/graveyard')).toBe(true);
+    expect(isProtectedCityRoute('/graveyard')).toBe(false);
+    expect(cityRouteNeedsSnapshot('/graveyard')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/graveyard')).toBe(true);
+  });
+
   test('keeps the live economy route public while loading city state', () => {
     expect(isKnownCityRoute('/economy')).toBe(true);
     expect(isProtectedCityRoute('/economy')).toBe(false);
@@ -117,6 +124,7 @@ describe('dashboard route helpers', () => {
     expect(cityRouteNeedsStoryDigests('/residents')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/residents/mother-anvil')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/library')).toBe(true);
+    expect(cityRouteNeedsStoryDigests('/graveyard')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/chronicle')).toBe(true);
     expect(cityRouteNeedsStoryDigests('/economy')).toBe(false);
   });
