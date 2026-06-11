@@ -27,6 +27,7 @@ async function withPublicApi<T>(run: (ctx: { config: DashboardConfig; runtime: R
       benchmarkRoot: path.join(root, 'benchmarks'),
       eventPublicRoot: path.join(root, 'public'),
       webDist: path.join(root, 'web-dist'),
+      cacheTtlMs: 0,
     };
     const runtime = new RuntimeRepository(
       config.memoryRoot,

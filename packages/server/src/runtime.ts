@@ -41,9 +41,24 @@ import type {
   Position,
 } from '@nullcity-dashboard/shared';
 import type { ResidentFeedSnapshot } from './gateway';
+import { TtlCache } from './ttl-cache';
 import { asRecord, latestDatedJsonl, listFiles, pathExists, readJsonFile, readJsonl, readTextFile, residentSlug, safeJoin } from './util';
 
+export const DEFAULT_RUNTIME_CACHE_TTL_MS = 15_000;
+
+export interface RuntimeCacheOptions {
+  /** TTL for cached cross-resident aggregations; <= 0 disables caching. */
+  cacheTtlMs?: number;
+  /** Clock override for tests. */
+  now?: () => number;
+}
+
 export class RuntimeRepository {
+  // Relationship summaries read every resident's full library timeline; they
+  // are user-independent (derived purely from controller files + the visible
+  // resident allowlist), so a shared cache keyed by (limit, allowlist) is safe.
+  private readonly relationshipCache: TtlCache<RelationshipActivitySummary>;
+
   constructor(
     private readonly memoryRoot: string,
     private readonly logsRoot: string,
@@ -51,7 +66,10 @@ export class RuntimeRepository {
     private readonly soulsRoot: string,
     private readonly residentSaveRoot = path.join(path.dirname(memoryRoot), 'residents'),
     private readonly benchmarkRoot = path.join(path.dirname(memoryRoot), 'benchmarks'),
-  ) {}
+    cacheOptions: RuntimeCacheOptions = {},
+  ) {
+    this.relationshipCache = new TtlCache(cacheOptions.cacheTtlMs ?? DEFAULT_RUNTIME_CACHE_TTL_MS, cacheOptions.now);
+  }
 
   async status(): Promise<ControllerStatus> {
     const [memory, logs, souls] = await Promise.all([
@@ -352,9 +370,14 @@ export class RuntimeRepository {
   }
 
   async relationshipSummary(limit = 20, visibleResidents?: Iterable<string>): Promise<RelationshipActivitySummary> {
-    const libraryRoot = path.join(this.memoryRoot, 'library');
     const visible = visibleResidents ? normalizedResidentSet(visibleResidents) : undefined;
     if (visible && visible.size === 0) return buildRelationshipSummary([], limit);
+    const cacheKey = `${limit}:${visible ? [...visible].sort().join(',') : '*'}`;
+    return this.relationshipCache.getOrCompute(cacheKey, () => this.readRelationshipSummary(limit, visible));
+  }
+
+  private async readRelationshipSummary(limit: number, visible?: Set<string>): Promise<RelationshipActivitySummary> {
+    const libraryRoot = path.join(this.memoryRoot, 'library');
     const files = await listFiles(libraryRoot, ['timeline.jsonl']);
     const summaries = await Promise.all(
       files.map(async file => {

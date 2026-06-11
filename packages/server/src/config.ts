@@ -23,6 +23,8 @@ export interface DashboardConfig {
   eventPublicRoot: string;
   webDist: string;
   webDevOrigin?: string;
+  /** TTL (ms) for cached cross-resident aggregations on hot routes; 0 disables caching. */
+  cacheTtlMs: number;
 }
 
 export function dashboardDataRoots(root: string): Pick<
@@ -62,7 +64,14 @@ export const config: DashboardConfig = {
   eventPublicRoot: process.env.DASHBOARD_EVENT_PUBLIC_ROOT || path.resolve(import.meta.dir, '../public'),
   webDist: process.env.DASHBOARD_WEB_DIST || path.resolve(import.meta.dir, '../../web/dist'),
   webDevOrigin: process.env.DASHBOARD_WEB_DEV_ORIGIN,
+  cacheTtlMs: cacheTtlMsFromEnv(process.env.DASHBOARD_CACHE_TTL_MS, 15_000),
 };
+
+function cacheTtlMsFromEnv(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : fallback;
+}
 
 function portFromEnv(...values: Array<string | number | undefined>): number {
   for (const value of values) {

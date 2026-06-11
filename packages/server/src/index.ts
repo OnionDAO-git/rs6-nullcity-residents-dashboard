@@ -1,4 +1,4 @@
-import type { CreateResidentSoulOptions, ResidentAppearance } from '@nullcity-dashboard/shared';
+import type { CreateResidentSoulOptions, ResidentAppearance, ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import { routeCityApi } from './city/routes';
 import { createCityServicesFromEnv, initializeCityServices } from './city/services';
 import { config, dashboardRequestIdleTimeoutSeconds, parseRsClientHost } from './config';
@@ -12,6 +12,7 @@ import { RuntimeRepository } from './runtime';
 import { readStorytellerDigestFeed } from './storyteller';
 import { routeRs6Api } from './rs6/routes';
 import { serveDashboardWeb } from './static';
+import { TtlCache } from './ttl-cache';
 import { jsonResponse, notFound, textResponse } from './util';
 
 const gateway = new GatewayClient(config.gatewayUrl, config.gatewayToken);
@@ -24,7 +25,14 @@ const runtime = new RuntimeRepository(
   config.soulsRoot,
   config.residentSaveRoot,
   config.benchmarkRoot,
+  { cacheTtlMs: config.cacheTtlMs },
 );
+
+// Enriched resident rows fan out into ~14 file reads per resident and are
+// polled on hot routes (/api/overview, /api/residents, /api/projector/overview).
+// They are user-independent (gateway roster + controller files only), so a
+// shared cache keyed by the roster filter is safe.
+const residentRowsCache = new TtlCache<ResidentDashboardRow[]>(config.cacheTtlMs);
 
 type WsMessage = string | ArrayBuffer | Uint8Array;
 
@@ -215,8 +223,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   }
 
   if (method === 'GET' && pathname === '/api/overview') {
-    const residents = await safeResidents(url.searchParams.get('filter') || 'all');
-    const rows = await enrichResidentRows(residents);
+    const rows = await cachedResidentRows(normalizeFilter(url.searchParams.get('filter')));
     const livingResidents = rows.filter(row => row.online).map(row => row.name);
     const [logs, recentLetters, patrons, relationships, gatewayStatus, controllerStatus, souls] = await Promise.all([
       runtime.readAllLogs(60),
@@ -253,8 +260,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   }
 
   if (method === 'GET' && pathname === '/api/public/overview') {
-    const residents = await safeResidents('all');
-    const rows = await enrichResidentRows(residents);
+    const rows = await cachedResidentRows('all');
     const patrons = await runtime.patronSummary(12).catch(() => undefined);
     return jsonResponse({
       generatedAt: new Date().toISOString(),
@@ -264,8 +270,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   }
 
   if (method === 'GET' && pathname === '/api/projector/overview') {
-    const residents = await safeResidents('all');
-    const rows = await enrichResidentRows(residents);
+    const rows = await cachedResidentRows('all');
     const [patrons, projectorFrame] = await Promise.all([
       runtime.patronSummary(12).catch(() => undefined),
       city.nullcityControl?.storytellerProjectorLatest?.().catch(() => undefined) ?? Promise.resolve(undefined),
@@ -279,9 +284,7 @@ async function routeApi(request: Request, url: URL): Promise<Response> {
   }
 
   if (method === 'GET' && pathname === '/api/residents') {
-    const filter = normalizeFilter(url.searchParams.get('filter'));
-    const residents = await safeResidents(filter);
-    return jsonResponse(await enrichResidentRows(residents));
+    return jsonResponse(await cachedResidentRows(normalizeFilter(url.searchParams.get('filter'))));
   }
   if (method === 'POST' && pathname === '/api/residents') {
     const { soul, ...resident } = normalizeCreateResident(await request.json());
@@ -423,6 +426,10 @@ async function safeResidents(filter: string) {
     // gateway roster is temporarily empty but controller memory is hot.
   }
   return runtime.listRuntimeResidentSummaries({ filter: normalized }).catch(() => []);
+}
+
+async function cachedResidentRows(filter: 'online' | 'offline' | 'all'): Promise<ResidentDashboardRow[]> {
+  return residentRowsCache.getOrCompute(filter, async () => enrichResidentRows(await safeResidents(filter)));
 }
 
 async function enrichResidentRows(residents: Awaited<ReturnType<typeof safeResidents>>) {

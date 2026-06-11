@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { PatronActivitySummary, RelationshipActivitySummary } from '@nullcity-dashboard/shared';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { buildSparkRuntimeSummary } from './runtime';
 
 describe('buildSparkRuntimeSummary', () => {
@@ -1113,6 +1113,79 @@ describe('RuntimeRepository relationships', () => {
     expect(JSON.stringify(summary)).not.toContain('alice@example.com');
     expect(JSON.stringify(summary)).not.toContain('ALICE@example.com');
     expect(JSON.stringify(summary)).not.toContain('bob');
+  });
+
+  test('serves relationship summaries from cache within the TTL and re-reads timelines after expiry', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-relationships-cache-'));
+    const memoryRoot = path.join(root, 'memory');
+    const libraryRoot = path.join(memoryRoot, 'library');
+    let nowMs = Date.parse('2026-06-11T12:00:00.000Z');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      undefined,
+      undefined,
+      { cacheTtlMs: 15_000, now: () => nowMs },
+    );
+    const timelineFile = path.join(libraryRoot, 'res-agent', 'timeline.jsonl');
+    await fs.mkdir(path.dirname(timelineFile), { recursive: true });
+    await fs.writeFile(timelineFile, JSON.stringify({ kind: 'patron_gift', ts: '2026-06-11T11:00:00.000Z', patronHandle: 'alice' }), 'utf8');
+
+    const reads = spyOn(fs, 'readFile');
+    try {
+      const timelineReads = () => reads.mock.calls.filter(call => String(call[0]).endsWith('timeline.jsonl')).length;
+
+      const first = await repository.relationshipSummary(5, ['res:agent']);
+      expect(first.totalPatronEvents).toBe(1);
+      const readsAfterFirst = timelineReads();
+      expect(readsAfterFirst).toBeGreaterThan(0);
+
+      await fs.appendFile(timelineFile, `\n${JSON.stringify({ kind: 'patron_gift', ts: '2026-06-11T11:30:00.000Z', patronHandle: 'bob' })}`, 'utf8');
+      nowMs += 14_999; // still inside the TTL
+      const second = await repository.relationshipSummary(5, ['res:agent']);
+      expect(second).toEqual(first);
+      expect(timelineReads()).toBe(readsAfterFirst);
+
+      nowMs += 1; // crosses the TTL boundary
+      const third = await repository.relationshipSummary(5, ['res:agent']);
+      expect(third.totalPatronEvents).toBe(2);
+      expect(timelineReads()).toBeGreaterThan(readsAfterFirst);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  test('caches relationship summaries per limit and visible-resident allowlist', async () => {
+    const { RuntimeRepository } = await import('./runtime');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-relationships-cache-keys-'));
+    const memoryRoot = path.join(root, 'memory');
+    const libraryRoot = path.join(memoryRoot, 'library');
+    const repository = new RuntimeRepository(
+      memoryRoot,
+      path.join(root, 'logs'),
+      path.join(root, 'agent-logs'),
+      path.join(root, 'souls'),
+      undefined,
+      undefined,
+      { cacheTtlMs: 60_000 },
+    );
+    for (const [slug, patronHandle] of [['res-agent', 'alice'], ['res-hans', 'bob']] as const) {
+      await fs.mkdir(path.join(libraryRoot, slug), { recursive: true });
+      await fs.writeFile(
+        path.join(libraryRoot, slug, 'timeline.jsonl'),
+        JSON.stringify({ kind: 'patron_gift', ts: '2026-06-11T11:00:00.000Z', patronHandle }),
+        'utf8',
+      );
+    }
+
+    const everyone = await repository.relationshipSummary(5);
+    const onlyAgent = await repository.relationshipSummary(5, ['res:agent']);
+    expect(everyone.residentsWithRelationships).toBe(2);
+    expect(onlyAgent.residentsWithRelationships).toBe(1);
+    expect(onlyAgent.residents.map(row => row.resident)).toEqual(['res:agent']);
   });
 
   test('filters library timelines to the visible resident allowlist', async () => {
