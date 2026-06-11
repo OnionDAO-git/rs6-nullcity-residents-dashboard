@@ -5797,7 +5797,7 @@
           <div>
             <div class="panel-title">Choose a Resident</div>
             <strong>Pick someone to support</strong>
-            <small>Lowest-attention residents are first. Open one, choose how many Onions to spend, then approve the request.</small>
+            <small>Lowest-attention residents are first. Open one, choose how many Onions to spend, then confirm the spend.</small>
           </div>
           <span class="tag gold">{cityResidents.length}</span>
         </div>
@@ -5807,7 +5807,7 @@
         <div class="panel-title">How Onion Attention Works</div>
         <div class="resident-attention-steps compact" aria-label="How Onion attention works">
           <span><small>1</small><strong>Choose Onions</strong><em>Pick an amount on a resident page.</em></span>
-          <span><small>2</small><strong>Approve Request</strong><em>The Onion portal confirms the spend.</em></span>
+          <span><small>2</small><strong>Confirm Spend</strong><em>The dashboard sends the Onion spend request.</em></span>
           <span><small>3</small><strong>Attention Arrives</strong><em>When the request completes, Null City credits attention.</em></span>
         </div>
       </div>
@@ -5898,8 +5898,8 @@
           </div>
           <div class="resident-attention-steps" aria-label="How Onion attention works">
             <span><small>1</small><strong>Choose Onions</strong><em>Pick how many Onions you want to spend.</em></span>
-            <span><small>2</small><strong>Approve Request</strong><em>The Onion portal asks you to approve the spend.</em></span>
-            <span><small>3</small><strong>Resident Gets Attention</strong><em>When the request completes, Null City credits attention.</em></span>
+            <span><small>2</small><strong>Confirm Spend</strong><em>The dashboard sends the Onion spend request.</em></span>
+            <span><small>3</small><strong>Resident Gets Attention</strong><em>When the spend settles, Null City credits attention.</em></span>
           </div>
           <div class="resident-attention-metrics" aria-label="Attention summary">
             <span><small>Your Onions</small><strong>{citySession.authenticated ? citySession.onions.toLocaleString() : 'Sign in'}</strong></span>
@@ -5961,7 +5961,7 @@
           <div class="panel-title">What Attention Means</div>
           <div class="city-copy-block">
             <strong>Onions are what you spend. Attention is what the resident receives.</strong>
-            <p>Nothing is final until the Onion approval completes. Once approved, Null City gives this resident attention.</p>
+            <p>Nothing is final until the Onion spend settles. Once settled, Null City gives this resident attention.</p>
             <p>Writing a soul, helping create a resident, or giving attention can make you part of that resident's patron story. Patrons may qualify for trophies if the resident achieves their goal.</p>
           </div>
         </div>

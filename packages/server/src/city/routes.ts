@@ -779,30 +779,69 @@ async function runOnionAttentionGrant(
   if (!username) return jsonResponse({ error: 'onion_username_required' }, { status: 400 });
   const idempotencyKey = stringBody(body, 'idempotencyKey') || crypto.randomUUID();
   const memo = stringBody(body, 'memo') || `Spend ${onionAmount} Onions to support ${residentId}`;
-  const requestResult = await context.oniondao.createRequest({
-    type: 'burn',
-    username,
-    amount: onionAmount,
-    callbackUrl: onionCallbackUrl(context.config),
-    requester: context.config.onionExternalRequester,
-    externalId: onionAttentionExternalId(auth.cityUser.id, residentId, idempotencyKey),
-    note: memo,
-    metadata: {
-      app: 'nullcity-dashboard',
-      cityUserId: auth.cityUser.id,
-      landingUserId: auth.landingUser.id,
-      residentId,
-      idempotencyKey,
-      attentionAmount,
-    },
+  let intent = await context.store.createAttentionGrantIntent({
+    cityUserId: auth.cityUser.id,
+    residentId,
+    apAmount: attentionAmount,
+    idempotencyKey,
   });
-
-  let onionRequest = await context.oniondao.requestStatus(requestResult.id);
-  if (onionRequest.status === 'pending') {
-    await context.oniondao.approveRequest(requestResult.id, sessionToken);
-    onionRequest = await context.oniondao.requestStatus(requestResult.id);
+  if (intent.state === 'settled') {
+    if (!intent.onionRequestId) return jsonResponse({ error: 'attention_grant_already_settled' }, { status: 409 });
+    const onionRequest = await context.oniondao.requestStatus(intent.onionRequestId);
+    const onionWalletResult = await onionWalletForUser(context, auth.landingUser);
+    return jsonResponse({
+      status: 'settled',
+      residentId,
+      onionRequest,
+      city: intent.cityResponse,
+      ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
+      ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
+    }, { status: 202 });
   }
-  if (onionRequest.status !== 'completed') {
+
+  if (!intent.onionRequestId) {
+    const requestResult = await context.oniondao.createRequest({
+      type: 'burn',
+      username,
+      amount: onionAmount,
+      callbackUrl: onionCallbackUrl(context.config),
+      requester: context.config.onionExternalRequester,
+      externalId: onionAttentionExternalId(auth.cityUser.id, residentId, idempotencyKey),
+      note: memo,
+      metadata: {
+        app: 'nullcity-dashboard',
+        cityUserId: auth.cityUser.id,
+        landingUserId: auth.landingUser.id,
+        residentId,
+        idempotencyKey,
+        attentionAmount,
+      },
+    });
+    intent = await context.store.updateAttentionGrantIntent(intent.id, {
+      state: 'awaiting_approval',
+      onionRequestId: requestResult.id,
+    });
+  }
+  const onionRequestId = intent.onionRequestId;
+  if (!onionRequestId) return jsonResponse({ error: 'onion_request_missing' }, { status: 500 });
+
+  let onionRequest = await context.oniondao.requestStatus(onionRequestId);
+  if (onionRequest.status === 'pending') {
+    await context.oniondao.approveRequest(onionRequestId, sessionToken);
+    onionRequest = await context.oniondao.requestStatus(onionRequestId);
+  }
+  const settlement = await settleOnionAttentionGrant(
+    { store: context.store, control: context.nullcityControl },
+    { onionRequestId, status: onionRequest.status, success: onionRequest.status === 'completed' },
+  );
+  if (settlement.state === 'denied' || settlement.state === 'failed') {
+    return jsonResponse({
+      status: `onion_spend_${settlement.state}`,
+      residentId,
+      onionRequest,
+    }, { status: 202 });
+  }
+  if (!settlement.settled) {
     return jsonResponse({
       status: 'pending_onion_settlement',
       residentId,
@@ -810,22 +849,12 @@ async function runOnionAttentionGrant(
     }, { status: 202 });
   }
 
-  const cityResponse = await context.nullcityControl.creditAttention(residentId, {
-    idempotencyKey,
-    amount: attentionAmount,
-    cityUserId: auth.cityUser.id,
-    personId: auth.landingUser.id,
-    patronHandle: auth.landingUser.handle || auth.landingUser.email || auth.landingUser.name,
-    sourceType: 'oniondao_attention_spend',
-    sourceId: onionRequest.id,
-    note: memo,
-  });
   const onionWalletResult = await onionWalletForUser(context, auth.landingUser);
   return jsonResponse({
     status: 'settled',
     residentId,
     onionRequest,
-    city: cityResponse,
+    city: settlement.intent?.cityResponse,
     ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
     ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
   }, { status: 202 });
@@ -853,7 +882,7 @@ function onionAttentionExternalId(cityUserId: string, residentId: string, idempo
 
 function onionCallbackUrl(config: CityConfig): string {
   if (config.onionCallbackUrl) return config.onionCallbackUrl;
-  const url = new URL('/api/onions/callback', config.publicBaseUrl || 'http://localhost:8787');
+  const url = new URL('/api/city/onion-callback', config.publicBaseUrl || 'http://localhost:8787');
   if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')) url.hostname = 'localhost';
   return url.toString();
 }

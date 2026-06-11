@@ -493,7 +493,13 @@ export function residentAttentionResultNotice(input: ResidentAttentionResultNoti
     }
     return `Onions spent. ${resident} received ${amount.toLocaleString()} attention.`;
   }
-  return `Approval pending in Onion portal. ${resident} has not received attention yet.`;
+  if (input.status === 'onion_spend_denied' || input.onionRequestStatus === 'denied') {
+    return `Onion spend denied. ${resident} has not received attention.`;
+  }
+  if (input.status === 'onion_spend_failed' || input.onionRequestStatus === 'failed') {
+    return `Onion spend failed. ${resident} has not received attention.`;
+  }
+  return `Onion spend pending. ${resident} has not received attention yet.`;
 }
 
 export function residentAttentionPreview(input: ResidentAttentionPreviewInput): ResidentAttentionPreview {

@@ -566,6 +566,15 @@ describe('residentAttentionResultNotice', () => {
       onionAmount: 75,
       status: 'pending_onion_settlement',
       onionRequestStatus: 'pending',
-    })).toBe('Approval pending in Onion portal. Hans has not received attention yet.');
+    })).toBe('Onion spend pending. Hans has not received attention yet.');
+  });
+
+  test('keeps denied Onion spends out of pending copy', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 75,
+      status: 'onion_spend_denied',
+      onionRequestStatus: 'denied',
+    })).toBe('Onion spend denied. Hans has not received attention.');
   });
 });
