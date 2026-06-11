@@ -6,7 +6,7 @@
   import { api, routeTo, type PublicOverviewSnapshot, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type NullCityApGpExchangeRecord, type OnionAttentionGrantResponse, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { cityDemoPathSteps, type CityDemoApSupportSignal } from './lib/demo-path';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
@@ -68,6 +68,7 @@
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { fetchPublicSoulLives, type PublicSoulLife } from './lib/soul-library';
+  import { parsePendingSupportIntent, pendingSupportIntentFromGrant, pendingSupportStorageKey, safeApprovalUrl, serializePendingSupportIntent, supportSettlementState, type PendingSupportIntent } from './lib/support-intent';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
   import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentRecentPublicSay, residentSupportPayoff, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem, type ResidentSupportPayoff } from './lib/end-user-dashboard';
@@ -428,6 +429,11 @@
   let cityLatestSupportReceipt = '';
   let citySupportPayoff: ResidentSupportPayoff | undefined;
   let citySupportPayoffResidentId = '';
+  let cityPendingSupport: PendingSupportIntent | undefined;
+  let cityPendingSupportStatusUnavailable = false;
+  let citySupportFailure: { residentId: string; residentName: string; message: string } | undefined;
+  let pendingSupportTimer: ReturnType<typeof setInterval> | undefined;
+  let pendingSupportCheckBusy = false;
   let gameClientMount: HTMLElement | undefined;
   let gameClientCanvas: HTMLCanvasElement | undefined;
   let gameClientController: GameClientController | undefined;
@@ -513,6 +519,12 @@
   $: cityResidentApSupport = residentApSupportRecommendation(cityResident);
   $: cityResidentSupportPayoff = citySupportPayoff && cityResidentId && residentRouteSlug(citySupportPayoffResidentId) === residentRouteSlug(cityResidentId)
     ? citySupportPayoff
+    : undefined;
+  $: cityResidentPendingSupport = cityPendingSupport && cityResidentId && residentRouteSlug(cityPendingSupport.residentId) === residentRouteSlug(cityResidentId)
+    ? cityPendingSupport
+    : undefined;
+  $: cityResidentSupportFailure = citySupportFailure && cityResidentId && residentRouteSlug(citySupportFailure.residentId) === residentRouteSlug(cityResidentId)
+    ? citySupportFailure
     : undefined;
   $: cityResidentCurrentAttention = cityResident?.attention ?? cityResidentReadModel?.currentAttention;
   $: cityResidentDisplayName = cityResidentReadModel?.displayName || (cityResident ? residentDisplayName(cityResident.name) : cityResidentId || 'this resident');
@@ -774,6 +786,7 @@
       document.removeEventListener('webkitfullscreenchange', fullscreenChangeListener);
       document.removeEventListener('keydown', fullscreenKeyListener);
       clearInterval(timer);
+      stopPendingSupportPolling();
       closeRuntimeStream();
       closeSessionStream();
       closeCityEconomyStream();
@@ -832,6 +845,164 @@
     return `${latestSupportReceiptStorageKey}.${encodeURIComponent(identity)}`;
   }
 
+  function pendingSupportStorageKeyForSession(session: CitySession): string {
+    if (!session.authenticated) return '';
+    const identity = session.cityUserId || session.handle || session.email || session.name;
+    return pendingSupportStorageKey(identity);
+  }
+
+  function setPendingSupport(intent: PendingSupportIntent | undefined) {
+    cityPendingSupport = intent;
+    cityPendingSupportStatusUnavailable = false;
+    const storageKey = pendingSupportStorageKeyForSession(citySession);
+    if (storageKey) {
+      try {
+        if (intent) window.localStorage.setItem(storageKey, serializePendingSupportIntent(intent));
+        else window.localStorage.removeItem(storageKey);
+      } catch {
+        // The pending card still renders for this session if local storage is blocked.
+      }
+    }
+    if (intent) startPendingSupportPolling();
+    else stopPendingSupportPolling();
+  }
+
+  function clearPendingSupport() {
+    setPendingSupport(undefined);
+  }
+
+  function loadPendingSupportForSession(session: CitySession) {
+    const storageKey = pendingSupportStorageKeyForSession(session);
+    if (!storageKey) return;
+    let stored: PendingSupportIntent | undefined;
+    try {
+      stored = parsePendingSupportIntent(window.localStorage.getItem(storageKey));
+    } catch {
+      stored = undefined;
+    }
+    if (!stored) return;
+    if (cityPendingSupport?.idempotencyKey === stored.idempotencyKey) return;
+    cityPendingSupport = stored;
+    startPendingSupportPolling();
+  }
+
+  function startPendingSupportPolling() {
+    stopPendingSupportPolling();
+    if (!cityPendingSupport) return;
+    pendingSupportTimer = setInterval(() => void checkPendingSupportStatus(), 4000);
+    void checkPendingSupportStatus();
+  }
+
+  function stopPendingSupportPolling() {
+    if (pendingSupportTimer !== undefined) {
+      clearInterval(pendingSupportTimer);
+      pendingSupportTimer = undefined;
+    }
+  }
+
+  async function checkPendingSupportStatus() {
+    const intent = cityPendingSupport;
+    if (!intent || pendingSupportCheckBusy) return;
+    pendingSupportCheckBusy = true;
+    try {
+      const payload = await cityApi.onionAttentionGrantStatus(intent.idempotencyKey);
+      const approvalUrl = safeApprovalUrl(payload.approvalUrl || payload.onionRequest?.approvalUrl);
+      if (approvalUrl && approvalUrl !== intent.approvalUrl && cityPendingSupport?.idempotencyKey === intent.idempotencyKey) {
+        setPendingSupport({ ...intent, approvalUrl });
+      }
+      const state = supportSettlementState(payload.status, payload.onionRequest?.status);
+      if (state === 'settled') {
+        settlePendingSupport(intent, payload.city);
+      } else if (state === 'denied' || state === 'failed') {
+        failPendingSupport(intent, state === 'denied' ? 'onion_spend_denied' : 'onion_spend_failed');
+      }
+    } catch (err) {
+      if (err instanceof CityApiError && err.status === 404) {
+        // The status endpoint is not deployed yet (or the key is unknown);
+        // fall back to the manual "check again" path on the pending card.
+        cityPendingSupportStatusUnavailable = true;
+        stopPendingSupportPolling();
+      }
+      // Other errors: keep the pending card and try again on the next tick.
+    } finally {
+      pendingSupportCheckBusy = false;
+    }
+  }
+
+  function settlePendingSupport(intent: PendingSupportIntent, city?: { creditedAmount?: number; attentionBefore?: number; attentionAfter?: number }) {
+    clearPendingSupport();
+    citySupportFailure = undefined;
+    const onResidentPage = Boolean(cityResidentId) && residentRouteSlug(intent.residentId) === residentRouteSlug(cityResidentId || '');
+    const recentSay = onResidentPage
+      ? residentRecentPublicSay({
+          posts: cityResidentPosts,
+          ...(cityResident?.lastEvent ? { lastEvent: cityResident.lastEvent } : {}),
+          ...(cityResident?.feed ? { feed: cityResident.feed } : {}),
+        })
+      : undefined;
+    citySupportPayoff = residentSupportPayoff({
+      residentName: intent.residentName,
+      onionAmount: intent.onionAmount,
+      ...(city?.creditedAmount === undefined ? {} : { creditedAmount: city.creditedAmount }),
+      ...(city?.attentionBefore === undefined ? {} : { attentionBefore: city.attentionBefore }),
+      ...(city?.attentionAfter === undefined ? {} : { attentionAfter: city.attentionAfter }),
+      ...(recentSay ? { recentSay } : {}),
+    });
+    citySupportPayoffResidentId = intent.residentId;
+    const receipt = residentAttentionResultNotice({
+      residentName: intent.residentName,
+      onionAmount: intent.onionAmount,
+      status: 'settled',
+      onionRequestStatus: 'completed',
+      ...(city?.creditedAmount === undefined ? {} : { creditedAmount: city.creditedAmount }),
+      ...(city?.attentionBefore === undefined ? {} : { attentionBefore: city.attentionBefore }),
+      ...(city?.attentionAfter === undefined ? {} : { attentionAfter: city.attentionAfter }),
+    });
+    rememberLatestSupportReceipt(receipt);
+    cityActionNotice = expertMode ? receipt : '';
+    void bootstrapSession();
+    void loadRoute(false);
+  }
+
+  function failPendingSupport(intent: PendingSupportIntent, status: 'onion_spend_denied' | 'onion_spend_failed') {
+    clearPendingSupport();
+    const message = residentAttentionResultNotice({
+      residentName: intent.residentName,
+      onionAmount: intent.onionAmount,
+      status,
+    });
+    citySupportFailure = { residentId: intent.residentId, residentName: intent.residentName, message };
+    rememberLatestSupportReceipt(message);
+    cityActionNotice = expertMode ? message : '';
+  }
+
+  async function recheckPendingSupport() {
+    const intent = cityPendingSupport;
+    if (!intent) return;
+    await runAction(async () => {
+      const result = await cityApi.grantResidentOnionAttention(intent.residentId, {
+        onionAmount: intent.onionAmount,
+        memo: intent.memo,
+        idempotencyKey: intent.idempotencyKey,
+      });
+      applySupportGrantResult({
+        residentId: intent.residentId,
+        residentName: intent.residentName,
+        onionAmount: intent.onionAmount,
+        idempotencyKey: intent.idempotencyKey,
+        memo: intent.memo,
+      }, result);
+      if (supportSettlementState(result.status, result.onionRequest.status) === 'settled') {
+        await bootstrapSession();
+        await loadRoute(false);
+      }
+    });
+  }
+
+  function dismissSupportFailure() {
+    citySupportFailure = undefined;
+  }
+
   function loadLatestSupportReceiptForSession(session: CitySession) {
     const storageKey = latestSupportReceiptStorageKeyForSession(session);
     if (!storageKey) {
@@ -873,6 +1044,7 @@
       setCityCsrfToken(citySession.csrfToken);
       if (!citySession.authenticated) inboxNotificationReady = false;
       loadLatestSupportReceiptForSession(citySession);
+      loadPendingSupportForSession(citySession);
       sessionLoading = false;
     }
   }
@@ -2223,6 +2395,8 @@
     await runAction(async () => {
       const onionAmount = positiveInt(grantAttentionOnions, 'Onion spend');
       const residentNameForNotice = selectedCityResidentDisplay();
+      const memo = grantAttentionMemo.trim();
+      const idempotencyKey = crypto.randomUUID();
       const recentSay = residentRecentPublicSay({
         posts: cityResidentPosts,
         ...(cityResident?.lastEvent ? { lastEvent: cityResident.lastEvent } : {}),
@@ -2230,39 +2404,77 @@
       });
       citySupportPayoff = undefined;
       citySupportPayoffResidentId = '';
-      const result = await cityApi.grantResidentOnionAttention(residentId, {
-        onionAmount,
-        memo: grantAttentionMemo.trim(),
-        idempotencyKey: crypto.randomUUID(),
-      });
-      const settled = result.status === 'settled' || result.onionRequest.status === 'completed';
-      const receipt = result.message || residentAttentionResultNotice({
+      citySupportFailure = undefined;
+      const result = await cityApi.grantResidentOnionAttention(residentId, { onionAmount, memo, idempotencyKey });
+      applySupportGrantResult({
+        residentId,
         residentName: residentNameForNotice,
         onionAmount,
-        status: result.status,
-        onionRequestStatus: result.onionRequest.status,
-        ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
-        ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
-        ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
-      });
-      if (settled) {
-        citySupportPayoff = residentSupportPayoff({
-          residentName: residentNameForNotice,
-          onionAmount,
-          ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
-          ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
-          ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
-          ...(recentSay ? { recentSay } : {}),
-        });
-        citySupportPayoffResidentId = residentId;
-        cityActionNotice = expertMode ? receipt : '';
-      } else {
-        cityActionNotice = receipt;
-      }
-      rememberLatestSupportReceipt(receipt);
+        idempotencyKey,
+        memo,
+        ...(recentSay ? { recentSay } : {}),
+      }, result);
       await bootstrapSession();
       await loadRoute(false);
     });
+  }
+
+  interface SupportGrantContext {
+    residentId: string;
+    residentName: string;
+    onionAmount: number;
+    idempotencyKey: string;
+    memo: string;
+    recentSay?: string;
+  }
+
+  function applySupportGrantResult(context: SupportGrantContext, result: OnionAttentionGrantResponse) {
+    const settlement = supportSettlementState(result.status, result.onionRequest.status);
+    const receipt = result.message || residentAttentionResultNotice({
+      residentName: context.residentName,
+      onionAmount: context.onionAmount,
+      status: result.status,
+      onionRequestStatus: result.onionRequest.status,
+      ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
+      ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
+      ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
+    });
+
+    if (settlement === 'settled') {
+      clearPendingSupport();
+      citySupportFailure = undefined;
+      citySupportPayoff = residentSupportPayoff({
+        residentName: context.residentName,
+        onionAmount: context.onionAmount,
+        ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
+        ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
+        ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
+        ...(context.recentSay ? { recentSay: context.recentSay } : {}),
+      });
+      citySupportPayoffResidentId = context.residentId;
+      cityActionNotice = expertMode ? receipt : '';
+      rememberLatestSupportReceipt(receipt);
+      return;
+    }
+
+    if (settlement === 'pending') {
+      const intent = pendingSupportIntentFromGrant(result, context);
+      if (intent) setPendingSupport(intent);
+      cityActionNotice = expertMode ? receipt : '';
+      rememberLatestSupportReceipt(receipt);
+      return;
+    }
+
+    if (settlement === 'denied' || settlement === 'failed') {
+      clearPendingSupport();
+      citySupportFailure = { residentId: context.residentId, residentName: context.residentName, message: receipt };
+      cityActionNotice = expertMode ? receipt : '';
+      rememberLatestSupportReceipt(receipt);
+      return;
+    }
+
+    cityActionNotice = receipt;
+    rememberLatestSupportReceipt(receipt);
   }
 
   function dismissSupportPayoff() {
@@ -4017,6 +4229,20 @@
       {/if}
       {@render NoticeBanner({ kind: 'city-action-error', message: actionError, tone: 'rose' })}
       {@render NoticeBanner({ kind: 'city-action', message: cityActionNotice })}
+      {#if cityPendingSupport && !cityResidentPendingSupport}
+        <div class="notice amber city-pending-support-banner">
+          <div>
+            <strong>Waiting for your approval on OnionDAO</strong>
+            <span>{cityPendingSupport.onionAmount.toLocaleString()} Onion{cityPendingSupport.onionAmount === 1 ? '' : 's'} for {cityPendingSupport.residentName} will land once you approve the spend.</span>
+          </div>
+          <div class="city-pending-support-banner-actions">
+            {#if cityPendingSupport.approvalUrl}
+              <a class="city-link-button" href={cityPendingSupport.approvalUrl} target="_blank" rel="noopener noreferrer">Approve on OnionDAO →</a>
+            {/if}
+            <button onclick={() => cityPendingSupport && cityNav(`/residents/${encodeURIComponent(residentSlug(cityPendingSupport.residentId))}`)}>View resident</button>
+          </div>
+        </div>
+      {/if}
       {#if loading}
         {@render NoticeBanner({ kind: 'city-loading', message: 'Loading city state' })}
       {/if}
@@ -5980,6 +6206,41 @@
             {@render CityAuthCta({ label: cityResidentAttentionGuide.primaryAction })}
           {/if}
         </div>
+        {#if cityResidentPendingSupport}
+          <div class="city-panel span-2 resident-support-pending" aria-live="polite">
+            <div class="panel-title">Support Pending</div>
+            <strong class="resident-support-pending-headline">Waiting for your approval on OnionDAO</strong>
+            <small>{cityResidentPendingSupport.onionAmount.toLocaleString()} Onion{cityResidentPendingSupport.onionAmount === 1 ? '' : 's'} for {cityResidentPendingSupport.residentName}. Nothing is spent until you approve it, and {cityResidentPendingSupport.residentName} receives attention only after the spend completes.</small>
+            {#if cityResidentPendingSupport.approvalUrl}
+              <a class="city-link-button primary resident-support-approve-link" href={cityResidentPendingSupport.approvalUrl} target="_blank" rel="noopener noreferrer">Approve on OnionDAO →</a>
+            {:else}
+              <small>Open OnionDAO in another tab to approve this spend, then come back here.</small>
+            {/if}
+            {#if cityPendingSupportStatusUnavailable}
+              <div class="resident-simple-actions">
+                <button class="primary" disabled={actionBusy} onclick={() => void recheckPendingSupport()}>I approved it — check again</button>
+                <button onclick={clearPendingSupport}>Dismiss</button>
+              </div>
+            {:else}
+              <small>This page checks automatically and will celebrate the moment it lands.</small>
+              <div class="resident-simple-actions">
+                <button onclick={clearPendingSupport}>Dismiss</button>
+              </div>
+            {/if}
+          </div>
+        {:else if cityResidentSupportFailure}
+          <div class="city-panel span-2 resident-support-failed" aria-live="polite">
+            <div class="row">
+              <div class="panel-title">Spend Did Not Complete</div>
+              <button type="button" class="notice-dismiss" aria-label="Dismiss failed spend notice" title="Dismiss" onclick={dismissSupportFailure}>X</button>
+            </div>
+            <strong class="resident-support-pending-headline">This spend did not complete.</strong>
+            <small>{cityResidentSupportFailure.message} No Onions left your wallet for a denied or failed request.</small>
+            <div class="resident-simple-actions">
+              <button class="primary" onclick={dismissSupportFailure}>Try again</button>
+            </div>
+          </div>
+        {/if}
         {#if cityResidentSupportPayoff}
           <div class="city-panel span-2 resident-support-payoff tone-gold" aria-live="polite">
             <div class="row">

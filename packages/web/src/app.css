@@ -858,6 +858,10 @@ h1 {
   border-color: var(--s-rose);
 }
 
+.notice.amber {
+  border-color: var(--s-amber);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -3802,6 +3806,58 @@ pre {
   margin: 0;
   color: var(--text-1);
   line-height: 1.45;
+}
+
+.resident-support-pending,
+.resident-support-failed {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.resident-support-pending {
+  border-left: 3px solid var(--s-amber);
+  background: rgba(228, 184, 64, 0.04);
+}
+
+.resident-support-failed {
+  border-left: 3px solid var(--s-rose);
+}
+
+.resident-support-pending-headline {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: clamp(20px, 1.6vw, 27px);
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.resident-support-pending > small,
+.resident-support-failed > small {
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.resident-support-approve-link {
+  justify-self: start;
+}
+
+.city-pending-support-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.city-pending-support-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .resident-attention-steps {

@@ -125,6 +125,9 @@ describe('dashboard copy hygiene', () => {
     expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.reaction');
     expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.lettersLine');
     expect(simpleResidentProfileSource).toContain('Open Letters');
+    expect(simpleResidentProfileSource).toContain('Waiting for your approval on OnionDAO');
+    expect(simpleResidentProfileSource).toContain('Approve on OnionDAO →');
+    expect(simpleResidentProfileSource).toContain('This spend did not complete.');
     expect(appSource).toContain('attentionBefore: result.city.attentionBefore');
     expect(appSource).toContain('attentionAfter: result.city.attentionAfter');
     expect(dashboardNavSource).toContain('Their attention rose from');

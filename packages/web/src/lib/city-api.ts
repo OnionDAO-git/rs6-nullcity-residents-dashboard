@@ -533,6 +533,39 @@ export interface LibrarySoulLife {
   updatedAt: string;
 }
 
+export interface OnionAttentionGrantRequestState {
+  id: string;
+  status: string;
+  amount: number;
+  currencyMode?: string | null;
+  approvalUrl?: string;
+}
+
+export interface OnionAttentionGrantResponse {
+  status: string;
+  residentId: string;
+  message?: string;
+  /** Where the human approves the Onion spend on OnionDAO (landing). */
+  approvalUrl?: string;
+  onionRequest: OnionAttentionGrantRequestState;
+  onionWallet?: OnionWallet;
+  onionWalletError?: string;
+  city?: NullCityCreditAttentionResult;
+}
+
+/**
+ * Shape for GET /api/city/onion-attention-grants/:idempotencyKey/status.
+ * The BFF side of this endpoint is being added in parallel; every field is
+ * optional so the dashboard degrades gracefully against older servers.
+ */
+export interface OnionAttentionGrantStatusResponse {
+  status?: string;
+  residentId?: string;
+  approvalUrl?: string;
+  onionRequest?: Partial<OnionAttentionGrantRequestState>;
+  city?: NullCityCreditAttentionResult;
+}
+
 export class CityApiError extends Error {
   readonly status: number;
   readonly loginUrl?: string;
@@ -735,10 +768,12 @@ export const cityApi = {
       { method: 'POST', body: jsonBody(body) },
     ),
   grantResidentOnionAttention: (residentId: string, body: { onionAmount: number; attentionAmount?: number; memo?: string; idempotencyKey?: string }) =>
-    request<{ status: string; residentId: string; message?: string; onionRequest: { id: string; status: string; amount: number; currencyMode?: string | null }; onionWallet?: OnionWallet; onionWalletError?: string; city?: NullCityCreditAttentionResult }>(
+    request<OnionAttentionGrantResponse>(
       `/api/city/residents/${encodeURIComponent(residentId)}/onion-attention-grants`,
       { method: 'POST', body: jsonBody(body) },
     ),
+  onionAttentionGrantStatus: (idempotencyKey: string) =>
+    request<OnionAttentionGrantStatusResponse>(`/api/city/onion-attention-grants/${encodeURIComponent(idempotencyKey)}/status`),
   trades: () => request<{ trades: ResidentTrade[] }>('/api/city/trades'),
   createTrade: (body: { residentId: string; offeredResource: PointResource; offeredAmount: number; requestedItem?: string; idempotencyKey?: string; metadata?: Record<string, unknown> }) =>
     request<{ trade: ResidentTrade; ledger: PointLedgerEntry; mocked: boolean }>('/api/city/trades', { method: 'POST', body: jsonBody(body) }),
