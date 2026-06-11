@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { SoulProposal } from './city-api';
-import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
+import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav to the Simple IA destinations', () => {
@@ -344,6 +344,83 @@ describe('residentAttentionGuide', () => {
   });
 });
 
+describe('residentAttentionPreview', () => {
+  test('previews typed Onions as attention toward the suggested safe support target', () => {
+    expect(residentAttentionPreview({
+      residentName: 'Ada',
+      currentAttention: 40,
+      onionAmount: '100',
+      suggestedSafeSupportAmount: 100,
+      walletBalance: 250,
+    })).toEqual({
+      currentAmount: 40,
+      onionAmount: 100,
+      projectedAmount: 140,
+      targetAmount: 140,
+      percentBefore: 29,
+      percentAfter: 100,
+      copy: '100 Onions will give Ada about 100 attention.',
+      buttonLabel: 'Give 100 Onions',
+      exceedsWallet: false,
+    });
+  });
+
+  test('uses a projected fallback target and marks wallet overages', () => {
+    expect(residentAttentionPreview({
+      residentName: 'Hans',
+      currentAttention: 25,
+      onionAmount: '75',
+      suggestedSafeSupportAmount: 0,
+      walletBalance: 50,
+    })).toMatchObject({
+      currentAmount: 25,
+      onionAmount: 75,
+      projectedAmount: 100,
+      targetAmount: 100,
+      percentBefore: 25,
+      percentAfter: 100,
+      copy: '75 Onions will give Hans about 75 attention.',
+      buttonLabel: 'Give 75 Onions',
+      exceedsWallet: true,
+    });
+  });
+
+  test('accepts comma-formatted Onion amounts the same way the submit flow does', () => {
+    expect(residentAttentionPreview({
+      residentName: 'Ada',
+      currentAttention: 10,
+      onionAmount: '1,000',
+      suggestedSafeSupportAmount: 1000,
+      walletBalance: 1200,
+    })).toMatchObject({
+      onionAmount: 1000,
+      projectedAmount: 1010,
+      copy: '1,000 Onions will give Ada about 1,000 attention.',
+      buttonLabel: 'Give 1,000 Onions',
+      exceedsWallet: false,
+    });
+  });
+
+  test('keeps empty amounts human-facing and avoids a zero-width progress target', () => {
+    expect(residentAttentionPreview({
+      residentName: 'Ada',
+      currentAttention: 0,
+      onionAmount: '',
+      suggestedSafeSupportAmount: 0,
+    })).toEqual({
+      currentAmount: 0,
+      onionAmount: 0,
+      projectedAmount: 0,
+      targetAmount: 1,
+      percentBefore: 0,
+      percentAfter: 0,
+      copy: 'Choose how many Onions to give Ada.',
+      buttonLabel: 'Choose Onions',
+      exceedsWallet: false,
+    });
+  });
+});
+
 describe('residentAttentionResultNotice', () => {
   test('confirms settled Onion attention in resident terms', () => {
     expect(residentAttentionResultNotice({
@@ -353,6 +430,30 @@ describe('residentAttentionResultNotice', () => {
       onionRequestStatus: 'completed',
       creditedAmount: 75,
     })).toBe('Onions spent. Hans received 75 attention.');
+  });
+
+  test('uses actual before and after attention when the city returns them', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 75,
+      status: 'settled',
+      onionRequestStatus: 'completed',
+      creditedAmount: 75,
+      attentionBefore: 4,
+      attentionAfter: 79,
+    })).toBe('You gave Hans 75 Onions. Their attention rose from 4 to 79.');
+  });
+
+  test('keeps before and after attention authoritative when credited amount differs from the Onion amount', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 100,
+      status: 'settled',
+      onionRequestStatus: 'completed',
+      creditedAmount: 75,
+      attentionBefore: 4,
+      attentionAfter: 79,
+    })).toBe('You gave Hans 100 Onions. Their attention rose from 4 to 79.');
   });
 
   test('keeps pending Onion settlement explicit', () => {

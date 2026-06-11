@@ -93,7 +93,26 @@ describe('dashboard copy hygiene', () => {
     expect(boardSource).toContain('Use the Board to decide what to do next');
     expect(boardSource).toContain("cityNav('/residents?triage=attention')");
     expect(appSource).not.toContain('/residents?focus=needs-attention');
+    expect(boardSource).toContain('Resident Goals & Trophies');
+    expect(boardSource).toContain('wrote the soul, helped create the resident, or gave attention');
     expect(boardSource).not.toMatch(/\b(Designing|wired|API|bridge|backend|MVP|operator|dev)\b/i);
+    expect(boardSource).not.toMatch(/\bNCRI\b/);
+  });
+
+  test('keeps the simple resident attention flow preview-first and jargon-free', () => {
+    const residentProfileSource = sourceBetween(appSource, '{#snippet CityResidentProfile()}', '{#snippet CityResidentIntel()}');
+    const simpleResidentProfileSource = sourceBetween(residentProfileSource, '{#if !expertMode}', '      </section>\n    {:else}');
+
+    expect(simpleResidentProfileSource).toContain('Attention preview');
+    expect(simpleResidentProfileSource).toContain('cityResidentAttentionPreview.copy');
+    expect(simpleResidentProfileSource).toContain('cityResidentAttentionPreview.buttonLabel');
+    expect(simpleResidentProfileSource).toContain('Toward target');
+    expect(appSource).toContain('attentionBefore: result.city.attentionBefore');
+    expect(appSource).toContain('attentionAfter: result.city.attentionAfter');
+    expect(dashboardNavSource).toContain('Their attention rose from');
+    expect(simpleResidentProfileSource).toContain('Patrons may qualify for trophies if the resident achieves their goal.');
+    expect(simpleResidentProfileSource).toContain('helping create a resident');
+    expect(simpleResidentProfileSource).not.toMatch(/\b(NCRI|backend|bridge|API|controller|operator|MVP)\b/i);
   });
 
   test('renames the human-facing Graveyard surface to Soul Library while keeping /graveyard compatible', () => {
@@ -204,7 +223,7 @@ describe('dashboard copy hygiene', () => {
     const simpleItemsSource = sourceBetween(appSource, '{#snippet CitySimpleItemLoopPanels()}', '{#snippet CityGraveyard()}');
 
     expect(simpleItemsSource).toContain('Trophy Rewards');
-    expect(simpleItemsSource).toContain('Trophies are the physical swag loop');
+    expect(simpleItemsSource).toContain('Trophies are physical rewards');
     expect(simpleItemsSource).not.toContain('NCRI Marketplace');
     expect(simpleItemsSource).not.toContain('NCRI trophies are the physical swag loop');
     expect(simpleItemsSource).not.toContain('GP/payment flow');

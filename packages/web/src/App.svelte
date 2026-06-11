@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -274,10 +274,18 @@
   let cityResidentProofPulse = residentProofPulse(undefined);
   let cityResidentApSupport = residentApSupportRecommendation(undefined);
   let cityResidentCurrentAttention: number | undefined;
+  let cityResidentDisplayName = 'this resident';
   let cityResidentAttentionGuide = residentAttentionGuide({
     authenticated: false,
     residentName: 'this resident',
     suggestedOnions: 0,
+  });
+  let cityResidentAttentionPreview = residentAttentionPreview({
+    residentName: 'this resident',
+    currentAttention: 0,
+    onionAmount: '100',
+    suggestedSafeSupportAmount: 0,
+    walletBalance: 0,
   });
   let cityResidentProofRollup: ResidentProofRollup = residentProofRollup([]);
   let cityResidentLoopCoverage: ResidentLoopFact[] = [];
@@ -493,11 +501,19 @@
   });
   $: cityResidentApSupport = residentApSupportRecommendation(cityResident);
   $: cityResidentCurrentAttention = cityResident?.attention ?? cityResidentReadModel?.currentAttention;
+  $: cityResidentDisplayName = cityResidentReadModel?.displayName || (cityResident ? residentDisplayName(cityResident.name) : cityResidentId || 'this resident');
   $: cityResidentAttentionGuide = residentAttentionGuide({
     authenticated: citySession.authenticated,
-    residentName: selectedCityResidentDisplay(),
+    residentName: cityResidentDisplayName,
     suggestedOnions: cityResidentApSupport.suggestedAp,
     ...(cityResidentCurrentAttention === undefined ? {} : { currentAttention: cityResidentCurrentAttention }),
+  });
+  $: cityResidentAttentionPreview = residentAttentionPreview({
+    residentName: cityResidentDisplayName,
+    ...(cityResidentCurrentAttention === undefined ? {} : { currentAttention: cityResidentCurrentAttention }),
+    onionAmount: grantAttentionOnions,
+    suggestedSafeSupportAmount: cityResidentApSupport.suggestedAp,
+    ...(citySession.authenticated ? { walletBalance: citySession.onions } : {}),
   });
   $: cityPrintInsights = printQueueInsights(cityPrintRequests, cityPrintQueue, cityTrades);
   $: cityPrintResidentSignals = printResidentSignals(cityResidents, cityNullcityNcriRecords, cityTrades, 5);
@@ -1359,11 +1375,11 @@
         detail: 'Resident and city messages land here after sign in',
       },
       {
-        label: 'Request Print Quote',
+        label: 'Request Trophy',
         path: '/prints/new',
         tone: 'amber',
         metric: `${activePrints.toLocaleString()} active`,
-        detail: 'Ask for an NCRI print quote and track request status',
+        detail: 'Ask for a trophy or item request and track status',
       },
     ];
   }
@@ -2148,6 +2164,8 @@
         status: result.status,
         onionRequestStatus: result.onionRequest.status,
         ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
+        ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
+        ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
       });
       await bootstrapSession();
       await loadRoute(false);
@@ -2408,7 +2426,7 @@
   }
 
   function positiveInt(value: string, label: string): number {
-    const amount = Math.floor(Number(value));
+    const amount = Math.floor(Number(value.trim().replace(/,/g, '')));
     if (!Number.isFinite(amount) || amount <= 0) throw new Error(`${label} must be a positive number`);
     return amount;
   }
@@ -4499,12 +4517,12 @@
 
     <div class="city-panel">
       <div class="row">
-        <div class="panel-title">Resident Goals & Rewards</div>
+        <div class="panel-title">Resident Goals & Trophies</div>
         <button onclick={() => cityNav('/prints')}>Requests</button>
       </div>
       <div class="city-copy-block">
         <strong>Back residents whose goals should become trophies.</strong>
-        <p>Support a resident now; special item and trophy rewards can be attached as that loop matures.</p>
+        <p>People who wrote the soul, helped create the resident, or gave attention may qualify for a trophy if that resident achieves their goal.</p>
       </div>
       <div class="city-card-list compact">
         {#each cityPrintResidentSignals.slice(0, 3) as signal (signal.residentId)}
@@ -5759,11 +5777,30 @@
             <span><small>Suggested</small><strong>{cityResidentApSupport.suggestedAp > 0 ? `${cityResidentApSupport.suggestedAp.toLocaleString()} Onions` : 'Any amount'}</strong></span>
           </div>
           {#if citySession.authenticated}
+            <div class="resident-attention-preview" aria-label="Attention preview">
+              <div class="resident-attention-preview-head">
+                <strong>{cityResidentAttentionPreview.copy}</strong>
+                {#if cityResidentAttentionPreview.exceedsWallet}
+                  <small class="warn">You have {citySession.onions.toLocaleString()} Onion{citySession.onions === 1 ? '' : 's'} available.</small>
+                {:else}
+                  <small>Preview only. The final message uses the actual attention credited by Null City.</small>
+                {/if}
+              </div>
+              <div class="resident-attention-bar" aria-hidden="true">
+                <span class="before" style={`width: ${cityResidentAttentionPreview.percentBefore}%`}></span>
+                <span class="after" style={`width: ${cityResidentAttentionPreview.percentAfter}%`}></span>
+              </div>
+              <div class="resident-attention-preview-stats">
+                <span><small>Now</small><strong>{cityResidentAttentionPreview.currentAmount.toLocaleString()}</strong></span>
+                <span><small>After</small><strong>{cityResidentAttentionPreview.projectedAmount.toLocaleString()}</strong></span>
+                <span><small>Toward target</small><strong>{cityResidentAttentionPreview.percentAfter}% of {cityResidentAttentionPreview.targetAmount.toLocaleString()}</strong></span>
+              </div>
+            </div>
             <div class="city-form-grid resident-attention-form">
               <label>Onions to spend <input bind:value={grantAttentionOnions} inputmode="numeric" /></label>
               <label>Note <input bind:value={grantAttentionMemo} placeholder="optional" /></label>
-              <button class="primary span-2" disabled={actionBusy} onclick={() => grantResidentAttention(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>
-                {cityResidentAttentionGuide.primaryAction}
+              <button class="primary span-2" disabled={actionBusy || cityResidentAttentionPreview.onionAmount <= 0 || cityResidentAttentionPreview.exceedsWallet} onclick={() => grantResidentAttention(cityResident?.name || cityResidentReadModel?.nullcityResidentId || cityResidentId)}>
+                {cityResidentAttentionPreview.buttonLabel}
               </button>
             </div>
             {#if cityResidentApSupport.suggestedAp > 0}
@@ -5795,6 +5832,7 @@
           <div class="city-copy-block">
             <strong>Onions are what you spend. Attention is what the resident receives.</strong>
             <p>Nothing is final until the Onion approval completes. Once approved, Null City gives this resident attention.</p>
+            <p>Writing a soul, helping create a resident, or giving attention can make you part of that resident's patron story. Patrons may qualify for trophies if the resident achieves their goal.</p>
           </div>
         </div>
         <div class="city-panel span-2 resident-simple-posts">
@@ -6627,7 +6665,7 @@
 
 {#snippet CitySimpleItemLoopPanels()}
   <div class="city-panel">
-    <div class="panel-title">Resident Goals & Rewards</div>
+    <div class="panel-title">Resident Goals & Trophies</div>
     <div class="city-record-list compact">
       <article>
         <span class="tag warn">Next</span>
@@ -6652,7 +6690,7 @@
         <span class="tag warn">Next</span>
         <div>
           <strong>3D trophy rewards</strong>
-          <small>Trophies are the physical swag loop. Humans will be able to back residents, claim rewards, and request prints here.</small>
+          <small>Trophies are physical rewards. Humans will be able to back residents, claim rewards, and request prints here.</small>
         </div>
       </article>
       <article>

@@ -59,6 +59,28 @@ export interface ResidentAttentionResultNoticeInput {
   status: string;
   onionRequestStatus?: string;
   creditedAmount?: number;
+  attentionBefore?: number;
+  attentionAfter?: number;
+}
+
+export interface ResidentAttentionPreviewInput {
+  residentName: string;
+  currentAttention?: number;
+  onionAmount: string | number;
+  suggestedSafeSupportAmount?: number;
+  walletBalance?: number;
+}
+
+export interface ResidentAttentionPreview {
+  currentAmount: number;
+  onionAmount: number;
+  projectedAmount: number;
+  targetAmount: number;
+  percentBefore: number;
+  percentAfter: number;
+  copy: string;
+  buttonLabel: string;
+  exceedsWallet: boolean;
 }
 
 export function dashboardNoticeKey(kind: string, message: string): string {
@@ -297,7 +319,58 @@ export function residentAttentionResultNotice(input: ResidentAttentionResultNoti
   const settled = input.status === 'settled' || input.onionRequestStatus === 'completed';
   if (settled) {
     const amount = Math.max(0, Math.floor(input.creditedAmount ?? input.onionAmount));
+    const attentionBefore = nonNegativeWholeAmount(input.attentionBefore);
+    const attentionAfter = nonNegativeWholeAmount(input.attentionAfter);
+    if (input.attentionBefore !== undefined && input.attentionAfter !== undefined) {
+      return `You gave ${resident} ${formatOnionAmount(Math.max(0, Math.floor(input.onionAmount)))}. Their attention rose from ${attentionBefore.toLocaleString()} to ${attentionAfter.toLocaleString()}.`;
+    }
     return `Onions spent. ${resident} received ${amount.toLocaleString()} attention.`;
   }
   return `Approval pending in Onion portal. ${resident} has not received attention yet.`;
+}
+
+export function residentAttentionPreview(input: ResidentAttentionPreviewInput): ResidentAttentionPreview {
+  const resident = input.residentName.trim() || 'this resident';
+  const currentAmount = nonNegativeWholeAmount(input.currentAttention);
+  const onionAmount = nonNegativeWholeAmount(input.onionAmount);
+  const suggestedSafeSupportAmount = nonNegativeWholeAmount(input.suggestedSafeSupportAmount);
+  const projectedAmount = currentAmount + onionAmount;
+  const targetAmount = Math.max(1, currentAmount + (suggestedSafeSupportAmount > 0 ? suggestedSafeSupportAmount : onionAmount));
+  const walletBalance = normalizedWalletBalance(input.walletBalance);
+  const onionLabel = formatOnionAmount(onionAmount);
+
+  return {
+    currentAmount,
+    onionAmount,
+    projectedAmount,
+    targetAmount,
+    percentBefore: attentionProgressPercent(currentAmount, targetAmount),
+    percentAfter: attentionProgressPercent(projectedAmount, targetAmount),
+    copy: onionAmount > 0
+      ? `${onionLabel} will give ${resident} about ${onionAmount.toLocaleString()} attention.`
+      : `Choose how many Onions to give ${resident}.`,
+    buttonLabel: onionAmount > 0 ? `Give ${onionLabel}` : 'Choose Onions',
+    exceedsWallet: walletBalance !== undefined && onionAmount > walletBalance,
+  };
+}
+
+function nonNegativeWholeAmount(value: string | number | undefined): number {
+  const normalized = typeof value === 'string' ? Number(value.trim().replace(/,/g, '')) : Number(value);
+  if (!Number.isFinite(normalized)) return 0;
+  return Math.max(0, Math.floor(normalized));
+}
+
+function normalizedWalletBalance(value: number | undefined): number | undefined {
+  if (typeof value !== 'number') return undefined;
+  if (!Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.floor(value));
+}
+
+function attentionProgressPercent(value: number, target: number): number {
+  if (target <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((value / target) * 100)));
+}
+
+function formatOnionAmount(amount: number): string {
+  return `${amount.toLocaleString()} Onion${amount === 1 ? '' : 's'}`;
 }
