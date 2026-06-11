@@ -48,6 +48,12 @@ export function supportSettlementState(status: string | undefined, onionRequestS
 export interface GrantResultLike {
   status?: string;
   approvalUrl?: string;
+  /**
+   * The BFF's poll handle. May differ from the key the client sent: the
+   * double-burn guard reuses the existing pending intent (and its key) when
+   * the same user+resident already has a spend awaiting approval.
+   */
+  idempotencyKey?: string;
   onionRequest?: { status?: string; approvalUrl?: string };
 }
 
@@ -58,7 +64,7 @@ export function pendingSupportIntentFromGrant(result: GrantResultLike, context: 
     residentId: context.residentId,
     residentName: context.residentName,
     onionAmount: Math.max(0, Math.floor(context.onionAmount)),
-    idempotencyKey: context.idempotencyKey,
+    idempotencyKey: (typeof result.idempotencyKey === 'string' && result.idempotencyKey.trim()) || context.idempotencyKey,
     memo: context.memo || '',
     createdAt: context.now || new Date().toISOString(),
   };

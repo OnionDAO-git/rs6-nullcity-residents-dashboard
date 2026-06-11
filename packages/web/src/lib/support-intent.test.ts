@@ -64,6 +64,17 @@ describe('pendingSupportIntentFromGrant', () => {
     expect(intent?.approvalUrl).toBe('https://oniondao.example/requests/43');
   });
 
+  test('polls with the BFF poll handle when the double-burn guard reuses an existing intent', () => {
+    const intent = pendingSupportIntentFromGrant({
+      status: 'pending_onion_settlement',
+      idempotencyKey: 'existing-key-from-first-post',
+      approvalUrl: 'https://oniondao.example/portal/onions',
+      onionRequest: { status: 'pending' },
+    }, context);
+
+    expect(intent?.idempotencyKey).toBe('existing-key-from-first-post');
+  });
+
   test('still creates a pending intent when no approval link is provided yet', () => {
     const intent = pendingSupportIntentFromGrant({ status: 'pending_onion_settlement', onionRequest: { status: 'pending' } }, context);
 

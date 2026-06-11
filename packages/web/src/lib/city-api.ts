@@ -545,8 +545,11 @@ export interface OnionAttentionGrantResponse {
   status: string;
   residentId: string;
   message?: string;
-  /** Where the human approves the Onion spend on OnionDAO (landing). */
+  /** Where the human approves the Onion spend on OnionDAO (landing /portal/onions). */
   approvalUrl?: string;
+  /** Poll handle for the status endpoint; stable across retries and pending-intent reuse. */
+  idempotencyKey?: string;
+  statusUrl?: string;
   onionRequest: OnionAttentionGrantRequestState;
   onionWallet?: OnionWallet;
   onionWalletError?: string;
@@ -555,13 +558,15 @@ export interface OnionAttentionGrantResponse {
 
 /**
  * Shape for GET /api/city/onion-attention-grants/:idempotencyKey/status.
- * The BFF side of this endpoint is being added in parallel; every field is
- * optional so the dashboard degrades gracefully against older servers.
+ * Every field is optional so the dashboard degrades gracefully against
+ * servers that do not serve this endpoint yet (it 404s there).
  */
 export interface OnionAttentionGrantStatusResponse {
   status?: string;
   residentId?: string;
+  idempotencyKey?: string;
   approvalUrl?: string;
+  statusUrl?: string;
   onionRequest?: Partial<OnionAttentionGrantRequestState>;
   city?: NullCityCreditAttentionResult;
 }
