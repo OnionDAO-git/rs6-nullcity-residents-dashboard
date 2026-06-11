@@ -158,16 +158,18 @@ export interface CityStore {
   createAttentionGrantIntent(input: AttentionGrantIntentCreateInput): Promise<AttentionGrantIntent>;
   getAttentionGrantIntent(cityUserId: string, idempotencyKey: string): Promise<AttentionGrantIntent | undefined>;
   getAttentionGrantIntentByOnionRequestId(onionRequestId: string): Promise<AttentionGrantIntent | undefined>;
+  claimAttentionGrantIntent(id: string, fromStates: AttentionGrantIntentState[], toState: AttentionGrantIntentState): Promise<AttentionGrantIntent | undefined>;
   updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent>;
 }
 
 // 'standin' synchronous path: created -> debited -> sent_to_city -> settled | failed.
-// 'real' async consent path: created -> awaiting_approval -> settled | denied | failed.
+// 'real' async consent path: created -> awaiting_approval -> settling -> settled | denied | failed.
 export type AttentionGrantIntentState =
   | 'created'
   | 'debited'
   | 'sent_to_city'
   | 'awaiting_approval'
+  | 'settling'
   | 'settled'
   | 'denied'
   | 'failed';
@@ -725,6 +727,14 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
         if (intent.onionRequestId === onionRequestId) return { ...intent };
       }
       return undefined;
+    },
+
+    async claimAttentionGrantIntent(id, fromStates, toState) {
+      const existing = attentionGrantIntents.get(id);
+      if (!existing || !fromStates.includes(existing.state)) return undefined;
+      const updated = { ...existing, state: toState, updatedAt: timestamp() };
+      attentionGrantIntents.set(id, updated);
+      return { ...updated };
     },
 
     async updateAttentionGrantIntent(id, patch) {

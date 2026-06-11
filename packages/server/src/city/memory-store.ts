@@ -22,6 +22,7 @@ import {
   type AttentionGrantIntent,
   type AttentionGrantIntentCreateInput,
   type AttentionGrantIntentPatch,
+  type AttentionGrantIntentState,
   type CityStore,
   type LedgerAppendInput,
   type PrintBridgeJob,
@@ -557,6 +558,18 @@ export class InMemoryCityStore implements CityStore {
       if (intent.onionRequestId === onionRequestId) return clone(intent);
     }
     return undefined;
+  }
+
+  async claimAttentionGrantIntent(
+    id: string,
+    fromStates: AttentionGrantIntentState[],
+    toState: AttentionGrantIntentState,
+  ): Promise<AttentionGrantIntent | undefined> {
+    const existing = this.attentionGrantIntents.get(id);
+    if (!existing || !fromStates.includes(existing.state)) return undefined;
+    const updated: AttentionGrantIntent = { ...existing, state: toState, updatedAt: this.now() };
+    this.attentionGrantIntents.set(id, updated);
+    return clone(updated);
   }
 
   async updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent> {

@@ -285,7 +285,7 @@ CREATE TABLE IF NOT EXISTS attention_grant_intents (
   ap_amount INTEGER NOT NULL CHECK (ap_amount > 0),
   idempotency_key TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'created'
-    CHECK (state IN ('created', 'debited', 'sent_to_city', 'settled', 'failed')),
+    CHECK (state IN ('created', 'debited', 'sent_to_city', 'settling', 'settled', 'failed')),
   standin_ledger_entry_id TEXT REFERENCES point_ledger_entries(id) ON DELETE RESTRICT,
   city_response JSONB,
   failure_reason TEXT,
@@ -309,7 +309,7 @@ ALTER TABLE attention_grant_intents
 ALTER TABLE attention_grant_intents DROP CONSTRAINT IF EXISTS attention_grant_intents_state_check;
 ALTER TABLE attention_grant_intents
   ADD CONSTRAINT attention_grant_intents_state_check CHECK (
-    state IN ('created', 'debited', 'sent_to_city', 'awaiting_approval', 'settled', 'denied', 'failed')
+    state IN ('created', 'debited', 'sent_to_city', 'awaiting_approval', 'settling', 'settled', 'denied', 'failed')
   );
 
 CREATE INDEX IF NOT EXISTS idx_attention_grant_intents_onion_request

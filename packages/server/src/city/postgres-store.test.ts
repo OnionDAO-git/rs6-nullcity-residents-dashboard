@@ -79,6 +79,23 @@ describe('PostgresCityStore (mock-sql; catches mapper column drift)', () => {
     expect(intent.standinLedgerEntryId).toBe('led1');
   });
 
+  test('claimAttentionGrantIntent state-guards the transition and maps the returned row', async () => {
+    let seenQuery = '';
+    let seenValues: unknown[] = [];
+    const store = new PostgresCityStore('postgres://fake', makeSql((query, values) => {
+      seenQuery = query;
+      seenValues = values;
+      return [{ ...intentRow, state: 'settling' }];
+    }));
+
+    const intent = await store.claimAttentionGrantIntent('agi_1', ['awaiting_approval'], 'settling');
+
+    expect(seenQuery).toContain('UPDATE attention_grant_intents');
+    expect(seenQuery).toContain('state = ANY');
+    expect(seenValues).toEqual(['settling', 'agi_1', ['awaiting_approval']]);
+    expect(intent?.state).toBe('settling');
+  });
+
   test('setIdentityAlias issues an upsert without throwing', async () => {
     let called = false;
     const store = new PostgresCityStore('postgres://fake', makeSql(query => { if (query.includes('city_identity_aliases')) called = true; return []; }));

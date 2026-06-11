@@ -250,18 +250,34 @@ export async function settleOnionAttentionGrant(
   if (!completed) return { settled: false, state: intent.state, intent }; // still pending — ignore
 
   if (!deps.control.creditAttention) throw new CityStoreError('attention_credit_unconfigured', 503);
-  const personId = await deps.store.resolveOnionId(intent.cityUserId);
-  const patronHandle = await deps.store.resolvePatronHandle(personId);
-  const cityResponse = (await deps.control.creditAttention(intent.residentId, {
-    idempotencyKey: intent.idempotencyKey,
-    amount: intent.apAmount,
-    cityUserId: intent.cityUserId,
-    personId,
-    ...(patronHandle ? { patronHandle } : {}),
-    sourceType: 'resident_attention_grant',
-    sourceId: intent.idempotencyKey,
-  })) as unknown as Record<string, unknown>;
+  const claimed = await deps.store.claimAttentionGrantIntent(intent.id, ['awaiting_approval'], 'settling');
+  if (!claimed) {
+    const latest = await deps.store.getAttentionGrantIntentByOnionRequestId(params.onionRequestId);
+    if (latest?.state === 'settled') return { settled: true, state: 'settled', intent: latest };
+    return { settled: false, state: latest?.state ?? intent.state, intent: latest ?? intent };
+  }
 
-  const updated = await deps.store.updateAttentionGrantIntent(intent.id, { state: 'settled', cityResponse });
+  const personId = await deps.store.resolveOnionId(claimed.cityUserId);
+  const patronHandle = await deps.store.resolvePatronHandle(personId);
+  let cityResponse: Record<string, unknown>;
+  try {
+    cityResponse = (await deps.control.creditAttention(claimed.residentId, {
+      idempotencyKey: claimed.idempotencyKey,
+      amount: claimed.apAmount,
+      cityUserId: claimed.cityUserId,
+      personId,
+      ...(patronHandle ? { patronHandle } : {}),
+      sourceType: 'resident_attention_grant',
+      sourceId: claimed.idempotencyKey,
+    })) as unknown as Record<string, unknown>;
+  } catch (err) {
+    const failed = await deps.store.updateAttentionGrantIntent(claimed.id, {
+      state: 'failed',
+      failureReason: err instanceof Error ? err.message : String(err),
+    });
+    return { settled: false, state: 'failed', intent: failed };
+  }
+
+  const updated = await deps.store.updateAttentionGrantIntent(claimed.id, { state: 'settled', cityResponse });
   return { settled: true, state: 'settled', intent: updated };
 }

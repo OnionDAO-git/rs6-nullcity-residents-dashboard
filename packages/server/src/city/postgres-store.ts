@@ -605,6 +605,21 @@ export class PostgresCityStore implements CityStore {
     return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
   }
 
+  async claimAttentionGrantIntent(
+    id: string,
+    fromStates: AttentionGrantIntentState[],
+    toState: AttentionGrantIntentState,
+  ): Promise<AttentionGrantIntent | undefined> {
+    const rows = await this.sql`
+      UPDATE attention_grant_intents
+      SET state = ${toState}, updated_at = now()
+      WHERE id = ${id}
+        AND state = ANY(${fromStates}::text[])
+      RETURNING *
+    `;
+    return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
+  }
+
   async updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent> {
     const rows = await this.sql`
       UPDATE attention_grant_intents SET

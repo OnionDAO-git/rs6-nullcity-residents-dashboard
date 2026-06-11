@@ -608,7 +608,8 @@ export async function routeCityApi(
     if (pathname === '/api/city/onion-callback' && method === 'POST') {
       const raw = await request.text();
       const secret = context.config.onionCallbackSecret;
-      if (secret && !verifyOnionCallbackSignature(raw, request.headers.get('x-onion-signature'), secret)) {
+      if (!secret) return jsonResponse({ error: 'callback_secret_unconfigured' }, { status: 503 });
+      if (!verifyOnionCallbackSignature(raw, request.headers.get('x-onion-signature'), secret)) {
         return jsonResponse({ error: 'invalid_signature' }, { status: 401 });
       }
       let payload: Record<string, unknown> = {};
@@ -805,6 +806,7 @@ async function runOnionAttentionGrant(
       username,
       amount: onionAmount,
       callbackUrl: onionCallbackUrl(context.config),
+      callbackSecret: context.config.onionCallbackSecret,
       requester: context.config.onionExternalRequester,
       externalId: onionAttentionExternalId(auth.cityUser.id, residentId, idempotencyKey),
       note: memo,

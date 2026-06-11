@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { InMemoryCityStore } from './memory-store';
-import { runAttentionGrant } from './attention-grant';
+import { runAttentionGrant, settleOnionAttentionGrant } from './attention-grant';
 import { cityMigrations } from './migrations/schema';
 import type { NullCityControlClient } from './nullcity-control';
 import type { LandingSessionUser } from './types';
@@ -140,12 +140,64 @@ describe('runAttentionGrant', () => {
   });
 });
 
+describe('settleOnionAttentionGrant', () => {
+  test('claims settlement before crediting City so concurrent callbacks do not double-credit', async () => {
+    const { store, cityUserId } = await seededStore();
+    const intent = await store.createAttentionGrantIntent({
+      cityUserId,
+      residentId: 'res:fern',
+      apAmount: 40,
+      idempotencyKey: 'onion-race-1',
+    });
+    await store.updateAttentionGrantIntent(intent.id, {
+      state: 'awaiting_approval',
+      onionRequestId: 'onion-request-race',
+    });
+
+    let releaseCredit!: () => void;
+    const creditGate = new Promise<void>(resolve => {
+      releaseCredit = resolve;
+    });
+    const spy = { calls: [] as Array<{ resident: string; body: Record<string, unknown> }> };
+    const control: Pick<NullCityControlClient, 'creditAttention'> = {
+      creditAttention: async (resident, body) => {
+        spy.calls.push({ resident, body: body as unknown as Record<string, unknown> });
+        await creditGate;
+        return { ok: true as const, resident, attentionBefore: 5, attentionAfter: 45, creditedAmount: 40 };
+      },
+    };
+
+    const first = settleOnionAttentionGrant(
+      { store, control },
+      { onionRequestId: 'onion-request-race', status: 'completed', success: true },
+    );
+    while (spy.calls.length === 0) await new Promise(resolve => setTimeout(resolve, 0));
+
+    const second = await settleOnionAttentionGrant(
+      { store, control },
+      { onionRequestId: 'onion-request-race', status: 'completed', success: true },
+    );
+    releaseCredit();
+    const firstResult = await first;
+
+    expect(second).toMatchObject({ settled: false, state: 'settling' });
+    expect(firstResult).toMatchObject({ settled: true, state: 'settled' });
+    expect(spy.calls).toHaveLength(1);
+  });
+});
+
 describe('attention_grant_intents migration', () => {
   test('003 migration creates the table with the saga state CHECK', () => {
     const m = cityMigrations.find(x => x.id === '003_attention_grant_intents');
     expect(m).toBeDefined();
     expect(m!.sql).toContain('CREATE TABLE IF NOT EXISTS attention_grant_intents');
-    expect(m!.sql).toContain("state IN ('created', 'debited', 'sent_to_city', 'settled', 'failed')");
+    expect(m!.sql).toContain("state IN ('created', 'debited', 'sent_to_city', 'settling', 'settled', 'failed')");
     expect(m!.sql).toContain('UNIQUE (city_user_id, idempotency_key)');
+  });
+
+  test('004 migration allows real-spend states including settling', () => {
+    const m = cityMigrations.find(x => x.id === '004_attention_grant_real_spend');
+    expect(m).toBeDefined();
+    expect(m!.sql).toContain("state IN ('created', 'debited', 'sent_to_city', 'awaiting_approval', 'settling', 'settled', 'denied', 'failed')");
   });
 });

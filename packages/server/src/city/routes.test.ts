@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { cityConfigFromEnv } from './config';
 import type { LandingCheckinReader } from './checkins';
 import { cityMigrations } from './migrations/schema';
@@ -236,7 +237,7 @@ describe('routeCityApi points and souls', () => {
   });
 
   test('spends OnionDAO onions before crediting resident attention', async () => {
-    const createdRequests: Array<{ username: string; amount: number; callbackUrl: string; externalId?: string }> = [];
+    const createdRequests: Array<{ username: string; amount: number; callbackUrl: string; callbackSecret?: string; externalId?: string }> = [];
     const approvedRequests: Array<{ id: string; sessionToken: string }> = [];
     const statusSequence = ['pending', 'completed'];
     const creditCalls: Array<{ resident: string; body: Record<string, unknown> }> = [];
@@ -260,6 +261,7 @@ describe('routeCityApi points and souls', () => {
             username: input.username,
             amount: input.amount,
             callbackUrl: input.callbackUrl,
+            callbackSecret: input.callbackSecret,
             externalId: input.externalId,
           });
           return { id: 'onion-req-1', status: 'pending' };
@@ -288,6 +290,7 @@ describe('routeCityApi points and souls', () => {
           return { ok: true as const, resident, attentionBefore: 10, attentionAfter: 35, creditedAmount: 25 };
         },
       } as never,
+      ...onionCallbackOptions(),
     });
 
     const response = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
@@ -306,6 +309,7 @@ describe('routeCityApi points and souls', () => {
       username: 'alice',
       amount: 25,
       callbackUrl: 'http://localhost:8787/api/city/onion-callback',
+      callbackSecret: 'callback-secret',
       externalId: expect.stringContaining('onion-attn-1') as unknown as string,
     }]);
     expect(approvedRequests).toEqual([{ id: 'onion-req-1', sessionToken: 'test-token' }]);
@@ -327,7 +331,7 @@ describe('routeCityApi points and souls', () => {
   });
 
   test('settles pending OnionDAO attention through the City callback', async () => {
-    const createdRequests: Array<{ callbackUrl: string; externalId?: string }> = [];
+    const createdRequests: Array<{ callbackUrl: string; callbackSecret?: string; externalId?: string }> = [];
     const approvedRequests: string[] = [];
     const statusSequence = ['pending', 'pending'];
     const creditCalls: Array<{ resident: string; body: Record<string, unknown> }> = [];
@@ -347,7 +351,7 @@ describe('routeCityApi points and souls', () => {
           };
         },
         async createRequest(input) {
-          createdRequests.push({ callbackUrl: input.callbackUrl, externalId: input.externalId });
+          createdRequests.push({ callbackUrl: input.callbackUrl, callbackSecret: input.callbackSecret, externalId: input.externalId });
           return { id: 'onion-req-pending', status: 'pending' };
         },
         async approveRequest(id: string) {
@@ -374,6 +378,7 @@ describe('routeCityApi points and souls', () => {
           return { ok: true as const, resident, attentionBefore: 5, attentionAfter: 45, creditedAmount: 40 };
         },
       } as never,
+      ...onionCallbackOptions(),
     });
 
     const response = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
@@ -390,15 +395,20 @@ describe('routeCityApi points and souls', () => {
     });
     expect(createdRequests).toEqual([{
       callbackUrl: 'http://localhost:8787/api/city/onion-callback',
+      callbackSecret: 'callback-secret',
       externalId: expect.stringContaining('onion-attn-pending') as unknown as string,
     }]);
     expect(approvedRequests).toEqual(['onion-req-pending']);
     expect(creditCalls).toHaveLength(0);
 
+    const callbackBody = JSON.stringify({ id: 'onion-req-pending', status: 'completed', success: true });
     const callback = await route(new Request('http://city.test/api/city/onion-callback', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: 'onion-req-pending', status: 'completed', success: true }),
+      headers: {
+        'content-type': 'application/json',
+        'x-onion-signature': signOnionCallback(callbackBody),
+      },
+      body: callbackBody,
     }), services);
 
     expect(callback.status).toBe(200);
@@ -415,6 +425,27 @@ describe('routeCityApi points and souls', () => {
         sourceId: 'onion-attn-pending',
       },
     }]);
+  });
+
+  test('rejects unsigned OnionDAO callbacks when callback signing is unavailable or invalid', async () => {
+    const unsigned = await route(new Request('http://city.test/api/city/onion-callback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'onion-req-pending', status: 'completed', success: true }),
+    }), testServices(adminUser));
+    expect(unsigned.status).toBe(503);
+    expect(await unsigned.json()).toEqual({ error: 'callback_secret_unconfigured' });
+
+    const invalid = await route(new Request('http://city.test/api/city/onion-callback', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-onion-signature': 'bad-signature',
+      },
+      body: JSON.stringify({ id: 'onion-req-pending', status: 'completed', success: true }),
+    }), testServices(adminUser, undefined, onionCallbackOptions()));
+    expect(invalid.status).toBe(401);
+    expect(await invalid.json()).toEqual({ error: 'invalid_signature' });
   });
 
   test('marks denied OnionDAO attention without telling humans to wait for settlement', async () => {
@@ -1315,6 +1346,7 @@ function testServices(
     nullcityControl?: CityServices['nullcityControl'];
     oniondao?: CityServices['oniondao'];
     nullcityLettersBaseUrl?: string;
+    onionCallbackSecret?: string;
     printBridgeToken?: string;
   } = {},
 ): CityServices {
@@ -1325,6 +1357,7 @@ function testServices(
     NODE_ENV: options.csrfEnabled ? 'production' : 'test',
     CITY_PRINT_BRIDGE_TOKEN: options.printBridgeToken,
     NULLCITY_LETTERS_BASE_URL: options.nullcityLettersBaseUrl,
+    ONION_CALLBACK_SECRET: options.onionCallbackSecret,
   });
   return {
     config,
@@ -1343,6 +1376,14 @@ function testServices(
     nullcityControl: options.nullcityControl,
     oniondao: options.oniondao,
   };
+}
+
+function onionCallbackOptions(): { onionCallbackSecret: string } {
+  return { onionCallbackSecret: 'callback-secret' };
+}
+
+function signOnionCallback(body: string, secret = 'callback-secret'): string {
+  return createHmac('sha256', secret).update(body).digest('hex');
 }
 
 function authedRequest(path: string): Request {
