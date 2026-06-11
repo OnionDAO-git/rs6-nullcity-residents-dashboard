@@ -64,6 +64,82 @@ Open `http://localhost:5174/login` to log into the dashboard as the configured d
 
 `railway.json` builds with Bun and starts the server with `bun run start`. The configured healthcheck is `/api/health`.
 
+### All-in-one container (controller + BFF + SPA on one `/data` volume)
+
+This is the production target when the laptop is off: a single Railway
+container runs the nullcity-server controller **and** this dashboard BFF + the
+built SPA, sharing one Railway Volume mounted at `/data`. The dashboard reads
+**and writes** the same controller files the controller owns — exactly like the
+Mac runs them today, because in-container they share the volume.
+
+The container entrypoint (built in the server repo) should:
+
+1. Build the SPA: `bun install --frozen-lockfile && bun run build` → emits
+   `packages/web/dist`.
+2. Start the BFF as the foreground/last service: `bun src/index.ts`
+   (equivalently `bun run start`) from `packages/server`.
+
+Dashboard env for the all-in-one container (everything points at localhost
+inside the container; no cross-account DB):
+
+```sh
+# --- Serving ---
+DASHBOARD_HOST=0.0.0.0            # bind all interfaces (default 127.0.0.1 is loopback-only)
+DASHBOARD_PORT=${{ PORT }}        # Railway injects $PORT; config also reads PORT directly
+# DASHBOARD_WEB_DEV_ORIGIN must stay UNSET in prod (set => 307-redirects to a vite dev origin)
+# DASHBOARD_WEB_DIST defaults to packages/web/dist; only set if the build output moves
+
+# --- In-container service targets (controller runs in the same container) ---
+AGENT_GATEWAY_URL=ws://127.0.0.1:43595
+AGENT_GATEWAY_TOKEN=<server agentGateway.authToken>
+NULLCITY_RS_HOST=127.0.0.1:43594  # raw RuneScape game gateway behind the /rs ws proxy
+
+# --- Shared volume write/read roots (must match the controller's paths on /data) ---
+NULLCITY_SERVER_ROOT=/data
+NULLCITY_MEMORY_ROOT=/data/controller/memory
+NULLCITY_LOGS_ROOT=/data/controller/logs
+NULLCITY_AGENT_LOGS_ROOT=/data/agent-logs
+NULLCITY_SOULS_ROOT=/data/controller/soul/starter-souls   # NOTE: not under memory root
+NULLCITY_RESIDENT_SAVE_ROOT=/data/residents
+NULLCITY_BENCHMARK_ROOT=/data/benchmarks
+
+# --- Auth without landing's Postgres (the key simplification) ---
+LANDING_SESSION_MODE=api          # resolve session over HTTP, no LANDING_DATABASE_URL needed
+LANDING_AUTH_BASE_URL=https://oniondao.dev
+AUTH_COOKIE_NAME=session
+AUTH_COOKIE_DOMAIN=.oniondao.dev
+CITY_PUBLIC_BASE_URL=https://city.oniondao.dev
+# Leave LANDING_DATABASE_URL unset → 'auto' already picks the HTTP reader.
+# In api mode, landing daily_checkins sync has no HTTP equivalent and is disabled
+# (degrades gracefully; /api/city/checkins/sync returns landing_database_not_configured).
+
+# --- City store + print bridge ---
+CITY_DATABASE_URL=${{ Postgres.DATABASE_URL }}   # or omit to use the in-memory store
+CITY_PRINT_BRIDGE_TOKEN=<shared bridge token>
+```
+
+#### Runtime write paths → env → `/data` (shared with the controller)
+
+Every dashboard runtime write is under a configurable `NULLCITY_*_ROOT`, so it
+lands on the shared volume. No write path is hardcoded.
+
+| Write site | File(s) written | Root used | Env knob | Lands at (`/data`) |
+| --- | --- | --- | --- | --- |
+| `event-public.ts` `/v1/patron/checkin` | `patron-currency.json`, `patron-check-in.json` | `config.memoryRoot` | `NULLCITY_MEMORY_ROOT` | `/data/controller/memory/patron-currency.json`, `…/patron-check-in.json` |
+| `runtime.ts` `writeResidentSoul` (resident-create) | `<slug>.md` | `config.soulsRoot` | `NULLCITY_SOULS_ROOT` | `/data/controller/soul/starter-souls/<slug>.md` |
+| `runtime.ts` `deleteResidentFiles` (resident-delete) | rm resident dirs under memory/logs/agent-logs | `config.memoryRoot`, `config.logsRoot`, `config.agentLogsRoot` | `NULLCITY_MEMORY_ROOT`, `NULLCITY_LOGS_ROOT`, `NULLCITY_AGENT_LOGS_ROOT` | `/data/controller/memory/…`, `/data/controller/logs/…`, `/data/agent-logs/…` |
+
+`writeJsonAtomic` (temp file + `rename`) keeps patron writes crash-safe; both it
+and `mkdir -p` run under `NULLCITY_MEMORY_ROOT`. The soul write target
+(`NULLCITY_SOULS_ROOT`) is **not** under the memory root, so the container must
+set it explicitly to wherever the controller reads souls from on `/data`.
+
+### Separate dashboard service (legacy two-service deploy)
+
+If the dashboard runs as its own Railway service talking to a remote
+nullcity-server, point the gateway/RS host at the server over the network and
+(optionally) keep the direct landing DB reader.
+
 Required production variables:
 
 ```sh
@@ -79,6 +155,8 @@ AGENT_GATEWAY_URL=<nullcity-server agent gateway websocket URL>
 AGENT_GATEWAY_TOKEN=<nullcity-server agent gateway token>
 NULLCITY_RS_HOST=<nullcity-server rs tcp proxy host:port>
 CITY_PRINT_BRIDGE_TOKEN=<shared bridge token>
+# Optional: set LANDING_SESSION_MODE=api to resolve sessions over HTTP and drop
+# LANDING_DATABASE_URL here too (loses daily_checkins sync, otherwise equivalent).
 ```
 
 The local checkout is not linked to a Railway project by default. Link or deploy it into the same Railway project/environment as `landing-2026`, add a separate Postgres service for this dashboard, and attach `city.oniondao.dev` to the dashboard service.
