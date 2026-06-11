@@ -480,6 +480,81 @@ export function residentAttentionGuide(input: ResidentAttentionGuideInput): Resi
   };
 }
 
+export interface ResidentSupportPayoffInput {
+  residentName: string;
+  onionAmount: number;
+  creditedAmount?: number;
+  attentionBefore?: number;
+  attentionAfter?: number;
+  recentSay?: string;
+}
+
+export interface ResidentSupportPayoff {
+  headline: string;
+  detail: string;
+  reaction?: string;
+  lettersLine: string;
+}
+
+/**
+ * Rough life-runway conversion for the support payoff moment.
+ *
+ * `residentNeedsApSupportSoon` flags residents once attention runway drops to
+ * the short band (<=25 attention, floor at 10), which in practice reads as
+ * "may need help within about a day" — roughly one attention point per idle
+ * hour. The payoff copy uses the same approximation and always says "about".
+ */
+const APPROX_ATTENTION_HOURS_PER_POINT = 1;
+
+export function residentSupportPayoff(input: ResidentSupportPayoffInput): ResidentSupportPayoff {
+  const resident = input.residentName.trim() || 'This resident';
+  const attentionBefore = input.attentionBefore;
+  const attentionAfter = input.attentionAfter;
+  const credited = attentionBefore !== undefined && attentionAfter !== undefined && attentionAfter > attentionBefore
+    ? attentionAfter - attentionBefore
+    : Math.max(0, Math.floor(input.creditedAmount ?? input.onionAmount));
+  const runway = approximateRunwayLabel(credited * APPROX_ATTENTION_HOURS_PER_POINT);
+  const onionLabel = formatOnionAmount(Math.max(0, Math.floor(input.onionAmount)));
+  const attentionTrail = attentionBefore !== undefined && attentionAfter !== undefined
+    ? ` Attention ${nonNegativeWholeAmount(attentionBefore).toLocaleString()} → ${nonNegativeWholeAmount(attentionAfter).toLocaleString()}.`
+    : '';
+  const reaction = input.recentSay?.trim();
+
+  return {
+    headline: `You just gave ${resident} ${runway} in the city.`,
+    detail: `${onionLabel} settled as ${credited.toLocaleString()} attention.${attentionTrail}`,
+    ...(reaction ? { reaction } : {}),
+    lettersLine: `${resident} will write to you — check your Letters.`,
+  };
+}
+
+function approximateRunwayLabel(hours: number): string {
+  const wholeHours = Math.max(0, Math.round(hours));
+  if (wholeHours < 1) return 'a little more time';
+  if (wholeHours === 1) return 'about 1 more hour';
+  if (wholeHours < 48) return `about ${wholeHours.toLocaleString()} more hours`;
+  const days = Math.round(wholeHours / 24);
+  return `about ${days.toLocaleString()} more days`;
+}
+
+export interface ResidentRecentSayInput {
+  posts?: readonly { body?: string; source?: string; visibility?: string; createdAt?: string }[];
+  feed?: { latestEventKind?: string; latestEventText?: string };
+  lastEvent?: { kind?: string; text?: string };
+}
+
+export function residentRecentPublicSay(input: ResidentRecentSayInput): string | undefined {
+  const posts = [...(input.posts ?? [])]
+    .filter(post => (post.source ?? 'resident') === 'resident' && post.visibility !== 'hidden' && Boolean(post.body?.trim()))
+    .sort((a, b) => timestampValue(b.createdAt) - timestampValue(a.createdAt));
+  const postBody = posts[0]?.body?.trim();
+  if (postBody) return postBody;
+
+  if (input.lastEvent?.kind === 'say' && input.lastEvent.text?.trim()) return input.lastEvent.text.trim();
+  if (input.feed?.latestEventKind === 'say' && input.feed.latestEventText?.trim()) return input.feed.latestEventText.trim();
+  return undefined;
+}
+
 export function residentAttentionResultNotice(input: ResidentAttentionResultNoticeInput): string {
   const resident = input.residentName || 'This resident';
   const settled = input.status === 'settled' || input.onionRequestStatus === 'completed';

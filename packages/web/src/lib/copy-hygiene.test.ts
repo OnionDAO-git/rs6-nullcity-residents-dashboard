@@ -121,6 +121,10 @@ describe('dashboard copy hygiene', () => {
     expect(simpleResidentProfileSource).toContain('cityResidentAttentionPreview.copy');
     expect(simpleResidentProfileSource).toContain('cityResidentAttentionPreview.buttonLabel');
     expect(simpleResidentProfileSource).toContain('Toward target');
+    expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.headline');
+    expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.reaction');
+    expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.lettersLine');
+    expect(simpleResidentProfileSource).toContain('Open Letters');
     expect(appSource).toContain('attentionBefore: result.city.attentionBefore');
     expect(appSource).toContain('attentionAfter: result.city.attentionAfter');
     expect(dashboardNavSource).toContain('Their attention rose from');

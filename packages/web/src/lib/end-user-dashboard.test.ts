@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { SoulProposal } from './city-api';
-import { boardActionCards, dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
+import { boardActionCards, dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentRecentPublicSay, residentSupportPayoff, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav to the Simple IA destinations', () => {
@@ -525,6 +525,86 @@ describe('residentAttentionPreview', () => {
       buttonLabel: 'Choose Onions',
       exceedsWallet: false,
     });
+  });
+});
+
+describe('residentSupportPayoff', () => {
+  test('frames settled support as life runway with the resident reaction and letters hook', () => {
+    const payoff = residentSupportPayoff({
+      residentName: 'Hans',
+      onionAmount: 75,
+      creditedAmount: 75,
+      attentionBefore: 4,
+      attentionAfter: 79,
+      recentSay: 'The embassy lamps are lit again.',
+    });
+
+    expect(payoff.headline).toBe('You just gave Hans about 3 more days in the city.');
+    expect(payoff.detail).toBe('75 Onions settled as 75 attention. Attention 4 → 79.');
+    expect(payoff.reaction).toBe('The embassy lamps are lit again.');
+    expect(payoff.lettersLine).toBe('Hans will write to you — check your Letters.');
+  });
+
+  test('uses hour framing for small spends and stays labeled as approximate', () => {
+    const payoff = residentSupportPayoff({ residentName: 'Pip', onionAmount: 6 });
+
+    expect(payoff.headline).toBe('You just gave Pip about 6 more hours in the city.');
+    expect(payoff.detail).toBe('6 Onions settled as 6 attention.');
+    expect(payoff.reaction).toBeUndefined();
+  });
+
+  test('prefers the actual attention delta over the requested onion amount', () => {
+    const payoff = residentSupportPayoff({
+      residentName: 'Hans',
+      onionAmount: 100,
+      creditedAmount: 100,
+      attentionBefore: 10,
+      attentionAfter: 60,
+    });
+
+    expect(payoff.headline).toBe('You just gave Hans about 2 more days in the city.');
+    expect(payoff.detail).toBe('100 Onions settled as 50 attention. Attention 10 → 60.');
+  });
+
+  test('keeps payoff copy free of AP, GP, and controller jargon', () => {
+    const payoff = residentSupportPayoff({
+      residentName: 'Hans',
+      onionAmount: 25,
+      attentionBefore: 5,
+      attentionAfter: 30,
+      recentSay: 'Back to the river.',
+    });
+    const copy = `${payoff.headline} ${payoff.detail} ${payoff.lettersLine}`;
+
+    expect(copy).not.toMatch(/\b(AP|GP|controller|operator|API|backend|bridge|MVP)\b/);
+  });
+});
+
+describe('residentRecentPublicSay', () => {
+  test('returns the newest public resident post body', () => {
+    expect(residentRecentPublicSay({
+      posts: [
+        { body: 'Older words.', source: 'resident', visibility: 'public', createdAt: '2026-06-01T10:00:00Z' },
+        { body: 'The embassy lamps are lit again.', source: 'resident', visibility: 'public', createdAt: '2026-06-02T10:00:00Z' },
+        { body: 'Operator note.', source: 'admin', visibility: 'public', createdAt: '2026-06-03T10:00:00Z' },
+        { body: 'Hidden thought.', source: 'resident', visibility: 'hidden', createdAt: '2026-06-04T10:00:00Z' },
+      ],
+    })).toBe('The embassy lamps are lit again.');
+  });
+
+  test('falls back to the live say feed when no posts exist', () => {
+    expect(residentRecentPublicSay({
+      posts: [],
+      lastEvent: { kind: 'say', text: 'Checking the road.' },
+    })).toBe('Checking the road.');
+
+    expect(residentRecentPublicSay({
+      feed: { latestEventKind: 'say', latestEventText: 'Anyone seen my axe?' },
+    })).toBe('Anyone seen my axe?');
+  });
+
+  test('returns undefined instead of inventing a reaction', () => {
+    expect(residentRecentPublicSay({ posts: [], lastEvent: { kind: 'walk' }, feed: { latestEventKind: 'combat' } })).toBeUndefined();
   });
 });
 

@@ -70,7 +70,7 @@
   import { fetchPublicSoulLives, type PublicSoulLife } from './lib/soul-library';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentRecentPublicSay, residentSupportPayoff, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem, type ResidentSupportPayoff } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -426,6 +426,8 @@
   let exchangeResult: NullCityApGpExchangeRecord | undefined;
   let cityActionNotice = '';
   let cityLatestSupportReceipt = '';
+  let citySupportPayoff: ResidentSupportPayoff | undefined;
+  let citySupportPayoffResidentId = '';
   let gameClientMount: HTMLElement | undefined;
   let gameClientCanvas: HTMLCanvasElement | undefined;
   let gameClientController: GameClientController | undefined;
@@ -509,6 +511,9 @@
     storyteller: cityResidentStorySignal,
   });
   $: cityResidentApSupport = residentApSupportRecommendation(cityResident);
+  $: cityResidentSupportPayoff = citySupportPayoff && cityResidentId && residentRouteSlug(citySupportPayoffResidentId) === residentRouteSlug(cityResidentId)
+    ? citySupportPayoff
+    : undefined;
   $: cityResidentCurrentAttention = cityResident?.attention ?? cityResidentReadModel?.currentAttention;
   $: cityResidentDisplayName = cityResidentReadModel?.displayName || (cityResident ? residentDisplayName(cityResident.name) : cityResidentId || 'this resident');
   $: cityResidentAttentionGuide = residentAttentionGuide({
@@ -2218,12 +2223,20 @@
     await runAction(async () => {
       const onionAmount = positiveInt(grantAttentionOnions, 'Onion spend');
       const residentNameForNotice = selectedCityResidentDisplay();
+      const recentSay = residentRecentPublicSay({
+        posts: cityResidentPosts,
+        ...(cityResident?.lastEvent ? { lastEvent: cityResident.lastEvent } : {}),
+        ...(cityResident?.feed ? { feed: cityResident.feed } : {}),
+      });
+      citySupportPayoff = undefined;
+      citySupportPayoffResidentId = '';
       const result = await cityApi.grantResidentOnionAttention(residentId, {
         onionAmount,
         memo: grantAttentionMemo.trim(),
         idempotencyKey: crypto.randomUUID(),
       });
-      cityActionNotice = result.message || residentAttentionResultNotice({
+      const settled = result.status === 'settled' || result.onionRequest.status === 'completed';
+      const receipt = result.message || residentAttentionResultNotice({
         residentName: residentNameForNotice,
         onionAmount,
         status: result.status,
@@ -2232,10 +2245,29 @@
         ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
         ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
       });
-      rememberLatestSupportReceipt(cityActionNotice);
+      if (settled) {
+        citySupportPayoff = residentSupportPayoff({
+          residentName: residentNameForNotice,
+          onionAmount,
+          ...(result.city?.creditedAmount === undefined ? {} : { creditedAmount: result.city.creditedAmount }),
+          ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
+          ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
+          ...(recentSay ? { recentSay } : {}),
+        });
+        citySupportPayoffResidentId = residentId;
+        cityActionNotice = expertMode ? receipt : '';
+      } else {
+        cityActionNotice = receipt;
+      }
+      rememberLatestSupportReceipt(receipt);
       await bootstrapSession();
       await loadRoute(false);
     });
+  }
+
+  function dismissSupportPayoff() {
+    citySupportPayoff = undefined;
+    citySupportPayoffResidentId = '';
   }
 
   function applyApSupportSuggestion(recommendation: ResidentApSupportRecommendation) {
@@ -5948,6 +5980,27 @@
             {@render CityAuthCta({ label: cityResidentAttentionGuide.primaryAction })}
           {/if}
         </div>
+        {#if cityResidentSupportPayoff}
+          <div class="city-panel span-2 resident-support-payoff tone-gold" aria-live="polite">
+            <div class="row">
+              <div class="panel-title">Support Delivered</div>
+              <button type="button" class="notice-dismiss" aria-label="Dismiss support result" title="Dismiss" onclick={dismissSupportPayoff}>X</button>
+            </div>
+            <strong class="resident-support-payoff-headline">{cityResidentSupportPayoff.headline}</strong>
+            <small>{cityResidentSupportPayoff.detail}</small>
+            {#if cityResidentSupportPayoff.reaction}
+              <blockquote class="resident-support-reaction">
+                <p>"{cityResidentSupportPayoff.reaction}"</p>
+                <cite>— {selectedCityResidentDisplay()}, recently in the city</cite>
+              </blockquote>
+            {/if}
+            <p class="resident-support-letters-line">{cityResidentSupportPayoff.lettersLine}</p>
+            <div class="resident-simple-actions">
+              <button class="primary" onclick={() => cityNav('/inbox')}>Open Letters</button>
+              <button disabled={!cityResident?.online} onclick={() => cityResident && cityNav(`/world?resident=${encodeURIComponent(cityResident.name)}`)}>Watch them live</button>
+            </div>
+          </div>
+        {/if}
         <div class="city-panel resident-simple-facts-panel">
           <div class="panel-title">Resident Now</div>
           <div class="city-resident-profile-grid simple-facts">
