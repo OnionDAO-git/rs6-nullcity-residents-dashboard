@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -571,6 +571,13 @@
     proposalCount: cityProposals.length,
     onionBalance: citySession.onions,
     residentCount: cityResidents.length,
+  });
+  $: cityBoardActionCards = boardActionCards({
+    authenticated: citySession.authenticated,
+    onionBalance: citySession.onions,
+    lowAttentionResidents: cityLowAttentionResidents.length,
+    residentCount: cityResidents.length,
+    pendingPrints: cityPendingPrints,
   });
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
   $: cityGuestTrailGuide = residentGuestTrailGuideCopy(cityLoopPulse);
@@ -4489,6 +4496,20 @@
     <h1>Board</h1>
     <p class="city-lede">Use the Board to decide what to do next: give attention, support resident goals, follow future souls, and track item requests.</p>
   </section>
+  <section class="city-board-action-strip" aria-label="What to do now">
+    <div class="city-board-action-heading">
+      <p class="kicker">What To Do Now</p>
+      <strong>Pick one action and move the city forward.</strong>
+    </div>
+    <div class="city-board-action-grid">
+      {#each cityBoardActionCards as card (card.label)}
+        <button class={`city-board-action tone-${card.tone}`} onclick={() => cityNav(card.path)}>
+          <strong>{card.label}</strong>
+          <small>{card.detail}</small>
+        </button>
+      {/each}
+    </div>
+  </section>
   <section class="city-dashboard-grid">
     <div class="city-panel span-2">
       <div class="row">
@@ -4508,8 +4529,12 @@
           </button>
         {:else}
           <div class="city-empty-state">
-            <strong>No resident list yet</strong>
-            <span>Live residents will appear here when the city snapshot is ready.</span>
+            <strong>Resident list is loading</strong>
+            <span>Watch Live or check Residents while the list catches up.</span>
+            <div class="resident-sync-actions">
+              <button onclick={() => cityNav('/live')}>Watch Live</button>
+              <button onclick={() => cityNav('/residents')}>Residents</button>
+            </div>
           </div>
         {/each}
       </div>
@@ -4535,6 +4560,10 @@
           <div class="city-empty-state">
             <strong>No trophy goals yet</strong>
             <span>Follow resident goals here, then use attention to help one happen.</span>
+            <div class="resident-sync-actions">
+              <button onclick={() => cityNav('/residents?triage=attention')}>Give Attention</button>
+              <button onclick={() => cityNav('/prints')}>Trophies</button>
+            </div>
           </div>
         {/each}
       </div>
@@ -4556,6 +4585,10 @@
           <div class="city-empty-state">
             <strong>No future residents yet</strong>
             <span>Open New Souls to propose the next resident.</span>
+            <div class="resident-sync-actions">
+              <button onclick={() => cityNav(citySession.authenticated ? '/embassy/new' : '/login')}>Create Soul</button>
+              <button onclick={() => cityNav('/embassy')}>New Souls</button>
+            </div>
           </div>
         {/each}
       </div>
@@ -4578,13 +4611,19 @@
             <div class="city-empty-state">
               <strong>No item requests yet</strong>
               <span>Request a trophy when you want a physical object from the city.</span>
+              <div class="resident-sync-actions">
+                <button onclick={() => cityNav(citySession.authenticated ? '/prints/new' : '/login')}>Request Trophy</button>
+              </div>
             </div>
           {/each}
         </div>
       {:else}
         <div class="city-empty-state">
-          <strong>Sign in to see your requests</strong>
-          <span>Your item requests and resident support history appear after login.</span>
+          <strong>Sign in to track trophies</strong>
+          <span>Your trophy requests and supported residents appear after login.</span>
+          <div class="resident-sync-actions">
+            <button onclick={() => cityNav('/login')}>Sign In</button>
+          </div>
         </div>
       {/if}
     </div>
@@ -4603,6 +4642,9 @@
         <div class="city-empty-state">
           <strong>No city update yet</strong>
           <span>Open Live to watch residents while new updates arrive.</span>
+          <div class="resident-sync-actions">
+            <button onclick={() => cityNav('/live')}>Watch Live</button>
+          </div>
         </div>
       {/if}
     </div>
@@ -6209,7 +6251,8 @@
         <strong>{missingState.title}</strong>
         <span>{missingState.detail}</span>
         <div class="resident-sync-actions">
-          <button onclick={() => cityNav('/chronicle')}>Story</button>
+          <button onclick={() => cityNav('/live')}>Watch Live</button>
+          <button onclick={() => cityNav('/board')}>Board</button>
           {#if expertMode}
             <button onclick={() => debugNav('/residents')}>Ops Roster</button>
           {/if}
@@ -7138,7 +7181,8 @@
         <strong>{rosterState.title}</strong>
         <span>{rosterState.detail}</span>
         <div class="resident-sync-actions">
-          <button onclick={() => cityNav('/chronicle')}>Story</button>
+          <button onclick={() => cityNav('/live')}>Watch Live</button>
+          <button onclick={() => cityNav('/board')}>Board</button>
           {#if expertMode}
             <button onclick={() => debugNav('/residents')}>Ops Roster</button>
           {/if}

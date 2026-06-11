@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { SoulProposal } from './city-api';
-import { dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
+import { boardActionCards, dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav to the Simple IA destinations', () => {
@@ -56,6 +56,45 @@ describe('primaryDashboardNavItems', () => {
     expect(labels).toContain('Library');
     expect(labels).toContain('Admin');
     expect(labels).toContain('Debug');
+  });
+});
+
+describe('boardActionCards', () => {
+  test('gives guests a simple start-here strip without expert routes or jargon', () => {
+    const cards = boardActionCards({
+      authenticated: false,
+      onionBalance: 0,
+      lowAttentionResidents: 2,
+      residentCount: 10,
+      pendingPrints: 0,
+    });
+
+    expect(cards.map(card => [card.label, card.path])).toEqual([
+      ['Give Attention', '/residents?triage=attention'],
+      ['Watch Live', '/live'],
+      ['Request Trophy', '/login'],
+      ['Sign In', '/login'],
+    ]);
+    expect(cards.map(card => card.detail).join(' ')).not.toMatch(/\b(debug|ops|controller|bridge|snapshot|API|backend|MVP|endpoint|shell)\b/i);
+  });
+
+  test('routes signed-in humans to their usable Board actions', () => {
+    const cards = boardActionCards({
+      authenticated: true,
+      onionBalance: 999,
+      lowAttentionResidents: 0,
+      residentCount: 10,
+      pendingPrints: 1,
+    });
+
+    expect(cards.map(card => [card.label, card.path])).toEqual([
+      ['Give Attention', '/residents'],
+      ['Watch Live', '/live'],
+      ['Request Trophy', '/prints/new'],
+      ['Me', '/profile'],
+    ]);
+    expect(cards[0]?.detail).toContain('999 Onions');
+    expect(cards[2]?.detail).toContain('1 request');
   });
 });
 

@@ -1903,6 +1903,73 @@ pre {
   font: 700 10px var(--mono);
 }
 
+.city-board-action-strip {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 18px;
+  padding: 16px;
+  background: rgba(22, 19, 16, 0.9);
+  border: 1px solid var(--ground-3);
+  border-left: 3px solid var(--s-gold);
+}
+
+.city-board-action-heading {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.city-board-action-heading strong {
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: clamp(22px, 1.8vw, 30px);
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.city-board-action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.city-board-action {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 14px;
+  text-align: left;
+  background: var(--ground-1);
+  border: 1px solid var(--ground-3);
+  border-left: 3px solid var(--s-bone);
+}
+
+.city-board-action strong {
+  overflow-wrap: anywhere;
+  color: var(--text-0);
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.city-board-action small {
+  min-width: 0;
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+  white-space: normal;
+}
+
 .city-admin-strip {
   border-left-color: var(--s-amber);
 }
@@ -4081,6 +4148,14 @@ pre {
     padding-inline: 22px;
   }
 
+  .city-board-action-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .city-board-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .city-dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4689,6 +4764,27 @@ pre {
   .city-entry {
     min-height: 112px;
     padding: 13px;
+  }
+
+  .city-board-action-strip {
+    padding: 14px;
+  }
+
+  .city-board-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .city-board-action {
+    min-height: 118px;
+    padding: 12px;
+  }
+
+  .city-board-action strong {
+    font-size: 19px;
+  }
+
+  .city-board-action small {
+    font-size: 11px;
   }
 
   .city-card-list button,

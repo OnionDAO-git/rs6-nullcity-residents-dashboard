@@ -38,6 +38,21 @@ export interface RecommendedDashboardAction {
   actionLabel?: string;
 }
 
+export interface BoardActionCardsInput {
+  authenticated: boolean;
+  onionBalance: number;
+  lowAttentionResidents: number;
+  residentCount: number;
+  pendingPrints: number;
+}
+
+export interface BoardActionCard {
+  label: string;
+  path: string;
+  detail: string;
+  tone: DashboardTone;
+}
+
 export interface ResidentAttentionGuideInput {
   authenticated: boolean;
   residentName: string;
@@ -233,6 +248,49 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
     tone: 'teal',
     actionLabel: 'Open Residents',
   };
+}
+
+export function boardActionCards(input: BoardActionCardsInput): BoardActionCard[] {
+  const attentionPath = input.lowAttentionResidents > 0 ? '/residents?triage=attention' : '/residents';
+  const onionText = input.authenticated && input.onionBalance > 0
+    ? `${input.onionBalance.toLocaleString()} Onion${input.onionBalance === 1 ? '' : 's'}`
+    : 'Onions';
+  const requestText = input.pendingPrints > 0
+    ? `${input.pendingPrints.toLocaleString()} request${input.pendingPrints === 1 ? '' : 's'} in progress.`
+    : 'Ask for a physical trophy or item request.';
+
+  return [
+    {
+      label: 'Give Attention',
+      path: attentionPath,
+      detail: input.residentCount > 0
+        ? `Choose a resident and spend ${onionText} so they receive attention.`
+        : 'Open the resident list when it loads, then choose who should receive attention.',
+      tone: input.lowAttentionResidents > 0 ? 'warn' : 'gold',
+    },
+    {
+      label: 'Watch Live',
+      path: '/live',
+      detail: 'See residents moving in the city before you choose who to support.',
+      tone: 'teal',
+    },
+    {
+      label: 'Request Trophy',
+      path: input.authenticated ? '/prints/new' : '/login',
+      detail: input.authenticated
+        ? requestText
+        : 'Sign in first, then ask for a trophy or item request.',
+      tone: 'amber',
+    },
+    {
+      label: input.authenticated ? 'Me' : 'Sign In',
+      path: input.authenticated ? '/profile' : '/login',
+      detail: input.authenticated
+        ? 'See your Onions, supported residents, and requests.'
+        : 'Load your Onions and unlock resident support.',
+      tone: 'mauve',
+    },
+  ];
 }
 
 export function simpleModeRouteRequiresExpert(route: string, search = ''): boolean {

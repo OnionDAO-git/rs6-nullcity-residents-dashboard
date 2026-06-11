@@ -38,6 +38,7 @@ describe('dashboard copy hygiene', () => {
 
   test('keeps guest session copy attendee-facing instead of naming API internals', () => {
     expect(appSource).not.toContain('`/api/session`');
+    expect(appSource).not.toContain('Showing the shell with empty states');
     expect(appSource).toContain('Sign in to spend Onions, support residents, create new souls, request items, and see your messages.');
     expect(appSource).toContain('This dashboard remains in guest mode until attendee login is connected.');
   });
@@ -91,11 +92,23 @@ describe('dashboard copy hygiene', () => {
     expect(dashboardNavSource).not.toMatch(/\{[^}]*path: '\/board'[^}]*expertOnly: true[^}]*\}/);
     expect(boardSource).toContain('<h1>Board</h1>');
     expect(boardSource).toContain('Use the Board to decide what to do next');
+    expect(boardSource).toContain('What To Do Now');
+    expect(boardSource).toContain('Give Attention');
+    expect(boardSource).toContain('Watch Live');
+    expect(boardSource).toContain('Request Trophy');
+    expect(boardSource).toContain("cityNav('/live')");
+    expect(boardSource).toContain("cityNav('/prints')");
+    expect(boardSource).toContain("'/prints/new'");
+    expect(boardSource).toContain("'/embassy/new'");
+    expect(boardSource).toContain("citySession.authenticated ? '/prints/new' : '/login'");
+    expect(boardSource).toContain("citySession.authenticated ? '/embassy/new' : '/login'");
     expect(boardSource).toContain("cityNav('/residents?triage=attention')");
     expect(appSource).not.toContain('/residents?focus=needs-attention');
     expect(boardSource).toContain('Resident Goals & Trophies');
     expect(boardSource).toContain('wrote the soul, helped create the resident, or gave attention');
-    expect(boardSource).not.toMatch(/\b(Designing|wired|API|bridge|backend|MVP|operator|dev)\b/i);
+    expect(boardSource).toContain('Resident list is loading');
+    expect(boardSource).toContain('Sign in to track trophies');
+    expect(boardSource).not.toMatch(/\b(Designing|wired|API|bridge|backend|MVP|operator|dev|snapshot)\b/i);
     expect(boardSource).not.toMatch(/\bNCRI\b/);
   });
 
