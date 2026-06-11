@@ -236,25 +236,13 @@ describe('routeCityApi points and souls', () => {
     expect(balanceOf(await points.json(), 'AP')).toBe(reconstructed);
   });
 
-  test('spends OnionDAO onions before crediting resident attention', async () => {
+  test('requires explicit consent: creates the burn request, returns approvalUrl, and never auto-approves', async () => {
     const createdRequests: Array<{ username: string; amount: number; callbackUrl: string; callbackSecret?: string; externalId?: string }> = [];
-    const approvedRequests: Array<{ id: string; sessionToken: string }> = [];
-    const statusSequence = ['pending', 'completed'];
     const creditCalls: Array<{ resident: string; body: Record<string, unknown> }> = [];
     const services = testServices(adminUser, undefined, {
       oniondao: {
         async profile() {
-          return {
-            name: 'Alice',
-            handle: 'alice',
-            avatarUrl: null,
-            onionId: null,
-            solanaWalletAddress: null,
-            balanceType: 'points',
-            currentOnionPoints: 1175,
-            currentOnionTokens: null,
-            currentBalance: 1175,
-          };
+          return walletReadout(1175);
         },
         async createRequest(input) {
           createdRequests.push({
@@ -266,22 +254,11 @@ describe('routeCityApi points and souls', () => {
           });
           return { id: 'onion-req-1', status: 'pending' };
         },
-        async approveRequest(id: string, sessionToken: string) {
-          approvedRequests.push({ id, sessionToken });
+        async approveRequest() {
+          throw new Error('EXPLICIT CONSENT: the dashboard must never auto-approve a burn');
         },
         async requestStatus(id: string) {
-          return {
-            id,
-            requestType: 'burn',
-            status: statusSequence.shift() || 'completed',
-            amount: 25,
-            currencyMode: 'points',
-            solanaSignature: null,
-            error: null,
-            createdAt: '2026-06-04T12:00:00.000Z',
-            updatedAt: '2026-06-04T12:00:01.000Z',
-            reviewedAt: '2026-06-04T12:00:01.000Z',
-          };
+          return burnRequestStatus(id, 'pending', 25);
         },
       },
       nullcityControl: {
@@ -298,13 +275,18 @@ describe('routeCityApi points and souls', () => {
       idempotencyKey: 'onion-attn-1',
       memo: 'Focus Fern',
     }), services);
-    const payload = await response.json() as {
-      onionRequest: { id: string; status: string };
-      city: { creditedAmount: number };
-      onionWallet?: { currentBalance: number };
-    };
+    const payload = await response.json() as Record<string, unknown>;
 
     expect(response.status).toBe(202);
+    expect(payload).toMatchObject({
+      status: 'pending_onion_settlement',
+      residentId: 'res:fern',
+      idempotencyKey: 'onion-attn-1',
+      approvalUrl: 'https://oniondao.dev/portal/onions',
+      statusUrl: '/api/city/onion-attention-grants/onion-attn-1/status',
+      onionRequest: { id: 'onion-req-1', status: 'pending' },
+      intent: { state: 'awaiting_approval', residentId: 'res:fern' },
+    });
     expect(createdRequests).toEqual([{
       username: 'alice',
       amount: 25,
@@ -312,64 +294,164 @@ describe('routeCityApi points and souls', () => {
       callbackSecret: 'callback-secret',
       externalId: expect.stringContaining('onion-attn-1') as unknown as string,
     }]);
-    expect(approvedRequests).toEqual([{ id: 'onion-req-1', sessionToken: 'test-token' }]);
+    // No credit until the attendee approves on landing.
+    expect(creditCalls).toHaveLength(0);
+  });
+
+  test('reuses the existing pending intent for the same user+resident instead of double-burning', async () => {
+    const createdRequests: string[] = [];
+    const services = testServices(adminUser, undefined, {
+      oniondao: {
+        async profile() {
+          return walletReadout(1175);
+        },
+        async createRequest(input) {
+          const id = `onion-req-${createdRequests.length + 1}`;
+          createdRequests.push(input.externalId || '');
+          return { id, status: 'pending' };
+        },
+        async approveRequest() {
+          throw new Error('must not auto-approve');
+        },
+        async requestStatus(id: string) {
+          return burnRequestStatus(id, 'pending', 25);
+        },
+      },
+      nullcityControl: {
+        creditAttention: async () => {
+          throw new Error('pending grants must not credit attention');
+        },
+      } as never,
+      ...onionCallbackOptions(),
+    });
+
+    const first = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
+      onionAmount: 25,
+      idempotencyKey: 'dup-1',
+    }), services);
+    // Retry with a FRESH idempotencyKey while the first is still awaiting approval.
+    const second = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
+      onionAmount: 25,
+      idempotencyKey: 'dup-2',
+    }), services);
+
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(202);
+    const firstPayload = await first.json() as Record<string, unknown>;
+    const secondPayload = await second.json() as Record<string, unknown>;
+    expect(firstPayload).toMatchObject({ status: 'pending_onion_settlement', idempotencyKey: 'dup-1' });
+    // The retry returns the EXISTING intent (same key, same burn request) — no second burn.
+    expect(secondPayload).toMatchObject({
+      status: 'pending_onion_settlement',
+      idempotencyKey: 'dup-1',
+      approvalUrl: 'https://oniondao.dev/portal/onions',
+      onionRequest: { id: 'onion-req-1' },
+    });
+    expect(createdRequests).toHaveLength(1);
+
+    // A different resident is out of scope for the reuse guard: new burn request.
+    const other = await route(jsonRequest('/api/city/residents/res:oak/onion-attention-grants', {
+      onionAmount: 10,
+      idempotencyKey: 'dup-3',
+    }), services);
+    expect(other.status).toBe(202);
+    expect(await other.json()).toMatchObject({ status: 'pending_onion_settlement', idempotencyKey: 'dup-3' });
+    expect(createdRequests).toHaveLength(2);
+  });
+
+  test('poll endpoint settles the grant once landing reports the burn approved', async () => {
+    const statusSequence = ['pending', 'completed', 'completed'];
+    const creditCalls: Array<{ resident: string; body: Record<string, unknown> }> = [];
+    const services = testServices(adminUser, undefined, {
+      oniondao: {
+        async profile() {
+          return walletReadout(1150);
+        },
+        async createRequest() {
+          return { id: 'onion-req-poll', status: 'pending' };
+        },
+        async approveRequest() {
+          throw new Error('must not auto-approve');
+        },
+        async requestStatus(id: string) {
+          return burnRequestStatus(id, statusSequence.shift() || 'completed', 25);
+        },
+      },
+      nullcityControl: {
+        creditAttention: async (resident: string, body: Record<string, unknown>) => {
+          creditCalls.push({ resident, body });
+          return { ok: true as const, resident, attentionBefore: 0, attentionAfter: 25, creditedAmount: 25 };
+        },
+      } as never,
+      ...onionCallbackOptions(),
+    });
+
+    const created = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
+      onionAmount: 25,
+      idempotencyKey: 'onion-attn-poll',
+    }), services);
+    expect(created.status).toBe(202);
+
+    const unknown = await route(authedRequest('/api/city/onion-attention-grants/no-such-key/status'), services);
+    expect(unknown.status).toBe(404);
+
+    // Poll 1: landing still pending — stay pending, keep the approval link.
+    const pendingPoll = await route(authedRequest('/api/city/onion-attention-grants/onion-attn-poll/status'), services);
+    expect(pendingPoll.status).toBe(200);
+    expect(await pendingPoll.json()).toMatchObject({
+      status: 'pending_onion_settlement',
+      residentId: 'res:fern',
+      idempotencyKey: 'onion-attn-poll',
+      approvalUrl: 'https://oniondao.dev/portal/onions',
+    });
+    expect(creditCalls).toHaveLength(0);
+
+    // Poll 2: the attendee approved on landing — settle and credit City.
+    const settledPoll = await route(authedRequest('/api/city/onion-attention-grants/onion-attn-poll/status'), services);
+    expect(settledPoll.status).toBe(200);
+    expect(await settledPoll.json()).toMatchObject({
+      status: 'settled',
+      residentId: 'res:fern',
+      idempotencyKey: 'onion-attn-poll',
+      city: { creditedAmount: 25 },
+      onionWallet: { currentBalance: 1150 },
+    });
     expect(creditCalls).toEqual([{
       resident: 'res:fern',
       body: {
-        idempotencyKey: 'onion-attn-1',
+        idempotencyKey: 'onion-attn-poll',
         amount: 25,
         cityUserId: expect.any(String) as unknown as string,
         personId: 'landing-user-1',
         patronHandle: 'alice',
         sourceType: 'resident_attention_grant',
-        sourceId: 'onion-attn-1',
+        sourceId: 'onion-attn-poll',
       },
     }]);
-    expect(payload.onionRequest).toMatchObject({ id: 'onion-req-1', status: 'completed' });
-    expect(payload.city).toMatchObject({ creditedAmount: 25 });
-    expect(payload.onionWallet).toMatchObject({ currentBalance: 1175 });
+
+    // Poll 3: idempotent replay — still settled, City credited exactly once.
+    const replayPoll = await route(authedRequest('/api/city/onion-attention-grants/onion-attn-poll/status'), services);
+    expect(await replayPoll.json()).toMatchObject({ status: 'settled', idempotencyKey: 'onion-attn-poll' });
+    expect(creditCalls).toHaveLength(1);
   });
 
-  test('settles pending OnionDAO attention through the City callback', async () => {
+  test('settles pending OnionDAO attention through the City callback (no auto-approve)', async () => {
     const createdRequests: Array<{ callbackUrl: string; callbackSecret?: string; externalId?: string }> = [];
-    const approvedRequests: string[] = [];
-    const statusSequence = ['pending', 'pending'];
     const creditCalls: Array<{ resident: string; body: Record<string, unknown> }> = [];
     const services = testServices(adminUser, undefined, {
       oniondao: {
         async profile() {
-          return {
-            name: 'Alice',
-            handle: 'alice',
-            avatarUrl: null,
-            onionId: null,
-            solanaWalletAddress: null,
-            balanceType: 'points',
-            currentOnionPoints: 1175,
-            currentOnionTokens: null,
-            currentBalance: 1175,
-          };
+          return walletReadout(1175);
         },
         async createRequest(input) {
           createdRequests.push({ callbackUrl: input.callbackUrl, callbackSecret: input.callbackSecret, externalId: input.externalId });
           return { id: 'onion-req-pending', status: 'pending' };
         },
-        async approveRequest(id: string) {
-          approvedRequests.push(id);
+        async approveRequest() {
+          throw new Error('must not auto-approve');
         },
         async requestStatus(id: string) {
-          return {
-            id,
-            requestType: 'burn',
-            status: statusSequence.shift() || 'pending',
-            amount: 40,
-            currencyMode: 'points',
-            solanaSignature: null,
-            error: null,
-            createdAt: '2026-06-04T12:00:00.000Z',
-            updatedAt: '2026-06-04T12:00:01.000Z',
-            reviewedAt: null,
-          };
+          return burnRequestStatus(id, 'pending', 40);
         },
       },
       nullcityControl: {
@@ -391,6 +473,8 @@ describe('routeCityApi points and souls', () => {
     expect(response.status).toBe(202);
     expect(payload).toMatchObject({
       status: 'pending_onion_settlement',
+      idempotencyKey: 'onion-attn-pending',
+      approvalUrl: 'https://oniondao.dev/portal/onions',
       onionRequest: { id: 'onion-req-pending', status: 'pending' },
     });
     expect(createdRequests).toEqual([{
@@ -398,7 +482,6 @@ describe('routeCityApi points and souls', () => {
       callbackSecret: 'callback-secret',
       externalId: expect.stringContaining('onion-attn-pending') as unknown as string,
     }]);
-    expect(approvedRequests).toEqual(['onion-req-pending']);
     expect(creditCalls).toHaveLength(0);
 
     const callbackBody = JSON.stringify({ id: 'onion-req-pending', status: 'completed', success: true });
@@ -425,6 +508,18 @@ describe('routeCityApi points and souls', () => {
         sourceId: 'onion-attn-pending',
       },
     }]);
+
+    // Redelivered callback is an idempotent no-op: still settled, credited once.
+    const redelivered = await route(new Request('http://city.test/api/city/onion-callback', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-onion-signature': signOnionCallback(callbackBody),
+      },
+      body: callbackBody,
+    }), services);
+    expect(await redelivered.json()).toMatchObject({ settled: true, state: 'settled' });
+    expect(creditCalls).toHaveLength(1);
   });
 
   test('rejects unsigned OnionDAO callbacks when callback signing is unavailable or invalid', async () => {
@@ -448,40 +543,20 @@ describe('routeCityApi points and souls', () => {
     expect(await invalid.json()).toEqual({ error: 'invalid_signature' });
   });
 
-  test('marks denied OnionDAO attention without telling humans to wait for settlement', async () => {
-    const statusSequence = ['pending', 'denied'];
+  test('marks denied OnionDAO attention when the poll finds the attendee declined', async () => {
     const services = testServices(adminUser, undefined, {
       oniondao: {
         async profile() {
-          return {
-            name: 'Alice',
-            handle: 'alice',
-            avatarUrl: null,
-            onionId: null,
-            solanaWalletAddress: null,
-            balanceType: 'points',
-            currentOnionPoints: 1175,
-            currentOnionTokens: null,
-            currentBalance: 1175,
-          };
+          return walletReadout(1175);
         },
         async createRequest() {
           return { id: 'onion-req-denied', status: 'pending' };
         },
-        async approveRequest() {},
+        async approveRequest() {
+          throw new Error('must not auto-approve');
+        },
         async requestStatus(id: string) {
-          return {
-            id,
-            requestType: 'burn',
-            status: statusSequence.shift() || 'denied',
-            amount: 40,
-            currencyMode: 'points',
-            solanaSignature: null,
-            error: null,
-            createdAt: '2026-06-04T12:00:00.000Z',
-            updatedAt: '2026-06-04T12:00:01.000Z',
-            reviewedAt: '2026-06-04T12:00:01.000Z',
-          };
+          return burnRequestStatus(id, 'denied', 40);
         },
       },
       nullcityControl: {
@@ -495,13 +570,28 @@ describe('routeCityApi points and souls', () => {
       onionAmount: 40,
       idempotencyKey: 'onion-attn-denied',
     }), services);
-    const payload = await response.json() as { status: string; onionRequest: { id: string; status: string } };
-
     expect(response.status).toBe(202);
-    expect(payload).toMatchObject({
+    expect(await response.json()).toMatchObject({
+      status: 'pending_onion_settlement',
+      idempotencyKey: 'onion-attn-denied',
+    });
+
+    const poll = await route(authedRequest('/api/city/onion-attention-grants/onion-attn-denied/status'), services);
+    expect(poll.status).toBe(200);
+    expect(await poll.json()).toMatchObject({
       status: 'onion_spend_denied',
+      residentId: 'res:fern',
+      idempotencyKey: 'onion-attn-denied',
       onionRequest: { id: 'onion-req-denied', status: 'denied' },
     });
+
+    // The dead intent stays dead — replaying the POST reports the denial.
+    const replay = await route(jsonRequest('/api/city/residents/res:fern/onion-attention-grants', {
+      onionAmount: 40,
+      idempotencyKey: 'onion-attn-denied',
+    }), services);
+    expect(replay.status).toBe(202);
+    expect(await replay.json()).toMatchObject({ status: 'onion_spend_denied', idempotencyKey: 'onion-attn-denied' });
   });
 
   test('merges Null City tier letters into the authenticated inbox', async () => {
@@ -1380,6 +1470,35 @@ function testServices(
 
 function onionCallbackOptions(): { onionCallbackSecret: string } {
   return { onionCallbackSecret: 'callback-secret' };
+}
+
+function walletReadout(currentBalance: number) {
+  return {
+    name: 'Alice',
+    handle: 'alice',
+    avatarUrl: null,
+    onionId: null,
+    solanaWalletAddress: null,
+    balanceType: 'points',
+    currentOnionPoints: currentBalance,
+    currentOnionTokens: null,
+    currentBalance,
+  };
+}
+
+function burnRequestStatus(id: string, status: string, amount: number) {
+  return {
+    id,
+    requestType: 'burn',
+    status,
+    amount,
+    currencyMode: 'points',
+    solanaSignature: null,
+    error: null,
+    createdAt: '2026-06-04T12:00:00.000Z',
+    updatedAt: '2026-06-04T12:00:01.000Z',
+    reviewedAt: status === 'pending' ? null : '2026-06-04T12:00:01.000Z',
+  };
 }
 
 function signOnionCallback(body: string, secret = 'callback-secret'): string {

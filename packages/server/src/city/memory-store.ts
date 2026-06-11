@@ -560,6 +560,16 @@ export class InMemoryCityStore implements CityStore {
     return undefined;
   }
 
+  async findPendingAttentionGrantIntent(cityUserId: string, residentId: string): Promise<AttentionGrantIntent | undefined> {
+    let latest: AttentionGrantIntent | undefined;
+    for (const intent of this.attentionGrantIntents.values()) {
+      if (intent.cityUserId !== cityUserId || intent.residentId !== residentId) continue;
+      if (intent.state !== 'awaiting_approval') continue;
+      if (!latest || intent.createdAt > latest.createdAt) latest = intent;
+    }
+    return latest ? clone(latest) : undefined;
+  }
+
   async claimAttentionGrantIntent(
     id: string,
     fromStates: AttentionGrantIntentState[],

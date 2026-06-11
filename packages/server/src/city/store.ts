@@ -158,6 +158,13 @@ export interface CityStore {
   createAttentionGrantIntent(input: AttentionGrantIntentCreateInput): Promise<AttentionGrantIntent>;
   getAttentionGrantIntent(cityUserId: string, idempotencyKey: string): Promise<AttentionGrantIntent | undefined>;
   getAttentionGrantIntentByOnionRequestId(onionRequestId: string): Promise<AttentionGrantIntent | undefined>;
+  /**
+   * Most recent intent for (cityUserId, residentId) still awaiting the
+   * attendee's explicit approval on landing. Used to reuse an in-flight burn
+   * request instead of creating a second one when a retry arrives with a
+   * fresh idempotencyKey (double-burn guard).
+   */
+  findPendingAttentionGrantIntent(cityUserId: string, residentId: string): Promise<AttentionGrantIntent | undefined>;
   claimAttentionGrantIntent(id: string, fromStates: AttentionGrantIntentState[], toState: AttentionGrantIntentState): Promise<AttentionGrantIntent | undefined>;
   updateAttentionGrantIntent(id: string, patch: AttentionGrantIntentPatch): Promise<AttentionGrantIntent>;
 }
@@ -727,6 +734,16 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
         if (intent.onionRequestId === onionRequestId) return { ...intent };
       }
       return undefined;
+    },
+
+    async findPendingAttentionGrantIntent(cityUserId, residentId) {
+      let latest: AttentionGrantIntent | undefined;
+      for (const intent of attentionGrantIntents.values()) {
+        if (intent.cityUserId !== cityUserId || intent.residentId !== residentId) continue;
+        if (intent.state !== 'awaiting_approval') continue;
+        if (!latest || intent.createdAt > latest.createdAt) latest = intent;
+      }
+      return latest ? { ...latest } : undefined;
     },
 
     async claimAttentionGrantIntent(id, fromStates, toState) {

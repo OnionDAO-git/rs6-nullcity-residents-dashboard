@@ -49,6 +49,12 @@ export interface OnionExternalRequestStatus {
 export interface OnionDaoClient {
   profile(identifier: string): Promise<OnionWallet>;
   createRequest(input: OnionCreateRequestInput): Promise<OnionCreateRequestResult>;
+  /**
+   * Approve a pending request on the user's behalf.
+   * EXPLICIT CONSENT (maintainer decision 2026-06-11): the dashboard must NOT
+   * call this on the support/spend path — the attendee approves the burn on
+   * landing's /portal/onions surface themselves. Kept only for tooling.
+   */
   approveRequest(id: string, sessionToken: string): Promise<void>;
   requestStatus(id: string): Promise<OnionExternalRequestStatus>;
 }

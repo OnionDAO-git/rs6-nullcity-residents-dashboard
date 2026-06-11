@@ -605,6 +605,16 @@ export class PostgresCityStore implements CityStore {
     return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
   }
 
+  async findPendingAttentionGrantIntent(cityUserId: string, residentId: string): Promise<AttentionGrantIntent | undefined> {
+    const rows = await this.sql`
+      SELECT * FROM attention_grant_intents
+      WHERE city_user_id = ${cityUserId} AND resident_id = ${residentId} AND state = 'awaiting_approval'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    return rows[0] ? mapAttentionGrantIntent(rows[0]) : undefined;
+  }
+
   async claimAttentionGrantIntent(
     id: string,
     fromStates: AttentionGrantIntentState[],

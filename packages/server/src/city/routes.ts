@@ -15,7 +15,7 @@ import { OnionDaoClientError, type OnionDaoClient, type OnionWallet } from './on
 import { quoteSoulProposal } from './quote';
 import { runAttentionGrant, initiateOnionAttentionGrant, settleOnionAttentionGrant } from './attention-grant';
 import { verifyOnionCallbackSignature, type OnionApiClient } from './landing-onions';
-import { CityStoreError, type CityStore } from './store';
+import { CityStoreError, type AttentionGrantIntent, type CityStore } from './store';
 import type { CityUser, InboxMessage, InboxThread, LandingSessionUser, PointResource } from './types';
 import { jsonResponse, notFound } from '../util';
 
@@ -564,11 +564,17 @@ export async function routeCityApi(
             note: stringBody(body, 'memo'),
           },
         );
+        // Same explicit-consent contract as the onion-attention-grants route:
+        // the attendee confirms on landing; the UI links approvalUrl and polls
+        // statusUrl until the callback (or poll) settles the grant.
         return jsonResponse({
           status: result.status,
           onionRequestId: result.onionRequestId,
+          idempotencyKey: result.intent.idempotencyKey,
+          approvalUrl: onionApprovalUrl(context.config),
+          statusUrl: `/api/city/onion-attention-grants/${encodeURIComponent(result.intent.idempotencyKey)}/status`,
           intent: { id: result.intent.id, state: result.intent.state, residentId },
-          message: 'Approve the burn in /portal/onions to support this resident.',
+          message: 'Confirm the onion burn on OnionDAO (approvalUrl) to support this resident.',
         }, { status: 202 });
       }
 
@@ -602,6 +608,14 @@ export async function routeCityApi(
         decodeURIComponent(residentOnionAttention[1] || ''),
         await readJsonBody(request),
       );
+    }
+
+    // Pollable status for a pending onion attention grant (explicit-consent UX).
+    const onionGrantStatus = pathname.match(/^\/api\/city\/onion-attention-grants\/([^/]+)\/status$/);
+    if (onionGrantStatus && method === 'GET') {
+      const auth = await requireCityUser(request, url, context);
+      if (auth instanceof Response) return auth;
+      return onionAttentionGrantStatus(context, auth, decodeURIComponent(onionGrantStatus[1] || ''));
     }
 
     // Landing onion-spend callback (webhook): settle a previously-initiated grant.
@@ -760,6 +774,32 @@ async function requireAdmin(
   return auth;
 }
 
+/**
+ * EXPLICIT spend consent (maintainer decision 2026-06-11): the dashboard NEVER
+ * approves the burn itself. We create the burn request on landing, then SEND
+ * THE USER TO LANDING (`approvalUrl`) to confirm the transaction. Settlement
+ * happens only after landing reports the outcome — via the HMAC callback
+ * (`POST /api/city/onion-callback`) or the polling endpoint
+ * (`GET /api/city/onion-attention-grants/:idempotencyKey/status`).
+ *
+ * Response contract for the UI (pending-state UX is built against this):
+ *   202 {
+ *     status: 'pending_onion_settlement',
+ *     residentId,
+ *     idempotencyKey,                  // poll handle — stable across retries
+ *     approvalUrl,                     // landing's approval surface (/portal/onions)
+ *     statusUrl,                       // GET endpoint the UI can poll
+ *     onionRequest: { id, status },
+ *     intent: { id, state, residentId },
+ *   }
+ *   202 { status: 'settled', residentId, idempotencyKey, onionRequest, city, onionWallet? }   // replay of a settled key
+ *   202 { status: 'onion_spend_denied' | 'onion_spend_failed', residentId, idempotencyKey }   // replay of a dead key
+ *
+ * Double-burn guard: a POST with a FRESH idempotencyKey while the same
+ * user+resident still has an intent awaiting approval returns the EXISTING
+ * pending intent (same approvalUrl/idempotencyKey) instead of creating a
+ * second burn request on landing.
+ */
 async function runOnionAttentionGrant(
   request: Request,
   context: CityApiContext,
@@ -768,9 +808,9 @@ async function runOnionAttentionGrant(
   body: Record<string, unknown>,
 ): Promise<Response> {
   if (!context.oniondao) return jsonResponse({ error: 'oniondao_not_configured' }, { status: 503 });
+  // Settlement needs the City control seam; fail before burning onions we
+  // could never credit.
   if (!context.nullcityControl?.creditAttention) return jsonResponse({ error: 'nullcity_control_not_configured' }, { status: 503 });
-  const sessionToken = parseCookieHeader(request.headers.get('cookie')).get(context.config.authCookieName);
-  if (!sessionToken) return jsonResponse({ error: 'landing_session_cookie_required' }, { status: 401 });
 
   const onionAmount = numberBody(body, 'onionAmount', numberBody(body, 'amount'));
   const attentionAmount = numberBody(body, 'attentionAmount', onionAmount);
@@ -778,6 +818,14 @@ async function runOnionAttentionGrant(
 
   const username = onionUsername(auth.landingUser);
   if (!username) return jsonResponse({ error: 'onion_username_required' }, { status: 400 });
+
+  // Retry double-burn guard: reuse the in-flight intent for this user+resident
+  // (regardless of the idempotencyKey on this POST).
+  const pending = await context.store.findPendingAttentionGrantIntent(auth.cityUser.id, residentId);
+  if (pending?.onionRequestId) {
+    return pendingOnionSettlementResponse(context, pending);
+  }
+
   const idempotencyKey = stringBody(body, 'idempotencyKey') || crypto.randomUUID();
   const memo = stringBody(body, 'memo') || `Spend ${onionAmount} Onions to support ${residentId}`;
   let intent = await context.store.createAttentionGrantIntent({
@@ -793,73 +841,159 @@ async function runOnionAttentionGrant(
     return jsonResponse({
       status: 'settled',
       residentId,
+      idempotencyKey: intent.idempotencyKey,
       onionRequest,
       city: intent.cityResponse,
       ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
       ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
     }, { status: 202 });
   }
-
-  if (!intent.onionRequestId) {
-    const requestResult = await context.oniondao.createRequest({
-      type: 'burn',
-      username,
-      amount: onionAmount,
-      callbackUrl: onionCallbackUrl(context.config),
-      callbackSecret: context.config.onionCallbackSecret,
-      requester: context.config.onionExternalRequester,
-      externalId: onionAttentionExternalId(auth.cityUser.id, residentId, idempotencyKey),
-      note: memo,
-      metadata: {
-        app: 'nullcity-dashboard',
-        cityUserId: auth.cityUser.id,
-        landingUserId: auth.landingUser.id,
-        residentId,
-        idempotencyKey,
-        attentionAmount,
-      },
-    });
-    intent = await context.store.updateAttentionGrantIntent(intent.id, {
-      state: 'awaiting_approval',
-      onionRequestId: requestResult.id,
-    });
-  }
-  const onionRequestId = intent.onionRequestId;
-  if (!onionRequestId) return jsonResponse({ error: 'onion_request_missing' }, { status: 500 });
-
-  let onionRequest = await context.oniondao.requestStatus(onionRequestId);
-  if (onionRequest.status === 'pending') {
-    await context.oniondao.approveRequest(onionRequestId, sessionToken);
-    onionRequest = await context.oniondao.requestStatus(onionRequestId);
-  }
-  const settlement = await settleOnionAttentionGrant(
-    { store: context.store, control: context.nullcityControl },
-    { onionRequestId, status: onionRequest.status, success: onionRequest.status === 'completed' },
-  );
-  if (settlement.state === 'denied' || settlement.state === 'failed') {
+  if (intent.state === 'denied' || intent.state === 'failed') {
+    // Replay of a key whose burn was already denied/failed on landing.
     return jsonResponse({
-      status: `onion_spend_${settlement.state}`,
+      status: `onion_spend_${intent.state}`,
       residentId,
-      onionRequest,
+      idempotencyKey: intent.idempotencyKey,
     }, { status: 202 });
   }
-  if (!settlement.settled) {
-    return jsonResponse({
-      status: 'pending_onion_settlement',
-      residentId,
-      onionRequest,
-    }, { status: 202 });
+  if (intent.state === 'settling' || (intent.state === 'awaiting_approval' && intent.onionRequestId)) {
+    return pendingOnionSettlementResponse(context, intent);
   }
 
-  const onionWalletResult = await onionWalletForUser(context, auth.landingUser);
+  // Fresh intent: create the burn request the attendee must approve on landing.
+  // Idempotent on (requester, externalId) landing-side.
+  const requestResult = await context.oniondao.createRequest({
+    type: 'burn',
+    username,
+    amount: onionAmount,
+    callbackUrl: onionCallbackUrl(context.config),
+    callbackSecret: context.config.onionCallbackSecret,
+    requester: context.config.onionExternalRequester,
+    externalId: onionAttentionExternalId(auth.cityUser.id, residentId, idempotencyKey),
+    note: memo,
+    metadata: {
+      app: 'nullcity-dashboard',
+      cityUserId: auth.cityUser.id,
+      landingUserId: auth.landingUser.id,
+      residentId,
+      idempotencyKey,
+      attentionAmount,
+    },
+  });
+  intent = await context.store.updateAttentionGrantIntent(intent.id, {
+    state: 'awaiting_approval',
+    onionRequestId: requestResult.id,
+  });
+
+  // NO auto-approve here — the attendee confirms on landing (approvalUrl).
+  return pendingOnionSettlementResponse(context, intent);
+}
+
+/**
+ * Poll endpoint backing the pending-state UX:
+ * GET /api/city/onion-attention-grants/:idempotencyKey/status
+ *
+ * Checks the landing burn-request state and settles when the attendee has
+ * approved (the callback may also have settled it already — both paths are
+ * idempotent: settlement claims the intent only from `awaiting_approval`).
+ * Responses (always 200 once the intent exists; 404 for an unknown key):
+ *   { status: 'pending_onion_settlement', residentId, idempotencyKey, approvalUrl, statusUrl, onionRequest? }
+ *   { status: 'settled', residentId, idempotencyKey, city, onionRequest?, onionWallet? }
+ *   { status: 'onion_spend_denied' | 'onion_spend_failed', residentId, idempotencyKey, onionRequest? }
+ */
+async function onionAttentionGrantStatus(
+  context: CityApiContext,
+  auth: AuthenticatedCityRequest,
+  idempotencyKey: string,
+): Promise<Response> {
+  const intent = await context.store.getAttentionGrantIntent(auth.cityUser.id, idempotencyKey);
+  if (!intent) return notFound();
+
+  if (intent.state === 'settled') {
+    const onionWalletResult = await onionWalletForUser(context, auth.landingUser);
+    return jsonResponse({
+      status: 'settled',
+      residentId: intent.residentId,
+      idempotencyKey: intent.idempotencyKey,
+      city: intent.cityResponse,
+      ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
+      ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
+    });
+  }
+  if (intent.state === 'denied' || intent.state === 'failed') {
+    return jsonResponse({
+      status: `onion_spend_${intent.state}`,
+      residentId: intent.residentId,
+      idempotencyKey: intent.idempotencyKey,
+    });
+  }
+  if (!intent.onionRequestId || (!context.oniondao && !context.onionApi)) {
+    // No burn request yet (or no client to poll with): report pending; the
+    // callback can still settle it.
+    return pendingOnionSettlementResponse(context, intent, 200);
+  }
+
+  const onionRequest = context.oniondao
+    ? await context.oniondao.requestStatus(intent.onionRequestId)
+    : await context.onionApi!.getRequestStatus(intent.onionRequestId);
+  if (onionRequest.status === 'completed' || onionRequest.status === 'denied' || onionRequest.status === 'failed') {
+    const control = (context.nullcityControl ?? {}) as Pick<NullCityControlClient, 'creditAttention'>;
+    const settlement = await settleOnionAttentionGrant(
+      { store: context.store, control },
+      { onionRequestId: intent.onionRequestId, status: onionRequest.status, success: onionRequest.status === 'completed' },
+    );
+    if (settlement.settled) {
+      const onionWalletResult = await onionWalletForUser(context, auth.landingUser);
+      return jsonResponse({
+        status: 'settled',
+        residentId: intent.residentId,
+        idempotencyKey: intent.idempotencyKey,
+        onionRequest,
+        city: settlement.intent?.cityResponse,
+        ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
+        ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
+      });
+    }
+    if (settlement.state === 'denied' || settlement.state === 'failed') {
+      return jsonResponse({
+        status: `onion_spend_${settlement.state}`,
+        residentId: intent.residentId,
+        idempotencyKey: intent.idempotencyKey,
+        onionRequest,
+      });
+    }
+    // Another caller holds the settlement claim ('settling') — report pending.
+  }
+  return pendingOnionSettlementResponse(context, intent, 200, onionRequest);
+}
+
+function pendingOnionSettlementResponse(
+  context: CityApiContext,
+  intent: AttentionGrantIntent,
+  status = 202,
+  onionRequest?: { id: string; status: string },
+): Response {
   return jsonResponse({
-    status: 'settled',
-    residentId,
-    onionRequest,
-    city: settlement.intent?.cityResponse,
-    ...(onionWalletResult.wallet ? { onionWallet: onionWalletResult.wallet } : {}),
-    ...(onionWalletResult.error ? { onionWalletError: onionWalletResult.error } : {}),
-  }, { status: 202 });
+    status: 'pending_onion_settlement',
+    residentId: intent.residentId,
+    idempotencyKey: intent.idempotencyKey,
+    approvalUrl: onionApprovalUrl(context.config),
+    statusUrl: `/api/city/onion-attention-grants/${encodeURIComponent(intent.idempotencyKey)}/status`,
+    ...(intent.onionRequestId
+      ? { onionRequest: onionRequest ?? { id: intent.onionRequestId, status: 'pending' } }
+      : {}),
+    intent: { id: intent.id, state: intent.state, residentId: intent.residentId },
+    message: 'Confirm the onion burn on OnionDAO (approvalUrl) to support this resident.',
+  }, { status });
+}
+
+/**
+ * Landing's approval surface. Landing has no per-request deep link — its own
+ * push notifications point at the /portal/onions list page, where the attendee
+ * approves or denies pending requests.
+ */
+function onionApprovalUrl(config: CityConfig): string {
+  return new URL('/portal/onions', config.onionApiBaseUrl || config.landingAuthBaseUrl).toString();
 }
 
 async function onionWalletForUser(
