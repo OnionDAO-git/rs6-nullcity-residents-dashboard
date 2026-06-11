@@ -244,18 +244,19 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('This profile will appear after the attendee handle has public resident or letter history.');
   });
 
-  test('keeps public profile inbox behind Expert instead of exposing it as a Simple direct route', () => {
+  test('keeps the public profile readable while linking straight to the Simple inbox', () => {
     expect(appSource).not.toContain('Public profile from `/v1/patron/*` and `/v1/inbox`');
     expect(appSource).not.toContain('/debug/inbox/?human=');
     expect(appSource).toContain('Public AP, Embassy standing, resident relationships, and inbox readiness.');
-    expect(appSource).not.toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
-    expect(appSource).toContain("onclick={() => openExpertRoute('/inbox')}>Open Your Inbox</button>");
+    expect(appSource).toContain("onclick={() => cityNav('/inbox')}>Open Your Inbox</button>");
+    expect(appSource).not.toContain("onclick={() => openExpertRoute('/inbox')}>Open Your Inbox</button>");
   });
 
-  test('keeps simple profile messages out of the expert-only inbox route', () => {
+  test('keeps simple profile letters pointed at the readable inbox', () => {
     expect(appSource).not.toContain('Open Expert Inbox');
     expect(appSource).not.toContain('Switch to Expert mode to open the full inbox.');
-    expect(appSource).toContain('Full message tools are still being simplified. Important resident updates will surface here.');
+    expect(appSource).not.toContain('Full message tools are still being simplified. Important resident updates will surface here.');
+    expect(appSource).toContain('Residents you support will write to you. Read their letters in the Inbox.');
   });
 
   test('surfaces the NCRI marketplace without making GP the simple-mode payment plan', () => {

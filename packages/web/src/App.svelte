@@ -6,7 +6,7 @@
   import { api, routeTo, type PublicOverviewSnapshot, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type LibrarySoulLife, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type NullCityApGpExchangeRecord, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { cityDemoPathSteps, type CityDemoApSupportSignal } from './lib/demo-path';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
@@ -67,6 +67,7 @@
   import { printStoryDigestSignal, type PrintStoryDigestSignal } from './lib/print-story-digest';
   import { buildProfileEconomySummary, type ProfileEconomySummary } from './lib/profile-economy';
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
+  import { fetchPublicSoulLives, type PublicSoulLife } from './lib/soul-library';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
   import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
@@ -223,7 +224,7 @@
   let cityResidentPosts: ResidentPost[] = [];
   let cityResidentEconomy: ResidentEconomy | undefined;
   let cityResidentGoalContracts: Record<string, ResidentGoalContractSignal> = {};
-  let cityLibraryLives: LibrarySoulLife[] = [];
+  let cityLibraryLives: PublicSoulLife[] = [];
   let cityStoryDigests: StorytellerDigestSummary[] = [];
   let cityProjectorPatronAp: number | undefined;
   let cityProjectorFrame: ProjectorStoryFrame | undefined;
@@ -970,7 +971,7 @@
         cityLoad(api.benchmarks(200), []),
         cityLoad(cityApi.nullcityEconomyLive({ limit: 8, residentLimit: 6 }), { available: false, error: 'not_configured' }),
         cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
-        optionalCityLoad(cityApi.library(), { lives: [] }),
+        optionalCityLoad(fetchPublicSoulLives(), { lives: [] }),
         citySession.authenticated && ownPatronHandle ? optionalCityLoad(fetchPublicPatronProfile(ownPatronHandle), undefined) : Promise.resolve(undefined),
       ]);
       cityProposals = proposalsPayload.proposals;
@@ -1121,7 +1122,9 @@
       cityEconomyHeartbeat = heartbeatPayload;
       cityEconomyListings = listingsPayload;
     }
-    if (activeRoute === '/library' || activeRoute === '/graveyard') {
+    if (activeRoute === '/graveyard') {
+      cityLibraryLives = (await cityLoad(fetchPublicSoulLives(), { lives: [] })).lives;
+    } else if (activeRoute === '/library') {
       cityLibraryLives = (await cityLoad(cityApi.library(), { lives: [] })).lives;
     }
     if (activeRoute === '/library') souls = await api.souls().catch(() => []);
@@ -2560,17 +2563,17 @@
     return cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
   }
 
-  function deceasedCityLives(): LibrarySoulLife[] {
+  function deceasedCityLives(): PublicSoulLife[] {
     return cityLibraryLives
       .filter(life => Boolean(life.diedAt))
       .sort((a, b) => timestampValue(b.diedAt) - timestampValue(a.diedAt));
   }
 
-  function cityLifeDisplayName(life: LibrarySoulLife): string {
-    return cityResidentLabelFromId(life.nullcityResidentId || life.id);
+  function cityLifeDisplayName(life: PublicSoulLife): string {
+    return life.displayName || cityResidentLabelFromId(life.nullcityResidentId || life.id);
   }
 
-  function cityLifeSummary(life: LibrarySoulLife): string {
+  function cityLifeSummary(life: PublicSoulLife): string {
     return life.epitaph || life.goalSummary || `${life.meaningfulEvents.length.toLocaleString()} remembered moment${life.meaningfulEvents.length === 1 ? '' : 's'}`;
   }
 
@@ -5167,7 +5170,7 @@
             </div>
           {/if}
           {#if expertMode}
-            <button class="city-link-button" onclick={() => openExpertRoute('/inbox')}>Open Your Inbox</button>
+            <button class="city-link-button" onclick={() => cityNav('/inbox')}>Open Your Inbox</button>
           {/if}
         </div>
         <div class="city-panel span-2">
@@ -5280,7 +5283,10 @@
         </div>
       </div>
       <div class="city-panel">
-        <div class="panel-title">Messages</div>
+        <div class="row">
+          <div class="panel-title">Letters</div>
+          <button onclick={() => cityNav('/inbox')}>Open Inbox</button>
+        </div>
         {#if cityPublicPatronProfile?.latestLetter}
           <div class="city-copy-block">
             <strong>{cityPublicPatronProfile.latestLetter.subject}</strong>
@@ -5288,11 +5294,11 @@
           </div>
         {:else}
           <div class="city-empty-state">
-            <strong>No messages yet</strong>
-            <span>Resident replies and city notes will appear after you start supporting residents.</span>
+            <strong>No letters yet</strong>
+            <span>Residents write to the people who support them. Letters land in your Inbox.</span>
           </div>
         {/if}
-        <small>Full message tools are still being simplified. Important resident updates will surface here.</small>
+        <small>Residents you support will write to you. Read their letters in the Inbox.</small>
       </div>
     {:else}
     <div class={`city-panel span-2 city-economy-health tone-${cityProfileEconomy.tone}`}>

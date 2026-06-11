@@ -142,7 +142,7 @@ export const dashboardNavItems: DashboardNavItem[] = [
   { label: 'Me', path: '/profile', match: '/profile', glyph: 'ME' },
   { label: 'New Souls', path: '/embassy', match: '/embassy', glyph: 'SO', expertOnly: true },
   { label: 'Items', path: '/prints', match: '/prints', glyph: 'IT', expertOnly: true },
-  { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN', expertOnly: true },
+  { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
   { label: 'World', path: '/world', match: '/world', glyph: 'WO', expertOnly: true },
   { label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true },
   { label: 'Economy', path: '/economy', match: '/economy', glyph: 'EC', expertOnly: true },
@@ -225,11 +225,11 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
   if (input.unreadThreads > 0) {
     if (!expertMode) {
       return {
-        label: 'Check your messages',
-        path: '/profile',
-        detail: `${input.unreadThreads} unread update${input.unreadThreads === 1 ? '' : 's'} can be reached from Me.`,
+        label: 'Read your letters',
+        path: '/inbox',
+        detail: `${input.unreadThreads} letter${input.unreadThreads === 1 ? '' : 's'} from residents and the city waiting for you.`,
         tone: 'mauve',
-        actionLabel: 'Open Me',
+        actionLabel: 'Open Inbox',
       };
     }
     return {
@@ -405,7 +405,6 @@ export function residentSupportReason(row: ResidentDashboardRow): ResidentSuppor
 export function simpleModeRouteRequiresExpert(route: string, search = ''): boolean {
   const normalized = normalizeDashboardPath(route);
   if (normalized === '/world') return !hasWorldObserveTarget(search);
-  if (normalized === '/inbox' || normalized.startsWith('/inbox/')) return true;
   if (normalized === '/chronicle' || normalized.startsWith('/chronicle/')) return true;
   if (normalized === '/economy') return true;
   if (normalized === '/library') return true;

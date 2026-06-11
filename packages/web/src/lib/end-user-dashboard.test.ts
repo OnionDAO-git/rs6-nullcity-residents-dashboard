@@ -12,6 +12,7 @@ describe('visibleDashboardNavItems', () => {
       ['Residents', '/residents'],
       ['Soul Library', '/graveyard'],
       ['Me', '/profile'],
+      ['Inbox', '/inbox'],
     ]);
   });
 
@@ -33,7 +34,7 @@ describe('visibleDashboardNavItems', () => {
 });
 
 describe('primaryDashboardNavItems', () => {
-  test('keeps mobile simple mode to the six main human actions', () => {
+  test('keeps mobile simple mode to the main human actions including letters', () => {
     expect(primaryDashboardNavItems({ expertMode: false }).map(item => [item.label, item.path])).toEqual([
       ['Home', '/'],
       ['Live', '/live'],
@@ -41,6 +42,7 @@ describe('primaryDashboardNavItems', () => {
       ['Residents', '/residents'],
       ['Soul Library', '/graveyard'],
       ['Me', '/profile'],
+      ['Inbox', '/inbox'],
     ]);
   });
 
@@ -165,7 +167,7 @@ describe('recommendedDashboardAction', () => {
     });
   });
 
-  test('routes unread messages to Me instead of the expert-only inbox in simple mode', () => {
+  test('routes unread letters straight to the inbox in simple mode', () => {
     expect(recommendedDashboardAction({
       authenticated: true,
       loginReady: true,
@@ -176,9 +178,10 @@ describe('recommendedDashboardAction', () => {
       proposalCount: 0,
       expertMode: false,
     })).toMatchObject({
-      label: 'Check your messages',
-      path: '/profile',
+      label: 'Read your letters',
+      path: '/inbox',
       tone: 'mauve',
+      actionLabel: 'Open Inbox',
     });
   });
 
@@ -294,8 +297,6 @@ describe('simpleProfileActionCards', () => {
 
 describe('simpleModeRouteRequiresExpert', () => {
   test('gates direct expert-only city routes while Simple mode is active', () => {
-    expect(simpleModeRouteRequiresExpert('/inbox')).toBe(true);
-    expect(simpleModeRouteRequiresExpert('/inbox/thread-1')).toBe(true);
     expect(simpleModeRouteRequiresExpert('/chronicle')).toBe(true);
     expect(simpleModeRouteRequiresExpert('/chronicle/run-1')).toBe(true);
     expect(simpleModeRouteRequiresExpert('/economy')).toBe(true);
@@ -309,6 +310,8 @@ describe('simpleModeRouteRequiresExpert', () => {
 
   test('keeps the human action routes and resident world observe links Simple-safe', () => {
     expect(simpleModeRouteRequiresExpert('/')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/inbox')).toBe(false);
+    expect(simpleModeRouteRequiresExpert('/inbox/thread-1')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/residents')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/residents/res%3Ahans')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/embassy')).toBe(false);
