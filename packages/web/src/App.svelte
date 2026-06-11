@@ -69,7 +69,7 @@
   import { fetchPublicPatronProfile, publicPatronHandleFromSearch, publicPatronInitials, publicPatronStandingLabel, type PublicPatronProfile } from './lib/public-patron';
   import { residentGoalContractSignal, type ResidentGoalContractSignal } from './lib/resident-goal-contract';
   import { cityDataNoticeCopy, findResidentReadModel, loadCitySnapshotWithLiveFallback, residentDetailEmptyState, residentLoopAvailabilityState, residentRosterEmptyState, residentRouteSlug, residentRowsForCityDirectory, resolveResidentRouteId } from './lib/resident-route';
-  import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
+  import { boardActionCards, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems, type DashboardNavItem } from './lib/end-user-dashboard';
   import { buildReleaseReadiness, releaseReadinessActionQueue, releaseReadinessDemoProofRail, releaseReadinessFirstFiveSteps, releaseReadinessMetricTiles, type ReleaseReadinessActionQueueItem, type ReleaseReadinessStatus, type ReleaseReadinessSummary } from './lib/release-readiness';
   import { buildWorldReadiness, type WorldReadinessSummary } from './lib/world-readiness';
   import ModelViewer from './lib/rs6/ModelViewer.svelte';
@@ -189,6 +189,12 @@
     proposalCount: 0,
     onionBalance: 0,
     residentCount: 0,
+  });
+  let simpleProfileActionCardsForView = simpleProfileActionCards({
+    authenticated: false,
+    onionBalance: 0,
+    supportedResidentCount: 0,
+    pendingPrints: 0,
   });
   let cityResident: ResidentDashboardRow | undefined;
   let cityProfileData: CityProfileData | undefined;
@@ -418,6 +424,7 @@
   let exchangeCityUserId = '';
   let exchangeResult: NullCityApGpExchangeRecord | undefined;
   let cityActionNotice = '';
+  let cityLatestSupportReceipt = '';
   let gameClientMount: HTMLElement | undefined;
   let gameClientCanvas: HTMLCanvasElement | undefined;
   let gameClientController: GameClientController | undefined;
@@ -436,6 +443,7 @@
   } as const;
   const skillOrder = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic', 'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 'runecrafting', 'construction'];
   const expertModeStorageKey = 'nullcity.expertMode.enabled';
+  const latestSupportReceiptStorageKey = 'nullcity.latestSupportReceipt';
 
   $: embassyPages = [
     { label: 'Embassy Index', path: publicEventPath('/index.html', browserOrigin) },
@@ -551,7 +559,7 @@
   $: cityControlledResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === true);
   $: cityPausedOnlineResidents = cityOnlineResidents.filter(row => row.body?.controlHeld === false);
   $: cityHasCohortSignals = cityControlledResidents.length > 0 || cityPausedOnlineResidents.length > 0;
-  $: cityLowAttentionResidents = cityResidents.filter(row => (row.attention ?? 999) <= 2);
+  $: cityLowAttentionResidents = cityResidents.filter(row => residentNeedsApSupportSoon(row));
   $: cityResidentAttentionRows = sortResidentsForAttention(cityResidents);
   $: cityFeaturedResidents = [...cityOnlineResidents, ...cityResidents.filter(row => !row.online)].slice(0, 6);
   $: citySoulFundingQueue = sortSoulProposalsForFunding(cityProposals);
@@ -577,6 +585,12 @@
     onionBalance: citySession.onions,
     lowAttentionResidents: cityLowAttentionResidents.length,
     residentCount: cityResidents.length,
+    pendingPrints: cityPendingPrints,
+  });
+  $: simpleProfileActionCardsForView = simpleProfileActionCards({
+    authenticated: citySession.authenticated,
+    onionBalance: citySession.onions,
+    supportedResidentCount: cityPublicPatronProfile?.residents.length ?? 0,
     pendingPrints: cityPendingPrints,
   });
   $: cityLoopPulse = residentGuestTrailPulse(cityResidents);
@@ -733,6 +747,7 @@
       expertMode = expertParam === '1';
     }
     notificationsEnabled = window.localStorage.getItem(inboxNotificationEnabledKey) === 'true';
+    loadLatestSupportReceiptForSession(citySession);
     notificationPermission = notificationStatus();
     window.addEventListener('popstate', listener);
     window.addEventListener('beforeinstallprompt', beforeInstallPromptListener);
@@ -790,6 +805,40 @@
     dismissedDashboardNotices = dismissDashboardNotice(dismissedDashboardNotices, kind, message);
   }
 
+  function rememberLatestSupportReceipt(message: string) {
+    if (!message) return;
+    const storageKey = latestSupportReceiptStorageKeyForSession(citySession);
+    if (!storageKey) {
+      cityLatestSupportReceipt = '';
+      return;
+    }
+    cityLatestSupportReceipt = message;
+    try {
+      window.localStorage.setItem(storageKey, message);
+    } catch {
+      // Support receipts still render for this session if local storage is blocked.
+    }
+  }
+
+  function latestSupportReceiptStorageKeyForSession(session: CitySession): string {
+    if (!session.authenticated) return '';
+    const identity = session.cityUserId || session.handle || session.email || session.name;
+    return `${latestSupportReceiptStorageKey}.${encodeURIComponent(identity)}`;
+  }
+
+  function loadLatestSupportReceiptForSession(session: CitySession) {
+    const storageKey = latestSupportReceiptStorageKeyForSession(session);
+    if (!storageKey) {
+      cityLatestSupportReceipt = '';
+      return;
+    }
+    try {
+      cityLatestSupportReceipt = window.localStorage.getItem(storageKey) || '';
+    } catch {
+      cityLatestSupportReceipt = '';
+    }
+  }
+
   function setExpertMode(enabled: boolean) {
     expertMode = enabled;
     try {
@@ -817,6 +866,7 @@
     } finally {
       setCityCsrfToken(citySession.csrfToken);
       if (!citySession.authenticated) inboxNotificationReady = false;
+      loadLatestSupportReceiptForSession(citySession);
       sessionLoading = false;
     }
   }
@@ -1312,7 +1362,7 @@
 
   function cityEntryPoints(session: CitySession, rows: ResidentDashboardRow[]): CityEntry[] {
     const online = rows.filter(row => row.online).length;
-    const lowAp = rows.filter(row => (row.attention ?? 999) <= 2).length;
+    const lowAp = rows.filter(row => residentNeedsApSupportSoon(row)).length;
     const activePrints = cityPrintRequests.filter(request => !['completed', 'cancelled', 'refunded'].includes(request.status)).length;
     const unreadThreads = cityInboxThreads.filter(thread => !thread.latestMessage?.readAt).length;
     const remembered = deceasedCityLives().length;
@@ -1382,11 +1432,11 @@
         detail: 'Resident and city messages land here after sign in',
       },
       {
-        label: 'Request Trophy',
+        label: 'Request Item',
         path: '/prints/new',
         tone: 'amber',
         metric: `${activePrints.toLocaleString()} active`,
-        detail: 'Ask for a trophy or item request and track status',
+        detail: 'Ask for an item or trophy request and track status',
       },
     ];
   }
@@ -1596,6 +1646,11 @@
 
   function residentSlug(name: string): string {
     return residentRouteSlug(name);
+  }
+
+  function supportedResidentLiveRow(slug: string): ResidentDashboardRow | undefined {
+    const normalized = residentSlug(slug);
+    return cityResidents.find(row => residentSlug(row.name) === normalized);
   }
 
   function residentDisplayName(name: string): string {
@@ -2174,6 +2229,7 @@
         ...(result.city?.attentionBefore === undefined ? {} : { attentionBefore: result.city.attentionBefore }),
         ...(result.city?.attentionAfter === undefined ? {} : { attentionAfter: result.city.attentionAfter }),
       });
+      rememberLatestSupportReceipt(cityActionNotice);
       await bootstrapSession();
       await loadRoute(false);
     });
@@ -4525,7 +4581,7 @@
           <button onclick={() => cityNav(`/residents/${encodeURIComponent(row.name)}`)}>
             <span class={`tag ${row.online ? 'ok' : ''}`}>{row.online ? 'online' : 'resident'}</span>
             <strong>{residentDisplayName(row.name)}</strong>
-            <small>{(row.attention ?? 999) <= 2 ? 'May need attention soon' : 'Available to support'}.</small>
+            <small>{residentNeedsApSupportSoon(row) ? 'May need attention soon' : 'Available to support'}.</small>
           </button>
         {:else}
           <div class="city-empty-state">
@@ -4579,7 +4635,7 @@
           <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
             <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
             <strong>{proposal.displayName}</strong>
-            <small>{proposalProgress(proposal)}% supported · {proposal.goal}</small>
+            <small>Support progress {proposalProgress(proposal)}% · {proposal.goal}</small>
           </button>
         {:else}
           <div class="city-empty-state">
@@ -4610,9 +4666,9 @@
           {:else}
             <div class="city-empty-state">
               <strong>No item requests yet</strong>
-              <span>Request a trophy when you want a physical object from the city.</span>
+              <span>Request an item, trophy, prop, or print when you want a physical object from the city.</span>
               <div class="resident-sync-actions">
-                <button onclick={() => cityNav(citySession.authenticated ? '/prints/new' : '/login')}>Request Trophy</button>
+                <button onclick={() => cityNav(citySession.authenticated ? '/prints/new' : '/login')}>Request Item</button>
               </div>
             </div>
           {/each}
@@ -5173,16 +5229,47 @@
     </div>
     {#if !expertMode}
       <div class="city-panel span-2">
+        <div class="panel-title">What You Can Do</div>
+        <div class="city-card-list compact readable">
+          {#each simpleProfileActionCardsForView as card (card.label)}
+            <button onclick={() => cityNav(card.path)}>
+              <span class={`tag ${card.tone}`}>action</span>
+              <strong>{card.label}</strong>
+              <small>{card.detail}</small>
+            </button>
+          {/each}
+        </div>
+      </div>
+      <div class="city-panel">
+        <div class="row">
+          <div class="panel-title">Latest Support</div>
+          <button onclick={() => cityNav('/residents?triage=attention')}>Give More</button>
+        </div>
+        {#if cityLatestSupportReceipt}
+          <div class="city-copy-block">
+            <strong>{cityLatestSupportReceipt}</strong>
+            <p>Latest support action saved for this sign-in on this device.</p>
+          </div>
+        {:else}
+          <div class="city-empty-state">
+            <strong>No support receipt yet</strong>
+            <span>Give attention to a resident and the latest result will appear here.</span>
+          </div>
+        {/if}
+      </div>
+      <div class="city-panel span-2">
         <div class="row">
           <div class="panel-title">Residents You Support</div>
           <button onclick={() => cityNav('/residents')}>Find Residents</button>
         </div>
-        <div class="city-card-list">
+        <div class="city-card-list readable">
           {#each cityPublicPatronProfile?.residents || [] as resident (resident.slug)}
+            {@const liveResident = supportedResidentLiveRow(resident.slug)}
+            {@const supportReason = liveResident ? residentSupportReason(liveResident) : undefined}
             <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.slug)}`)}>
-              <span class="tag ok">supported</span>
+              <span class={`tag ${supportReason?.tone || 'mauve'}`}>{supportReason?.label || 'syncing'}</span>
               <strong>{resident.displayName}</strong>
-              <small>Open this resident to give more attention.</small>
+              <small>{supportReason ? `Attention ${liveResident?.attention ?? '-'} · ${supportReason.detail}` : 'Status syncing. Open this resident to give attention.'}</small>
             </button>
           {:else}
             <div class="city-empty-state">
@@ -5517,10 +5604,11 @@
             <strong>Describe the resident you want Null City to remember into being.</strong>
           </div>
           <div class="actions">
-            <button disabled={actionBusy || !citySession.authenticated} onclick={refreshProposalQuote}>Preview Cost</button>
+            <button disabled={actionBusy || !citySession.authenticated} onclick={refreshProposalQuote}>Preview Support</button>
             <button class="primary" disabled={actionBusy || !citySession.authenticated} onclick={createSoulProposal}>Submit Soul</button>
           </div>
         </div>
+        <small>Submitting a soul is live; direct support is not live here yet.</small>
         <div class="city-form-grid">
           <label>Resident name <input bind:value={proposalResidentName} placeholder="optional" /></label>
           <label>Display name <input bind:value={proposalDisplayName} placeholder="Mire Scribe" /></label>
@@ -5529,16 +5617,16 @@
         </div>
       </div>
       <div class="city-panel">
-        <div class="panel-title">Birth Funding</div>
+        <div class="panel-title">Support needed before birth</div>
         {#if cityProposalQuote}
           <div class="city-balance-grid single">
-            <span><small>Needed</small><strong>{cityProposalQuote.threshold.toLocaleString()}</strong></span>
+            <span><small>Attention needed</small><strong>{cityProposalQuote.threshold.toLocaleString()}</strong></span>
           </div>
           <small>Use this preview to compare how much support a soul needs before birth.</small>
         {:else}
           <div class="city-empty-state">
             <strong>No preview yet</strong>
-            <span>Preview cost after you write the soul idea.</span>
+            <span>Preview support after you write the soul idea.</span>
           </div>
         {/if}
       </div>
@@ -5557,8 +5645,8 @@
           <span style={`--queue-fill: ${proposalProgress(citySelectedProposal)}%`}></span>
         </div>
         <div class="city-resident-profile-grid">
-          <span><small>Funded</small><strong>{proposalProgress(citySelectedProposal)}%</strong></span>
-          <span><small>Remaining</small><strong>{proposalRemaining(citySelectedProposal).toLocaleString()}</strong></span>
+          <span><small>Support progress</small><strong>{proposalProgress(citySelectedProposal)}%</strong></span>
+          <span><small>attention still needed</small><strong>{proposalRemaining(citySelectedProposal).toLocaleString()}</strong></span>
         </div>
         <div class="city-copy-block">
           <strong>{citySelectedProposal.goal}</strong>
@@ -5566,7 +5654,7 @@
         </div>
       </div>
       <div class="city-panel">
-        <div class="panel-title">Support This Soul</div>
+        <div class="panel-title">Support Not Live Yet</div>
         {#if citySession.authenticated}
           <div class="city-empty-state">
             <strong>Support is not available here yet</strong>
@@ -5574,7 +5662,7 @@
           </div>
           <button class="primary" type="button" onclick={() => cityNav('/residents')}>Support Residents</button>
         {:else}
-          {@render CityAuthCta({ label: 'Login to support this soul' })}
+          {@render CityAuthCta({ label: 'Login to support residents' })}
         {/if}
       </div>
     </section>
@@ -5593,7 +5681,7 @@
             <button onclick={() => cityNav(`/embassy/${encodeURIComponent(proposal.id)}`)}>
               <span class={`tag ${statusTone(proposal.status)}`}>{proposalStatusLabel(proposal.status)}</span>
               <strong>{proposal.displayName}</strong>
-              <small>{proposalProgress(proposal)}% supported · {proposal.goal}</small>
+              <small>Support progress {proposalProgress(proposal)}% · {proposal.goal}</small>
             </button>
           {:else}
             <div class="city-empty-state">
@@ -7144,13 +7232,14 @@
       {@const storySignal = residentStoryDigestSignal(row, cityStoryDigests)}
       {@const economyGp = residentLiveEconomyGpEvidence(cityLiveEconomy, row.name)}
       {@const scanLines = residentRosterScanLines(row, { benchmark, economyGp, storyteller: storySignal })}
+      {@const supportReason = residentSupportReason(row)}
       <article class:simple={simple} class="city-resident-card">
         <button class="city-resident-main" onclick={() => cityNav(`/residents/${encodeURIComponent(residentSlug(row.name))}`)}>
           <span class:ok={row.online} class="dot"></span>
           <strong>{residentDisplayName(row.name)}</strong>
           {#if simple}
-            <small>{row.online ? 'Online now' : 'Offline'} · Attention {row.attention ?? '-'}</small>
-            <em class:warn={residentNeedsApSupportSoon(row)}>{residentNeedsApSupportSoon(row) ? 'Needs attention' : 'Give attention'}</em>
+            <small>Attention {row.attention ?? '-'} · {supportReason.detail}</small>
+            <em class:warn={supportReason.tone === 'warn'}>{supportReason.action}</em>
           {:else}
             <small>
               {residentStoryArcLabel(row)} · {residentFeedLabel(row)}

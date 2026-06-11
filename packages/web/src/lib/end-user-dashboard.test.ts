@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { SoulProposal } from './city-api';
-import { boardActionCards, dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
+import { boardActionCards, dashboardNoticeKey, dashboardNoticeVisible, dismissDashboardNotice, primaryDashboardNavItems, recommendedDashboardAction, residentAttentionGuide, residentAttentionPreview, residentAttentionResultNotice, residentSupportReason, simpleProfileActionCards, simpleModeRouteRequiresExpert, sortResidentsForAttention, sortSoulProposalsForFunding, visibleDashboardNavItems } from './end-user-dashboard';
 
 describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav to the Simple IA destinations', () => {
@@ -72,7 +72,7 @@ describe('boardActionCards', () => {
     expect(cards.map(card => [card.label, card.path])).toEqual([
       ['Give Attention', '/residents?triage=attention'],
       ['Watch Live', '/live'],
-      ['Request Trophy', '/login'],
+      ['Request Item', '/login'],
       ['Sign In', '/login'],
     ]);
     expect(cards.map(card => card.detail).join(' ')).not.toMatch(/\b(debug|ops|controller|bridge|snapshot|API|backend|MVP|endpoint|shell)\b/i);
@@ -90,7 +90,7 @@ describe('boardActionCards', () => {
     expect(cards.map(card => [card.label, card.path])).toEqual([
       ['Give Attention', '/residents'],
       ['Watch Live', '/live'],
-      ['Request Trophy', '/prints/new'],
+      ['Request Item', '/prints/new'],
       ['Me', '/profile'],
     ]);
     expect(cards[0]?.detail).toContain('999 Onions');
@@ -256,6 +256,42 @@ describe('recommendedDashboardAction', () => {
   });
 });
 
+describe('simpleProfileActionCards', () => {
+  test('gives signed-in humans clear next actions from Me', () => {
+    const cards = simpleProfileActionCards({
+      authenticated: true,
+      onionBalance: 999,
+      supportedResidentCount: 2,
+      pendingPrints: 1,
+    });
+
+    expect(cards.map(card => [card.label, card.path])).toEqual([
+      ['Give Attention', '/residents?triage=attention'],
+      ['Watch Live', '/live'],
+      ['Trophies', '/prints'],
+    ]);
+    expect(cards[0]?.detail).toContain('999 Onions');
+    expect(cards[1]?.detail).toContain('2 residents');
+    expect(cards[2]?.detail).toContain('1 trophy request');
+    expect(cards.map(card => card.detail).join(' ')).not.toMatch(/\b(debug|ops|controller|bridge|snapshot|API|backend|MVP|endpoint|shell)\b/i);
+  });
+
+  test('routes guests from Me toward login before protected actions', () => {
+    const cards = simpleProfileActionCards({
+      authenticated: false,
+      onionBalance: 0,
+      supportedResidentCount: 0,
+      pendingPrints: 0,
+    });
+
+    expect(cards.map(card => [card.label, card.path])).toEqual([
+      ['Sign In', '/login'],
+      ['Watch Live', '/live'],
+      ['Board', '/board'],
+    ]);
+  });
+});
+
 describe('simpleModeRouteRequiresExpert', () => {
   test('gates direct expert-only city routes while Simple mode is active', () => {
     expect(simpleModeRouteRequiresExpert('/inbox')).toBe(true);
@@ -339,6 +375,35 @@ describe('sortResidentsForAttention', () => {
     ]);
 
     expect(sorted.map(item => item.name)).toEqual(['Critical', 'Low', 'Steady', 'Unknown']);
+  });
+});
+
+describe('residentSupportReason', () => {
+  function resident(input: Partial<ResidentDashboardRow> & Pick<ResidentDashboardRow, 'name'>): ResidentDashboardRow {
+    return {
+      name: input.name,
+      online: input.online ?? false,
+      attention: input.attention,
+    } as ResidentDashboardRow;
+  }
+
+  test('explains why low-attention residents are the first support target', () => {
+    expect(residentSupportReason(resident({ name: 'Hans', online: true, attention: 2 }))).toEqual({
+      label: 'Needs attention',
+      detail: 'Attention is running low; support helps keep this resident active.',
+      tone: 'warn',
+      action: 'Give attention',
+    });
+  });
+
+  test('gives non-urgent residents a human reason without expert terms', () => {
+    expect(residentSupportReason(resident({ name: 'Ada', online: true, attention: 40 }))).toEqual({
+      label: 'Online now',
+      detail: 'Watch live, then support if their goal matters to you.',
+      tone: 'teal',
+      action: 'Open resident',
+    });
+    expect(residentSupportReason(resident({ name: 'Pip', online: false, attention: 16 })).detail).not.toMatch(/\b(AP|GP|debug|ops|controller|backend|snapshot)\b/i);
   });
 });
 

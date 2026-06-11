@@ -95,7 +95,7 @@ describe('dashboard copy hygiene', () => {
     expect(boardSource).toContain('What To Do Now');
     expect(boardSource).toContain('Give Attention');
     expect(boardSource).toContain('Watch Live');
-    expect(boardSource).toContain('Request Trophy');
+    expect(boardSource).toContain('Request Item');
     expect(boardSource).toContain("cityNav('/live')");
     expect(boardSource).toContain("cityNav('/prints')");
     expect(boardSource).toContain("'/prints/new'");
@@ -115,6 +115,7 @@ describe('dashboard copy hygiene', () => {
   test('keeps the simple resident attention flow preview-first and jargon-free', () => {
     const residentProfileSource = sourceBetween(appSource, '{#snippet CityResidentProfile()}', '{#snippet CityResidentIntel()}');
     const simpleResidentProfileSource = sourceBetween(residentProfileSource, '{#if !expertMode}', '      </section>\n    {:else}');
+    const residentListSource = sourceBetween(appSource, '{#snippet CityResidentList', '{#snippet SpectatorSurface');
 
     expect(simpleResidentProfileSource).toContain('Attention preview');
     expect(simpleResidentProfileSource).toContain('cityResidentAttentionPreview.copy');
@@ -126,6 +127,22 @@ describe('dashboard copy hygiene', () => {
     expect(simpleResidentProfileSource).toContain('Patrons may qualify for trophies if the resident achieves their goal.');
     expect(simpleResidentProfileSource).toContain('helping create a resident');
     expect(simpleResidentProfileSource).not.toMatch(/\b(NCRI|backend|bridge|API|controller|operator|MVP)\b/i);
+    expect(residentListSource).toContain('residentSupportReason(row)');
+    expect(residentListSource).toContain('supportReason.detail');
+  });
+
+  test('keeps the simple profile focused on receipts and next human actions', () => {
+    const profileSource = sourceBetween(appSource, '{#snippet CityProfile()}', '{#snippet CityWorld()}');
+    const simpleOwnProfileSource = sourceBetween(profileSource, '<div class="panel-title">What You Can Do</div>', '    {:else}\n    <div class={`city-panel span-2 city-economy-health');
+
+    expect(simpleOwnProfileSource).toContain('What You Can Do');
+    expect(simpleOwnProfileSource).toContain('simpleProfileActionCards');
+    expect(simpleOwnProfileSource).toContain('Latest Support');
+    expect(simpleOwnProfileSource).toContain('cityLatestSupportReceipt');
+    expect(simpleOwnProfileSource).toContain('saved for this sign-in on this device');
+    expect(appSource).toContain('latestSupportReceiptStorageKeyForSession');
+    expect(simpleOwnProfileSource).toContain('Residents You Support');
+    expect(simpleOwnProfileSource).not.toMatch(/\b(NCRI|backend|bridge|API|controller|operator|MVP|snapshot)\b/i);
   });
 
   test('renames the human-facing Graveyard surface to Soul Library while keeping /graveyard compatible', () => {
@@ -169,7 +186,16 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Support is not available here yet');
     expect(appSource).toContain('For now, support living residents with attention while this soul waits in the birth queue.');
     expect(appSource).toContain('Human support will decide which souls are ready for birth.');
+    expect(appSource).toContain('Preview Support');
+    expect(appSource).toContain('Support needed before birth');
+    expect(appSource).toContain('Support Not Live Yet');
+    expect(appSource).toContain('Submitting a soul is live; direct support is not live here yet.');
+    expect(appSource).toContain('attention still needed');
     expect(appSource).not.toContain('Onion funding is being wired');
+    expect(appSource).not.toContain('Login to support this soul');
+    expect(appSource).not.toContain('Support This Soul');
+    expect(appSource).not.toContain('Preview Cost');
+    expect(appSource).not.toContain('Birth Funding');
     expect(appSource).not.toContain('For MVP, funding should use Onions and record patrons.');
     expect(appSource).not.toContain('Funding will be the vote once the Onion-backed birth flow is connected.');
     expect(appSource).not.toContain('Add Onions');

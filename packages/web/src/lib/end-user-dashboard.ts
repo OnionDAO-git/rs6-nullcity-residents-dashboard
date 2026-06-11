@@ -1,5 +1,6 @@
 import type { ResidentDashboardRow } from '@nullcity-dashboard/shared';
 import type { SoulProposal } from './city-api';
+import { residentNeedsApSupportSoon } from './resident-loop';
 
 export type DashboardTone = 'gold' | 'teal' | 'green' | 'blue' | 'mauve' | 'amber' | 'warn';
 
@@ -51,6 +52,27 @@ export interface BoardActionCard {
   path: string;
   detail: string;
   tone: DashboardTone;
+}
+
+export interface SimpleProfileActionCardsInput {
+  authenticated: boolean;
+  onionBalance: number;
+  supportedResidentCount: number;
+  pendingPrints: number;
+}
+
+export interface SimpleProfileActionCard {
+  label: string;
+  path: string;
+  detail: string;
+  tone: DashboardTone;
+}
+
+export interface ResidentSupportReason {
+  label: string;
+  detail: string;
+  tone: DashboardTone;
+  action: string;
 }
 
 export interface ResidentAttentionGuideInput {
@@ -275,11 +297,11 @@ export function boardActionCards(input: BoardActionCardsInput): BoardActionCard[
       tone: 'teal',
     },
     {
-      label: 'Request Trophy',
+      label: 'Request Item',
       path: input.authenticated ? '/prints/new' : '/login',
       detail: input.authenticated
         ? requestText
-        : 'Sign in first, then ask for a trophy or item request.',
+        : 'Sign in first, then ask for an item or trophy request.',
       tone: 'amber',
     },
     {
@@ -291,6 +313,93 @@ export function boardActionCards(input: BoardActionCardsInput): BoardActionCard[
       tone: 'mauve',
     },
   ];
+}
+
+export function simpleProfileActionCards(input: SimpleProfileActionCardsInput): SimpleProfileActionCard[] {
+  if (!input.authenticated) {
+    return [
+      {
+        label: 'Sign In',
+        path: '/login',
+        detail: 'Load your Onions and start supporting residents.',
+        tone: 'gold',
+      },
+      {
+        label: 'Watch Live',
+        path: '/live',
+        detail: 'See what residents are doing before you choose one.',
+        tone: 'teal',
+      },
+      {
+        label: 'Board',
+        path: '/board',
+        detail: 'Find attention needs, trophies, and future residents.',
+        tone: 'mauve',
+      },
+    ];
+  }
+
+  return [
+    {
+      label: 'Give Attention',
+      path: '/residents?triage=attention',
+      detail: `${input.onionBalance.toLocaleString()} Onion${input.onionBalance === 1 ? '' : 's'} available. Spend them on a resident you want to keep active.`,
+      tone: 'gold',
+    },
+    {
+      label: 'Watch Live',
+      path: '/live',
+      detail: input.supportedResidentCount > 0
+        ? `${input.supportedResidentCount.toLocaleString()} resident${input.supportedResidentCount === 1 ? '' : 's'} in your patron list. Watch what is happening now.`
+        : 'Watch the city live before you choose who to support.',
+      tone: 'teal',
+    },
+    {
+      label: 'Trophies',
+      path: input.pendingPrints > 0 ? '/prints' : '/prints/new',
+      detail: input.pendingPrints > 0
+        ? `${input.pendingPrints.toLocaleString()} trophy request${input.pendingPrints === 1 ? '' : 's'} in progress.`
+        : 'Request a trophy, or support residents whose goals could become trophies.',
+      tone: 'amber',
+    },
+  ];
+}
+
+export function residentSupportReason(row: ResidentDashboardRow): ResidentSupportReason {
+  const attention = residentAttentionValue(row);
+  if (residentNeedsApSupportSoon(row)) {
+    return {
+      label: 'Needs attention',
+      detail: 'Attention is running low; support helps keep this resident active.',
+      tone: 'warn',
+      action: 'Give attention',
+    };
+  }
+
+  if (row.online) {
+    return {
+      label: 'Online now',
+      detail: 'Watch live, then support if their goal matters to you.',
+      tone: 'teal',
+      action: 'Open resident',
+    };
+  }
+
+  if (Number.isFinite(attention)) {
+    return {
+      label: 'Steady',
+      detail: 'Attention is steady; support if you want them to keep going.',
+      tone: 'gold',
+      action: 'Open resident',
+    };
+  }
+
+  return {
+    label: 'Resident',
+    detail: 'Open their page and decide if you want to support them.',
+    tone: 'mauve',
+    action: 'Open resident',
+  };
 }
 
 export function simpleModeRouteRequiresExpert(route: string, search = ''): boolean {

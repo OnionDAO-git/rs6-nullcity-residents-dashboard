@@ -3025,6 +3025,12 @@ pre {
   white-space: normal;
 }
 
+.city-card-list.readable small {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .city-record-list article {
   grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
 }
@@ -3500,6 +3506,7 @@ pre {
 
 .city-resident-loop-line {
   grid-column: 2 / 4;
+  grid-row: auto;
   min-width: 0;
   overflow: hidden;
   color: var(--text-2);
