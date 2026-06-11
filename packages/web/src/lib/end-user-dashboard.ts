@@ -596,7 +596,7 @@ export function residentAttentionPreview(input: ResidentAttentionPreviewInput): 
     copy: onionAmount > 0
       ? `${onionLabel} will give ${resident} about ${onionAmount.toLocaleString()} attention.`
       : `Choose how many Onions to give ${resident}.`,
-    buttonLabel: onionAmount > 0 ? `Give ${onionLabel}` : 'Choose Onions',
+    buttonLabel: onionAmount > 0 ? `Give ${onionLabel}` : 'Choose how much',
     exceedsWallet: walletBalance !== undefined && onionAmount > walletBalance,
   };
 }

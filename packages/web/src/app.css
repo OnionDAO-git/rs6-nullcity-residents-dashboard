@@ -3808,6 +3808,14 @@ pre {
   line-height: 1.45;
 }
 
+.city-resident-portrait-line {
+  color: var(--text-1);
+  font-family: var(--serif);
+  font-style: italic;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .resident-support-pending,
 .resident-support-failed {
   display: grid;

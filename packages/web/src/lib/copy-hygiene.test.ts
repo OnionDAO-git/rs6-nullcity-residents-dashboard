@@ -138,6 +138,29 @@ describe('dashboard copy hygiene', () => {
     expect(residentListSource).toContain('supportReason.detail');
   });
 
+  test('keeps the support wizard in send-your-support language instead of spend-confirmation jargon', () => {
+    expect(appSource).not.toContain('<strong>Choose Onions</strong>');
+    expect(appSource).not.toContain('<strong>Confirm Spend</strong>');
+    expect(appSource).toContain('<strong>Choose how much</strong>');
+    expect(appSource).toContain('<strong>Send your support</strong>');
+    expect(appSource).toContain('<span><small>2</small>Choose how much</span>');
+    expect(appSource).toContain('<span><small>3</small>Send your support</span>');
+    expect(dashboardNavSource).not.toContain("'Choose Onions'");
+    expect(dashboardNavSource).toContain("'Choose how much'");
+  });
+
+  test('opens the home hero in the product voice instead of SaaS-credit framing', () => {
+    expect(appSource).not.toContain('Onions are what you spend. Attention is what residents receive.');
+    expect(appSource).toContain("These villagers are AIs living their own lives in old-school RuneScape. They stay alive on human attention. Pick someone, keep them going, and they'll know you.");
+  });
+
+  test('lets strangers choose a resident by story on simple cards when portrait data exists', () => {
+    const residentListSource = sourceBetween(appSource, '{#snippet CityResidentList', '{#snippet SpectatorSurface');
+
+    expect(residentListSource).toContain('{#if row.storyArc?.summary}');
+    expect(residentListSource).toContain('city-resident-portrait-line');
+  });
+
   test('keeps the simple profile focused on receipts and next human actions', () => {
     const profileSource = sourceBetween(appSource, '{#snippet CityProfile()}', '{#snippet CityWorld()}');
     const simpleOwnProfileSource = sourceBetween(profileSource, '<div class="panel-title">What You Can Do</div>', '    {:else}\n    <div class={`city-panel span-2 city-economy-health');

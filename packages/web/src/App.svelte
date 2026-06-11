@@ -4349,7 +4349,7 @@
     <div>
       <p class="kicker">OnionDAO City</p>
       <h1>Null City</h1>
-      <p class="city-lede">Onions are what you spend. Attention is what residents receive. Use it when you want someone to stay active, visible, and responsive in the city.</p>
+      <p class="city-lede">These villagers are AIs living their own lives in old-school RuneScape. They stay alive on human attention. Pick someone, keep them going, and they'll know you.</p>
     </div>
     <div class="city-ledger-strip">
       <span><small>Your Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
@@ -4370,10 +4370,10 @@
       <strong>{cityRecommendedAction.label}</strong>
       <span>{cityRecommendedAction.detail}</span>
       {#if !expertMode && cityRecommendedAction.path.startsWith('/residents')}
-        <div class="city-simple-action-steps" aria-label="How to spend Onions">
-          <span><small>1</small>Pick a resident</span>
-          <span><small>2</small>Choose Onions</span>
-          <span><small>3</small>Complete request</span>
+        <div class="city-simple-action-steps" aria-label="How to support a resident">
+          <span><small>1</small>Pick someone</span>
+          <span><small>2</small>Choose how much</span>
+          <span><small>3</small>Send your support</span>
         </div>
       {/if}
     </div>
@@ -6061,18 +6061,18 @@
           <div>
             <div class="panel-title">Choose a Resident</div>
             <strong>Pick someone to support</strong>
-            <small>Lowest-attention residents are first. Open one, choose how many Onions to spend, then confirm the spend.</small>
+            <small>Lowest-attention residents are first. Open one, choose how much to give, then send your support.</small>
           </div>
           <span class="tag gold">{cityResidents.length}</span>
         </div>
         {@render CityResidentList({ rows: cityResidentAttentionRows, simple: true })}
       </div>
       <div class="city-panel resident-simple-help">
-        <div class="panel-title">How Onion Attention Works</div>
-        <div class="resident-attention-steps compact" aria-label="How Onion attention works">
-          <span><small>1</small><strong>Choose Onions</strong><em>Pick an amount on a resident page.</em></span>
-          <span><small>2</small><strong>Confirm Spend</strong><em>The dashboard sends the Onion spend request.</em></span>
-          <span><small>3</small><strong>Attention Arrives</strong><em>When the request completes, Null City credits attention.</em></span>
+        <div class="panel-title">How Supporting Works</div>
+        <div class="resident-attention-steps compact" aria-label="How supporting a resident works">
+          <span><small>1</small><strong>Choose how much</strong><em>Pick an amount on a resident page.</em></span>
+          <span><small>2</small><strong>Send your support</strong><em>Approve the spend on OnionDAO when it asks you.</em></span>
+          <span><small>3</small><strong>They feel it</strong><em>Your Onions become attention that keeps them going.</em></span>
         </div>
       </div>
       <div class="city-panel resident-simple-help">
@@ -6160,10 +6160,10 @@
             </div>
             <span class={`tag ${cityResidentAttentionGuide.tone}`}>{cityResidentAttentionGuide.amountLabel}</span>
           </div>
-          <div class="resident-attention-steps" aria-label="How Onion attention works">
-            <span><small>1</small><strong>Choose Onions</strong><em>Pick how many Onions you want to spend.</em></span>
-            <span><small>2</small><strong>Confirm Spend</strong><em>The dashboard sends the Onion spend request.</em></span>
-            <span><small>3</small><strong>Resident Gets Attention</strong><em>When the spend settles, Null City credits attention.</em></span>
+          <div class="resident-attention-steps" aria-label="How supporting a resident works">
+            <span><small>1</small><strong>Choose how much</strong><em>Pick how many Onions to put behind them.</em></span>
+            <span><small>2</small><strong>Send your support</strong><em>Approve the spend on OnionDAO when it asks you.</em></span>
+            <span><small>3</small><strong>They feel it</strong><em>Your Onions become attention that keeps them going.</em></span>
           </div>
           <div class="resident-attention-metrics" aria-label="Attention summary">
             <span><small>Your Onions</small><strong>{citySession.authenticated ? citySession.onions.toLocaleString() : 'Sign in'}</strong></span>
@@ -7558,6 +7558,9 @@
           <span class:ok={row.online} class="dot"></span>
           <strong>{residentDisplayName(row.name)}</strong>
           {#if simple}
+            {#if row.storyArc?.summary}
+              <small class="city-resident-portrait-line">{row.storyArc.summary}</small>
+            {/if}
             <small>Attention {row.attention ?? '-'} · {supportReason.detail}</small>
             <em class:warn={supportReason.tone === 'warn'}>{supportReason.action}</em>
           {:else}

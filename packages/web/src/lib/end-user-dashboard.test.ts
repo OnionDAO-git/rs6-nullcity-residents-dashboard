@@ -522,7 +522,7 @@ describe('residentAttentionPreview', () => {
       percentBefore: 0,
       percentAfter: 0,
       copy: 'Choose how many Onions to give Ada.',
-      buttonLabel: 'Choose Onions',
+      buttonLabel: 'Choose how much',
       exceedsWallet: false,
     });
   });
