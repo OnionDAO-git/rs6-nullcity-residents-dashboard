@@ -20,10 +20,13 @@ const adminUser: LandingSessionUser = {
 };
 
 describe('routeCityApi session', () => {
-  test('degrades cleanly when landing auth is not configured', async () => {
+  test('degrades cleanly when auth is fully disabled (explicit null reader)', async () => {
+    const config = cityConfigFromEnv({ LANDING_AUTH_BASE_URL: 'https://oniondao.dev' });
     const services: CityServices = {
-      config: cityConfigFromEnv({ LANDING_AUTH_BASE_URL: 'https://oniondao.dev' }),
-      auth: createLandingSessionAuthenticator(cityConfigFromEnv({ LANDING_AUTH_BASE_URL: 'https://oniondao.dev' }), undefined),
+      config,
+      // Explicit null disables auth entirely (vs. `undefined`, which falls back
+      // to the env-selected default reader).
+      auth: createLandingSessionAuthenticator(config, null),
       store: new InMemoryCityStore(),
     };
 
@@ -32,7 +35,24 @@ describe('routeCityApi session', () => {
     expect(await response.json()).toMatchObject({
       authenticated: false,
       auth: { mode: 'disabled', reason: 'not_configured' },
-      store: { mode: 'memory', cityDatabaseConfigured: false, landingDatabaseConfigured: false },
+      store: { mode: 'memory', cityDatabaseConfigured: false, landingDatabaseConfigured: false, landingSessionMode: 'auto' },
+    });
+  });
+
+  test('degrades cleanly in api mode with no session cookie', async () => {
+    const config = cityConfigFromEnv({ LANDING_AUTH_BASE_URL: 'https://oniondao.dev' });
+    const services: CityServices = {
+      config,
+      auth: createLandingSessionAuthenticator(config),
+      store: new InMemoryCityStore(),
+    };
+
+    const response = await route(new Request('http://city.test/api/session'), services);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      authenticated: false,
+      auth: { mode: 'landing-api', reason: 'missing_cookie' },
+      store: { mode: 'memory', cityDatabaseConfigured: false, landingDatabaseConfigured: false, landingSessionMode: 'auto' },
     });
   });
 

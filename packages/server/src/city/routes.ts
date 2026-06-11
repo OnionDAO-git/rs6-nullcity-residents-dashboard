@@ -720,6 +720,7 @@ async function sessionResponse(
     mode: context.store.mode,
     cityDatabaseConfigured: Boolean(context.config.cityDatabaseUrl),
     landingDatabaseConfigured: Boolean(context.config.landingDatabaseUrl),
+    landingSessionMode: context.config.landingSessionMode,
   };
   if (!result.user) return { authenticated: false, loginUrl, auth, store, csrfToken };
   const cityUser = await context.store.upsertUserFromLanding(result.user);

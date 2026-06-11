@@ -1,6 +1,13 @@
 export interface CityConfig {
   cityDatabaseUrl?: string;
   landingDatabaseUrl?: string;
+  /**
+   * How the dashboard resolves a landing session cookie into a user.
+   * - 'api'  → call landing's HTTP introspection endpoint (no DB dependency).
+   * - 'db'   → query landing's Postgres directly (legacy, requires LANDING_DATABASE_URL).
+   * - 'auto' → 'db' when LANDING_DATABASE_URL is set, otherwise 'api'.
+   */
+  landingSessionMode: 'api' | 'db' | 'auto';
   landingAuthBaseUrl: string;
   onionApiBaseUrl: string;
   onionExternalApiKey?: string;
@@ -34,6 +41,7 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
   return {
     cityDatabaseUrl: clean(env.CITY_DATABASE_URL),
     landingDatabaseUrl: clean(env.LANDING_DATABASE_URL),
+    landingSessionMode: landingSessionModeEnv(env.LANDING_SESSION_MODE),
     landingAuthBaseUrl: clean(env.LANDING_AUTH_BASE_URL) || 'https://oniondao.dev',
     onionApiBaseUrl: (clean(env.ONION_API_BASE_URL) || clean(env.CITY_ONION_API_BASE_URL) || clean(env.LANDING_AUTH_BASE_URL) || 'https://oniondao.dev').replace(/\/+$/, ''),
     onionExternalApiKey: clean(env.ONION_EXTERNAL_API_KEY) || clean(env.CITY_ONION_EXTERNAL_API_KEY),
@@ -68,6 +76,13 @@ export function cityConfigFromEnv(env: Record<string, string | undefined> = proc
 function clean(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function landingSessionModeEnv(value: string | undefined): 'api' | 'db' | 'auto' {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'api') return 'api';
+  if (normalized === 'db' || normalized === 'landing-db') return 'db';
+  return 'auto';
 }
 
 function booleanEnv(value: string | undefined): boolean {
