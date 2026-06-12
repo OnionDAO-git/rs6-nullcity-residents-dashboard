@@ -189,6 +189,49 @@ describe('NullCitySpectatorBridge', () => {
       sessionId: 'observe-res-hans',
       subject: { kind: 'resident', name: 'res:hans' },
       position: { x: 3222, y: 3218, level: 0 },
+      actors: [],
+    });
+  });
+
+  test('posts visible perception actors to the RuneScape iframe', () => {
+    const container = new FakeElement('div');
+    const bridge = new NullCitySpectatorBridge(container as unknown as HTMLElement, '/spectator.html');
+    const session: SpectatorSession = {
+      id: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      mode: 'follow',
+      connected: true,
+      position: { x: 3222, y: 3218, level: 0 },
+      latestPerception: {
+        nearby: {
+          players: [
+            { id: 'resident:father-aereck', kind: 'resident', name: 'res:father-aereck', position: { x: 3242, y: 3207, level: 0 } },
+            { id: 'player:guest', kind: 'player', name: 'guest', position: { x: 3224, y: 3218, level: 0 } },
+          ],
+          npcs: [
+            { id: 'npc:bob', kind: 'npc', name: 'Bob', position: { x: 3230, y: 3205, level: 0 } },
+          ],
+        },
+      },
+      packets: [],
+    };
+
+    bridge.setSession(session);
+
+    const iframe = container.children[0] as FakeIframe;
+    iframe.dispatch('load');
+    dispatchWindowMessage({ type: 'nullcity:spectator-ready' });
+
+    expect(iframe.postedMessages).toContainEqual({
+      type: 'nullcity:spectator-session',
+      sessionId: 'observe-res-hans',
+      subject: { kind: 'resident', name: 'res:hans' },
+      position: { x: 3222, y: 3218, level: 0 },
+      actors: [
+        { id: 'resident:father-aereck', kind: 'resident', name: 'res:father-aereck', position: { x: 3242, y: 3207, level: 0 } },
+        { id: 'player:guest', kind: 'player', name: 'guest', position: { x: 3224, y: 3218, level: 0 } },
+        { id: 'npc:bob', kind: 'npc', name: 'Bob', position: { x: 3230, y: 3205, level: 0 } },
+      ],
     });
   });
 

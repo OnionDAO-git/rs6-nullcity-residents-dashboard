@@ -52,7 +52,7 @@ const defaultDisplayFilters: SpectatorDisplayFilters = {
 };
 
 type SpectatorFrameMessage =
-  | { type: 'nullcity:spectator-session'; sessionId: string; subject: SpectatorSubject; position?: Position }
+  | { type: 'nullcity:spectator-session'; sessionId: string; subject: SpectatorSubject; position?: Position; actors: ObserverActor[] }
   | { type: 'nullcity:spectator-packet'; sessionId: string; packet: unknown }
   | { type: 'nullcity:spectator-clear' };
 
@@ -141,7 +141,8 @@ export class NullCitySpectatorBridge {
       return;
     }
 
-    this.fallbackRenderer.setFrame(frameFromSession(session, this.filters));
+    const frame = frameFromSession(session, this.filters);
+    this.fallbackRenderer.setFrame(frame);
     this.startClient();
 
     if (this.started && this.loaded) {
@@ -149,6 +150,7 @@ export class NullCitySpectatorBridge {
         type: 'nullcity:spectator-session',
         sessionId: session.id,
         subject: session.subject,
+        actors: frame?.actors || [],
         ...(session.position ? { position: session.position } : {}),
       });
       for (const [index, packet] of (session.packets || []).entries()) {

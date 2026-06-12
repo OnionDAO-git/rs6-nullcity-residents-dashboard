@@ -3,7 +3,13 @@ import { shouldReplaySpectatorPacket } from './lib/spectator-packets';
 import { liveSpectatorStatus, waitingForStableRenderStatus } from './lib/spectator-status';
 
 type SpectatorMessage =
-  | { type: 'nullcity:spectator-session'; sessionId: string; subject: { kind: string; name?: string; username?: string }; position?: { x: number; y: number; level?: number } }
+  | {
+      type: 'nullcity:spectator-session';
+      sessionId: string;
+      subject: { kind: string; name?: string; username?: string };
+      position?: { x: number; y: number; level?: number };
+      actors?: Array<{ id: string; kind: string; name: string; position?: { x: number; y: number; level?: number } }>;
+    }
   | { type: 'nullcity:spectator-packet'; sessionId: string; packet: SpectatorRsPacketFrame }
   | { type: 'nullcity:spectator-clear' };
 
@@ -56,6 +62,8 @@ window.addEventListener('message', event => {
     setTargetPosition(message.position);
     const label = message.subject.kind === 'resident' ? message.subject.name : message.subject.username;
     subjectLabel = label || 'subject';
+    client.setSpectatorSubject(subjectLabel);
+    client.setSpectatorActors(message.actors || []);
     setStatus(currentLiveStatus());
     return;
   }

@@ -90,6 +90,7 @@ const CLIENT_VERSION = 435;
 
 const MAX_PLAYER_COUNT = 2048;
 const LOCAL_PLAYER_INDEX = 2047;
+const MAX_SPECTATOR_SYNTHETIC_PLAYERS = 48;
 
 const MAX_CHATS = 50;
 const CHAT_COLOURS = [Colour.YELLOW, Colour.RED, Colour.GREEN, Colour.CYAN, Colour.MAGENTA, Colour.WHITE];
@@ -147,6 +148,13 @@ export interface SpectatorRsPacketFrame {
     payloadBase64: string;
     frameLength?: number;
     frameBase64?: string;
+}
+
+export interface SpectatorDisplayActor {
+    id: string;
+    kind: string;
+    name: string;
+    position?: { x: number; y: number; level?: number };
 }
 
 interface RsStream {
@@ -606,6 +614,7 @@ export class Client extends GameShell {
     private minusedlevel: number = 0;
     private selfSlot: number = -1;
     private localPlayer: ClientPlayer | null = null;
+    private readonly spectatorSyntheticPlayerSlots = new Map<string, number>();
     private membersAccount: number = 0;
 
     private entityRemovalCount: number = 0;
@@ -822,6 +831,91 @@ export class Client extends GameShell {
         this.orbitCameraX = this.localPlayer.x;
         this.orbitCameraZ = this.localPlayer.z;
         return true;
+    }
+
+    public setSpectatorSubject(displayName: string): void {
+        this.enableSpectatorMode();
+        if (!this.localPlayer) {
+            this.localPlayer = this.players[LOCAL_PLAYER_INDEX] = new ClientPlayer();
+        }
+
+        const trimmedName = displayName.trim();
+        this.localPlayer.name = trimmedName || 'spectator';
+        this.localPlayer.cycle = this.loopCycle;
+        this.localPlayer.totalHealth = this.localPlayer.totalHealth || 10;
+        this.localPlayer.health = this.localPlayer.health || this.localPlayer.totalHealth;
+        this.ensureSpectatorPlayerModel(this.localPlayer);
+    }
+
+    public setSpectatorActors(actors: SpectatorDisplayActor[]): void {
+        this.enableSpectatorMode();
+        const previousSyntheticSlots = new Set(this.spectatorSyntheticPlayerSlots.values());
+        const preservedPlayerIds: number[] = [];
+        for (let i = 0; i < this.playerCount; i++) {
+            const id = this.playerIds[i];
+            if (!previousSyntheticSlots.has(id)) {
+                preservedPlayerIds.push(id);
+            }
+        }
+        for (const slot of previousSyntheticSlots) {
+            this.players[slot] = null;
+        }
+        this.spectatorSyntheticPlayerSlots.clear();
+
+        this.playerCount = 0;
+        for (const id of preservedPlayerIds) {
+            this.playerIds[this.playerCount++] = id;
+        }
+
+        const preservedSlots = new Set(preservedPlayerIds);
+        let nextSyntheticSlot = LOCAL_PLAYER_INDEX - 1;
+        for (const actor of actors.slice(0, MAX_SPECTATOR_SYNTHETIC_PLAYERS)) {
+            if (actor.kind !== 'resident' && actor.kind !== 'player') {
+                continue;
+            }
+            const name = actor.name.trim();
+            if (!name || (this.localPlayer?.name && name === this.localPlayer.name)) {
+                continue;
+            }
+            const worldX = actor.position?.x;
+            const worldZ = actor.position?.y;
+            if (worldX === undefined || worldZ === undefined) {
+                continue;
+            }
+            const localTile = spectatorLocalTile(
+                { worldX, worldZ, level: actor.position?.level ?? 0 },
+                { baseX: this.mapBuildBaseX, baseZ: this.mapBuildBaseZ, size: BuildArea.SIZE }
+            );
+            if (!localTile || localTile.level !== this.minusedlevel) {
+                continue;
+            }
+            while (nextSyntheticSlot > 0 && preservedSlots.has(nextSyntheticSlot)) {
+                nextSyntheticSlot--;
+            }
+            if (nextSyntheticSlot <= 0 || this.playerCount >= MAX_PLAYER_COUNT) {
+                break;
+            }
+
+            const player = new ClientPlayer();
+            player.name = name;
+            player.teleport(localTile.localZ, false, localTile.localX);
+            player.cycle = this.loopCycle;
+            player.totalHealth = 10;
+            player.health = 10;
+            this.ensureSpectatorPlayerModel(player);
+            this.players[nextSyntheticSlot] = player;
+            this.playerIds[this.playerCount++] = nextSyntheticSlot;
+            this.spectatorSyntheticPlayerSlots.set(actor.id || name, nextSyntheticSlot);
+            nextSyntheticSlot--;
+        }
+    }
+
+    private ensureSpectatorPlayerModel(player: ClientPlayer): void {
+        if (player.model === null) {
+            const model = new PlayerModel();
+            model.setAppearance(null, false, new Int32Array(5), -1);
+            player.model = model;
+        }
     }
 
     public override error(message: string): void {
