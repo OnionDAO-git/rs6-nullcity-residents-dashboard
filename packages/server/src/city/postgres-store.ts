@@ -8,6 +8,7 @@ import {
   type AttentionGrantIntentPatch,
   type AttentionGrantIntentState,
   type CityStore,
+  type FeedbackCreateInput,
   type LedgerAppendInput,
   type PrintBridgeJob,
   type PrintQueueClaimInput,
@@ -21,6 +22,9 @@ import {
 import type {
   CityProfile,
   CityUser,
+  HumanFeedback,
+  HumanFeedbackFeeling,
+  HumanFeedbackMode,
   InboxMessage,
   InboxThread,
   LibrarySoulLife,
@@ -535,6 +539,34 @@ export class PostgresCityStore implements CityStore {
     return rows.map(mapLibrarySoulLife);
   }
 
+  async createFeedback(input: FeedbackCreateInput): Promise<HumanFeedback> {
+    const message = cleanString(input.message);
+    if (!message) throw new CityStoreError('feedback_message_required', 400);
+    const id = `feedback_${crypto.randomUUID()}`;
+    const rows = await this.sql`
+      INSERT INTO feedback_entries (
+        id, city_user_id, landing_user_id, display_name, handle, email, feeling,
+        trying_to_do, message, route, page_url, mode, resident_id, allow_follow_up,
+        user_agent, metadata
+      )
+      VALUES (
+        ${id}, ${input.cityUserId || null}, ${input.landingUserId || null}, ${input.displayName || null},
+        ${input.handle || null}, ${input.email || null}, ${input.feeling}, ${input.tryingToDo || null},
+        ${message}, ${input.route || null}, ${input.pageUrl || null}, ${input.mode || null},
+        ${input.residentId || null}, ${input.allowFollowUp === true}, ${input.userAgent || null},
+        ${json(input.metadata || {})}::jsonb
+      )
+      RETURNING *
+    `;
+    return mapFeedback(one(rows));
+  }
+
+  async listFeedback(limit = 50): Promise<HumanFeedback[]> {
+    const count = Math.max(1, Math.min(100, Math.floor(limit)));
+    const rows = await this.sql.unsafe('SELECT * FROM feedback_entries ORDER BY created_at DESC LIMIT $1', [count]);
+    return rows.map(mapFeedback);
+  }
+
   private async requireUser(cityUserId: string): Promise<CityUser> {
     const rows = await this.sql`SELECT * FROM city_users WHERE id = ${cityUserId}`;
     if (!rows[0]) throw new CityStoreError('City user not found', 404);
@@ -977,5 +1009,27 @@ function mapLibrarySoulLife(row: Record<string, unknown>): LibrarySoulLife {
     epitaph: nullableString(row, 'epitaph'),
     createdAt: dateField(row, 'created_at'),
     updatedAt: dateField(row, 'updated_at'),
+  };
+}
+
+function mapFeedback(row: Record<string, unknown>): HumanFeedback {
+  return {
+    id: stringField(row, 'id'),
+    cityUserId: nullableString(row, 'city_user_id'),
+    landingUserId: nullableString(row, 'landing_user_id'),
+    displayName: nullableString(row, 'display_name'),
+    handle: nullableString(row, 'handle'),
+    email: nullableString(row, 'email'),
+    feeling: stringField(row, 'feeling') as HumanFeedbackFeeling,
+    tryingToDo: nullableString(row, 'trying_to_do'),
+    message: stringField(row, 'message'),
+    route: nullableString(row, 'route'),
+    pageUrl: nullableString(row, 'page_url'),
+    mode: nullableString(row, 'mode') as HumanFeedbackMode | undefined,
+    residentId: nullableString(row, 'resident_id'),
+    allowFollowUp: row.allow_follow_up === true,
+    userAgent: nullableString(row, 'user_agent'),
+    metadata: jsonField(row, 'metadata', {}),
+    createdAt: dateField(row, 'created_at'),
   };
 }

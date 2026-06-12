@@ -1,6 +1,7 @@
 import type {
   CityProfile,
   CityUser,
+  HumanFeedback,
   InboxMessage,
   InboxThread,
   LandingSessionUser,
@@ -24,6 +25,7 @@ import {
   type AttentionGrantIntentPatch,
   type AttentionGrantIntentState,
   type CityStore,
+  type FeedbackCreateInput,
   type LedgerAppendInput,
   type PrintBridgeJob,
   type PrintQueueClaimInput,
@@ -68,6 +70,7 @@ export class InMemoryCityStore implements CityStore {
   private readonly inboxThreads = new Map<string, InboxThread>();
   private readonly inboxMessages = new Map<string, InboxMessage[]>();
   private readonly librarySoulLives = new Map<string, LibrarySoulLife>();
+  private readonly feedbackEntries = new Map<string, HumanFeedback>();
   private readonly identityAliases = new Map<string, string>(); // personId -> patronHandle
   private readonly attentionGrantIntents = new Map<string, AttentionGrantIntent>();
   private readonly attentionGrantIntentIdempotency = new Map<string, string>(); // `${cityUserId}:${idempotencyKey}` -> intent id
@@ -513,6 +516,37 @@ export class InMemoryCityStore implements CityStore {
 
   async listLibrarySoulLives(): Promise<LibrarySoulLife[]> {
     return clone([...this.librarySoulLives.values()].sort((a, b) => (b.diedAt || b.createdAt).localeCompare(a.diedAt || a.createdAt)));
+  }
+
+  async createFeedback(input: FeedbackCreateInput): Promise<HumanFeedback> {
+    const message = cleanString(input.message);
+    if (!message) throw new CityStoreError('feedback_message_required', 400);
+    const feedback: HumanFeedback = {
+      id: `feedback_${this.id()}`,
+      cityUserId: input.cityUserId,
+      landingUserId: input.landingUserId,
+      displayName: input.displayName,
+      handle: input.handle,
+      email: input.email,
+      feeling: input.feeling,
+      tryingToDo: cleanString(input.tryingToDo),
+      message,
+      route: cleanString(input.route),
+      pageUrl: cleanString(input.pageUrl),
+      mode: input.mode,
+      residentId: cleanString(input.residentId),
+      allowFollowUp: input.allowFollowUp === true,
+      userAgent: cleanString(input.userAgent),
+      metadata: input.metadata || {},
+      createdAt: this.now(),
+    };
+    this.feedbackEntries.set(feedback.id, feedback);
+    return clone(feedback);
+  }
+
+  async listFeedback(limit = 50): Promise<HumanFeedback[]> {
+    const count = Math.max(1, Math.min(100, Math.floor(limit)));
+    return clone([...this.feedbackEntries.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, count));
   }
 
   async resolveOnionId(cityUserId: string): Promise<string> {

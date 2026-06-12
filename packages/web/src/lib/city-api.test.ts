@@ -147,6 +147,71 @@ describe('cityApi', () => {
     }]);
   });
 
+  test('posts human feedback with CSRF and page context', async () => {
+    const calls: Array<{ path: string; method: string; body: unknown; csrf: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        csrf: new Headers(init?.headers).get('x-csrf-token'),
+      });
+      return new Response(JSON.stringify({
+        feedback: {
+          id: 'feedback-1',
+          createdAt: '2026-06-12T12:00:00.000Z',
+        },
+      }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    setCityCsrfToken('csrf-123');
+    await cityApi.submitFeedback({
+      feeling: 'confused',
+      tryingToDo: 'Give attention',
+      message: 'I do not know what to do next.',
+      route: '/residents/hans',
+      mode: 'simple',
+      allowFollowUp: false,
+    });
+
+    expect(calls).toEqual([{
+      path: '/api/feedback',
+      method: 'POST',
+      body: {
+        feeling: 'confused',
+        tryingToDo: 'Give attention',
+        message: 'I do not know what to do next.',
+        route: '/residents/hans',
+        mode: 'simple',
+        allowFollowUp: false,
+      },
+      csrf: 'csrf-123',
+    }]);
+  });
+
+  test('calls the admin human feedback endpoint with a limit', async () => {
+    const calls: Array<{ path: string; method: string }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        path: String(input),
+        method: init?.method || 'GET',
+      });
+      return new Response(JSON.stringify({ feedback: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    await cityApi.adminFeedback({ limit: 25 });
+
+    expect(calls).toEqual([
+      { path: '/api/admin/feedback?limit=25', method: 'GET' },
+    ]);
+  });
+
   test('calls controller-backed NCRI admin endpoint', async () => {
     const calls: Array<{ path: string; method: string; body: unknown }> = [];
     globalThis.fetch = (async (input, init) => {

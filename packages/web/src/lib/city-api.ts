@@ -533,6 +533,44 @@ export interface LibrarySoulLife {
   updatedAt: string;
 }
 
+export type HumanFeedbackFeeling = 'confused' | 'okay' | 'excited';
+export type HumanFeedbackMode = 'simple' | 'expert';
+
+export interface HumanFeedbackInput {
+  feeling: HumanFeedbackFeeling;
+  tryingToDo?: string;
+  message: string;
+  route?: string;
+  pageUrl?: string;
+  mode?: HumanFeedbackMode;
+  residentId?: string;
+  allowFollowUp?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface HumanFeedbackReceipt {
+  id: string;
+  createdAt: string;
+}
+
+export interface HumanFeedbackEntry extends HumanFeedbackReceipt {
+  cityUserId?: string;
+  landingUserId?: string;
+  displayName?: string;
+  handle?: string;
+  email?: string;
+  feeling: HumanFeedbackFeeling;
+  tryingToDo?: string;
+  message: string;
+  route?: string;
+  pageUrl?: string;
+  mode?: HumanFeedbackMode;
+  residentId?: string;
+  allowFollowUp: boolean;
+  userAgent?: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface OnionAttentionGrantRequestState {
   id: string;
   status: string;
@@ -667,6 +705,13 @@ function ncriPrintQueueQuery(options: { status?: NullCityNcriPrintQueueStatus } 
   return serialized ? `?${serialized}` : '';
 }
 
+function adminFeedbackQuery(options: { limit?: number } = {}): string {
+  const params = new URLSearchParams();
+  if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -704,6 +749,8 @@ export const cityApi = {
   points: () => request<{ balances: PointBalance[] }>('/api/profile/points'),
   ledger: (resource?: PointResource) => request<{ entries: PointLedgerEntry[] }>(`/api/profile/ledger${resource ? `?resource=${resource}` : ''}`),
   syncCheckins: () => request<{ ok: boolean; awarded: unknown[]; message?: string }>('/api/points/sync-checkins', { method: 'POST' }),
+  submitFeedback: (body: HumanFeedbackInput) =>
+    request<{ feedback: HumanFeedbackReceipt }>('/api/feedback', { method: 'POST', body: jsonBody(body) }),
 
   quoteSoulProposal: (body: SoulProposalInput) => request<SoulQuote>('/api/embassy/quote', { method: 'POST', body: jsonBody(body) }),
   proposals: () => request<{ proposals: SoulProposal[] }>('/api/embassy/proposals'),
@@ -725,6 +772,8 @@ export const cityApi = {
   nullcityEconomyStream: (options?: { since?: string; limit?: number; residentLimit?: number; intervalMs?: number }) =>
     new EventSource(`/api/nullcity/economy/stream${economyStreamQuery(options)}`),
   adminNullcityEconomyListings: () => request<NullCityEconomyListingsBridgeResponse>('/api/admin/nullcity/economy/listings'),
+  adminFeedback: (options?: { limit?: number }) =>
+    request<{ feedback: HumanFeedbackEntry[] }>(`/api/admin/feedback${adminFeedbackQuery(options)}`),
   exchangeNullcityApForGp: (residentId: string, body: NullCityApGpExchangeRequest) =>
     request<NullCityApGpExchangeBridgeResponse>(
       `/api/admin/nullcity/residents/${encodeURIComponent(residentId)}/ap-gp-exchanges`,

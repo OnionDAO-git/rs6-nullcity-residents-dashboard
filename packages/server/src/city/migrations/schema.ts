@@ -316,4 +316,31 @@ CREATE INDEX IF NOT EXISTS idx_attention_grant_intents_onion_request
   ON attention_grant_intents(onion_request_id);
 `.trim(),
   },
+  {
+    id: '005_human_feedback',
+    sql: `
+CREATE TABLE IF NOT EXISTS feedback_entries (
+  id TEXT PRIMARY KEY,
+  city_user_id TEXT REFERENCES city_users(id) ON DELETE SET NULL,
+  landing_user_id TEXT,
+  display_name TEXT,
+  handle TEXT,
+  email TEXT,
+  feeling TEXT NOT NULL CHECK (feeling IN ('confused', 'okay', 'excited')),
+  trying_to_do TEXT,
+  message TEXT NOT NULL,
+  route TEXT,
+  page_url TEXT,
+  mode TEXT CHECK (mode IN ('simple', 'expert')),
+  resident_id TEXT,
+  allow_follow_up BOOLEAN NOT NULL DEFAULT false,
+  user_agent TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_entries_created ON feedback_entries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_entries_city_user ON feedback_entries(city_user_id, created_at DESC);
+`.trim(),
+  },
 ];

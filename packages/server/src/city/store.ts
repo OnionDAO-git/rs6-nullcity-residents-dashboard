@@ -1,6 +1,9 @@
 import type {
   CityProfile,
   CityUser,
+  HumanFeedback,
+  HumanFeedbackFeeling,
+  HumanFeedbackMode,
   InboxMessage,
   InboxThread,
   LandingSessionUser,
@@ -148,6 +151,8 @@ export interface CityStore {
   listInboxThreads(cityUserId: string): Promise<InboxThread[]>;
   getInboxThread(cityUserId: string, threadId: string): Promise<{ thread: InboxThread; messages: InboxMessage[] } | undefined>;
   listLibrarySoulLives(): Promise<LibrarySoulLife[]>;
+  createFeedback(input: FeedbackCreateInput): Promise<HumanFeedback>;
+  listFeedback(limit?: number): Promise<HumanFeedback[]>;
 
   // Identity (personId === landing users.id === city_users.landing_user_id)
   resolveOnionId(cityUserId: string): Promise<string>;
@@ -221,6 +226,24 @@ export interface ResidentTradeCreateInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface FeedbackCreateInput {
+  cityUserId?: string;
+  landingUserId?: string;
+  displayName?: string;
+  handle?: string;
+  email?: string;
+  feeling: HumanFeedbackFeeling;
+  tryingToDo?: string;
+  message: string;
+  route?: string;
+  pageUrl?: string;
+  mode?: HumanFeedbackMode;
+  residentId?: string;
+  allowFollowUp?: boolean;
+  userAgent?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export async function grantPoints(
   store: CityStore,
   input: Omit<LedgerAppendInput, 'delta'> & { amount: number },
@@ -252,6 +275,7 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
   const inboxThreads = new Map<string, InboxThread>();
   const inboxMessages = new Map<string, InboxMessage[]>();
   const libraryLives: LibrarySoulLife[] = [];
+  const feedbackEntries: HumanFeedback[] = [];
   const identityAliases = new Map<string, string>(); // personId -> patronHandle
   const attentionGrantIntents = new Map<string, AttentionGrantIntent>();
   const attentionGrantIntentIdempotency = new Map<string, string>();
@@ -689,6 +713,37 @@ export function createInMemoryCityStore(now: () => Date = () => new Date()): Cit
 
     async listLibrarySoulLives() {
       return [...libraryLives].sort((a, b) => (b.diedAt || b.updatedAt).localeCompare(a.diedAt || a.updatedAt));
+    },
+
+    async createFeedback(input) {
+      const message = input.message.trim();
+      if (!message) throw new CityStoreError('feedback_message_required', 400);
+      const feedback: HumanFeedback = {
+        id: makeId('feedback'),
+        cityUserId: input.cityUserId,
+        landingUserId: input.landingUserId,
+        displayName: input.displayName,
+        handle: input.handle,
+        email: input.email,
+        feeling: input.feeling,
+        tryingToDo: input.tryingToDo,
+        message,
+        route: input.route,
+        pageUrl: input.pageUrl,
+        mode: input.mode,
+        residentId: input.residentId,
+        allowFollowUp: input.allowFollowUp === true,
+        userAgent: input.userAgent,
+        metadata: input.metadata || {},
+        createdAt: timestamp(),
+      };
+      feedbackEntries.unshift(feedback);
+      return { ...feedback, metadata: { ...feedback.metadata } };
+    },
+
+    async listFeedback(limit = 50) {
+      const count = Math.max(1, Math.min(100, Math.floor(limit)));
+      return feedbackEntries.slice(0, count).map(entry => ({ ...entry, metadata: { ...entry.metadata } }));
     },
 
     async resolveOnionId(cityUserId) {

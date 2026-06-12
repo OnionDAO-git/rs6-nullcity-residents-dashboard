@@ -43,6 +43,19 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('This dashboard remains in guest mode until attendee login is connected.');
   });
 
+  test('offers human feedback everywhere while keeping the team inbox admin-only', () => {
+    expect(appSource).toContain('class="city-feedback-float"');
+    expect(appSource).toContain('What were you trying to do?');
+    expect(appSource).toContain('What happened, or what should we change?');
+    expect(appSource).toContain('cityApi.submitFeedback');
+    expect(appSource).toContain("route === '/admin/feedback'");
+    expect(appSource).toContain('<h1>Human Feedback</h1>');
+    expect(appSource).toContain('cityApi.adminFeedback');
+    expect(appSource).not.toContain('Feedback API');
+    expect(appSource).not.toContain('feedback backend');
+    expect(dashboardNavSource).not.toMatch(/\{[^}]*label: 'Feedback'[^}]*expertOnly: false[^}]*\}/);
+  });
+
   test('keeps admin bridge empty states command-free and endpoint-free', () => {
     expect(appSource).not.toContain('`NULLCITY_CITY_API_URL`');
     expect(appSource).not.toContain('`NULLCITY_CITY_API_TOKEN`');
@@ -152,10 +165,14 @@ describe('dashboard copy hygiene', () => {
 
   test('keeps simple resident cards focused on visibility and support instead of raw story scans', () => {
     const residentListSource = sourceBetween(appSource, '{#snippet CityResidentList', '{#snippet SpectatorSurface');
+    const simpleSupportLineRule = cssRule(appCss, '.city-resident-card.simple .city-resident-support-line', '.city-resident-card.simple small');
 
     expect(residentListSource).toContain('city-resident-portrait-line');
+    expect(residentListSource).toContain('city-resident-support-line');
     expect(residentListSource).toContain('Visible in the city now.');
     expect(residentListSource).toContain('Resident profile is available.');
+    expect(simpleSupportLineRule).toContain('grid-row: 3;');
+    expect(simpleSupportLineRule).toContain('white-space: normal;');
   });
 
   test('keeps the simple profile focused on receipts and next human actions', () => {

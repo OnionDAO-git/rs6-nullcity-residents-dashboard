@@ -6,7 +6,7 @@
   import { api, routeTo, type PublicOverviewSnapshot, type ResidentEconomy, type StorytellerDigestEventSummary, type StorytellerDigestSummary } from './lib/api';
   import { buildActivitySnapshot } from './lib/activity';
   import { benchmarkActionRows } from './lib/benchmarks';
-  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type InboxThread, type InboxThreadDetail, type NullCityApGpExchangeRecord, type OnionAttentionGrantResponse, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
+  import { CityApiError, cityApi, residentTradeSummary, residentTradeTone, setCityCsrfToken, type CityProfile as CityProfileData, type HumanFeedbackEntry, type HumanFeedbackFeeling, type HumanFeedbackInput, type InboxThread, type InboxThreadDetail, type NullCityApGpExchangeRecord, type OnionAttentionGrantResponse, type NullCityEconomyHeartbeatBridgeResponse, type NullCityEconomyListingsBridgeResponse, type NullCityLiveEconomyBridgeResponse, type NullCityLiveEconomyStreamSnapshot, type NullCityNcriPrintQueueBridgeResponse, type NullCityNcriPrintQueueEntry, type NullCityNcriRecord, type NullCitySoulProposal, type PointLedgerEntry, type PointResource, type PrintQueueEntry, type PrintRequest, type Printer, type ResidentPost, type ResidentReadModel, type ResidentTrade, type SoulProposal, type SoulProposalInput, type SoulQuote } from './lib/city-api';
   import { compactJson, timeAgo } from './lib/format';
   import { cityDemoPathSteps, type CityDemoApSupportSignal } from './lib/demo-path';
   import { buildEconomyProofSummary, economyProofNextActions, type EconomyProofSummary } from './lib/economy-proof';
@@ -220,6 +220,7 @@
   let citySelectedPrint: PrintRequest | undefined;
   let cityPrinters: Printer[] = [];
   let cityPrintQueue: PrintQueueEntry[] = [];
+  let cityFeedbackEntries: HumanFeedbackEntry[] = [];
   let cityDirectoryResidents: ResidentReadModel[] = [];
   let cityResidentReadModel: ResidentReadModel | undefined;
   let cityResidentPosts: ResidentPost[] = [];
@@ -338,6 +339,11 @@
   let statsModelBytes: ArrayBuffer | null = null;
   let statsModelStatus = '';
   let statsModelKey = '';
+  let feedbackOpen = false;
+  let feedbackFeeling: HumanFeedbackFeeling = 'confused';
+  let feedbackTryingToDo = '';
+  let feedbackMessage = '';
+  let feedbackAllowFollowUp = false;
 
   const defaultSpawnX = '3225';
   const defaultSpawnY = '3217';
@@ -1274,7 +1280,7 @@
       citySelectedPrint = cityPrintId ? (await cityLoad(cityApi.print(cityPrintId), undefined))?.request : undefined;
     }
     if (activeRoute.startsWith('/admin')) {
-      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, ncriPayload, ncriPrintQueuePayload, printsPayload, ledgerPayload, heartbeatPayload, listingsPayload] = await Promise.all([
+      const [printersPayload, queuePayload, proposalsPayload, nullcityPayload, ncriPayload, ncriPrintQueuePayload, printsPayload, ledgerPayload, heartbeatPayload, listingsPayload, feedbackPayload] = await Promise.all([
         cityLoad(cityApi.adminPrinters(), { printers: [] }),
         cityLoad(cityApi.adminPrintQueue(), { queue: [] }),
         cityLoad(cityApi.proposals(), { proposals: [] }),
@@ -1285,6 +1291,7 @@
         cityLoad(cityApi.ledger(), { entries: [] }),
         cityLoad(cityApi.nullcityEconomyHeartbeat(), { available: false, error: 'not_configured' }),
         cityLoad(cityApi.adminNullcityEconomyListings(), { available: false, listings: [], error: 'not_configured' }),
+        cityLoad(cityApi.adminFeedback({ limit: 50 }), { feedback: [] }),
       ]);
       cityPrinters = printersPayload.printers;
       cityPrintQueue = queuePayload.queue;
@@ -1298,6 +1305,7 @@
       cityLedger = ledgerPayload.entries;
       cityEconomyHeartbeat = heartbeatPayload;
       cityEconomyListings = listingsPayload;
+      cityFeedbackEntries = feedbackPayload.feedback;
     }
     if (activeRoute === '/graveyard') {
       cityLibraryLives = (await cityLoad(fetchPublicSoulLives(), { lives: [] })).lives;
@@ -2866,6 +2874,45 @@
     return record.redemptionStatus === 'redeemed' ? 'redeemed' : record.approvalStatus;
   }
 
+  function feedbackResidentContext(): string | undefined {
+    if (cityResidentReadModel?.nullcityResidentId) return cityResidentReadModel.nullcityResidentId;
+    if (cityResident?.name) return cityResident.name;
+    if (cityResidentId) return cityResidentId;
+    if (cityWorldObserveResidentName) return cityWorldObserveResidentName;
+    return undefined;
+  }
+
+  async function submitFeedback() {
+    const message = feedbackMessage.trim();
+    if (!message) {
+      actionError = 'Tell us what happened before sending feedback.';
+      return;
+    }
+    await runAction(async () => {
+      const tryingToDo = feedbackTryingToDo.trim();
+      const residentId = feedbackResidentContext();
+      const feedbackBody: HumanFeedbackInput = {
+        feeling: feedbackFeeling,
+        message,
+        route: `${route}${browserSearch || ''}`,
+        pageUrl: `${browserOrigin}${browserPath}${browserSearch || ''}`,
+        mode: expertMode ? 'expert' : 'simple',
+        allowFollowUp: citySession.authenticated && feedbackAllowFollowUp,
+      };
+      if (tryingToDo) feedbackBody.tryingToDo = tryingToDo;
+      if (residentId) feedbackBody.residentId = residentId;
+      await cityApi.submitFeedback(feedbackBody);
+      cityActionNotice = 'Feedback sent. Thank you for helping make Null City clearer.';
+      feedbackOpen = false;
+      feedbackTryingToDo = '';
+      feedbackMessage = '';
+      feedbackAllowFollowUp = false;
+      if (route === '/admin/feedback' && citySession.admin) {
+        cityFeedbackEntries = (await cityApi.adminFeedback({ limit: 50 })).feedback;
+      }
+    });
+  }
+
   async function runAction(fn: () => Promise<void>) {
     actionBusy = true;
     actionError = '';
@@ -4221,6 +4268,7 @@
         <div class="city-nav secondary">
           <button class:active={route.startsWith('/admin/economy')} onclick={() => cityNav('/admin/economy')}>EC Economy</button>
           <button class:active={route.startsWith('/admin/souls')} onclick={() => cityNav('/admin/souls')}>SO Souls</button>
+          <button class:active={route === '/admin/feedback'} onclick={() => cityNav('/admin/feedback')}>FB Feedback</button>
           <button onclick={() => debugNav('/')}>DG Ops</button>
         </div>
       {/if}
@@ -4301,6 +4349,37 @@
         {@render CityNotFound()}
       {/if}
     </main>
+
+    <button class="city-feedback-float" type="button" onclick={() => (feedbackOpen = true)}>Feedback</button>
+    {#if feedbackOpen}
+      <section class="city-feedback-panel" aria-label="Send feedback">
+        <div class="row">
+          <div>
+            <div class="panel-title">Feedback</div>
+            <strong>Help us make this clearer</strong>
+          </div>
+          <button type="button" class="notice-dismiss" aria-label="Close feedback" title="Close feedback" onclick={() => (feedbackOpen = false)}>X</button>
+        </div>
+        <div class="city-feedback-feeling" role="group" aria-label="How this felt">
+          <button type="button" class:active={feedbackFeeling === 'confused'} onclick={() => (feedbackFeeling = 'confused')}>Confused</button>
+          <button type="button" class:active={feedbackFeeling === 'okay'} onclick={() => (feedbackFeeling = 'okay')}>Okay</button>
+          <button type="button" class:active={feedbackFeeling === 'excited'} onclick={() => (feedbackFeeling = 'excited')}>Excited</button>
+        </div>
+        <label>What were you trying to do?
+          <input bind:value={feedbackTryingToDo} placeholder="Give attention to a resident" />
+        </label>
+        <label>What happened, or what should we change?
+          <textarea bind:value={feedbackMessage} rows="4" placeholder="I had Onions, but..." maxlength="2000"></textarea>
+        </label>
+        {#if citySession.authenticated}
+          <label class="checkbox-line"><input type="checkbox" bind:checked={feedbackAllowFollowUp} /> Null City team can follow up with me</label>
+        {/if}
+        <div class="city-feedback-actions">
+          <button type="button" onclick={() => (feedbackOpen = false)}>Cancel</button>
+          <button type="button" class="primary" disabled={actionBusy || !feedbackMessage.trim()} onclick={submitFeedback}>Send Feedback</button>
+        </div>
+      </section>
+    {/if}
 
     <div class="city-expert-floating-toggle" role="group" aria-label="Dashboard mode">
       <button type="button" class:active={!expertMode} aria-pressed={!expertMode} onclick={() => setExpertMode(false)}>Simple</button>
@@ -7252,9 +7331,35 @@
       <button class="city-entry tone-teal" onclick={() => cityNav('/admin/printers')}><span>Printers</span><strong>{cityPrinters.length}</strong><small>Bambu, Snapmaker, and manual adapters</small></button>
       <button class="city-entry tone-green" onclick={() => cityNav('/admin/souls')}><span>Soul Moderation</span><strong>{cityProposals.filter(proposal => proposal.status === 'ready_to_birth').length}</strong><small>Birth controls and moderation</small></button>
       <button class="city-entry tone-blue" onclick={() => cityNav('/admin/economy')}><span>Economy</span><strong>audit</strong><small>AP/GP grants and adjustments</small></button>
+      <button class="city-entry tone-teal" onclick={() => cityNav('/admin/feedback')}><span>Human Feedback</span><strong>{cityFeedbackEntries.length}</strong><small>Confusion, requests, and follow-up notes</small></button>
       <button class="city-entry tone-mauve" onclick={() => debugNav('/')}><span>Debug</span><strong>ops</strong><small>Resident operations dashboard</small></button>
     </section>
-    {#if route === '/admin/printers'}
+    {#if route === '/admin/feedback'}
+      <section class="city-page-head">
+        <p class="kicker">Team Inbox</p>
+        <h1>Human Feedback</h1>
+      </section>
+      <section class="city-dashboard-grid">
+        <div class="city-panel span-3">
+          <div class="panel-title">Newest Notes</div>
+          <div class="city-feedback-list">
+            {#each cityFeedbackEntries as feedback (feedback.id)}
+              <article class="city-feedback-row">
+                <div class="row">
+                  <span class={`tag ${feedback.feeling === 'excited' ? 'ok' : feedback.feeling === 'confused' ? 'warn' : ''}`}>{feedback.feeling}</span>
+                  <small>{timeAgo(feedback.createdAt)} ago</small>
+                </div>
+                <strong>{feedback.tryingToDo || 'General dashboard note'}</strong>
+                <p>{feedback.message}</p>
+                <small>{feedback.displayName || feedback.handle || 'Guest'} · {feedback.mode || 'mode unknown'} · {feedback.route || 'unknown page'}{feedback.allowFollowUp ? ' · follow-up ok' : ''}</small>
+              </article>
+            {:else}
+              <div class="city-empty-state"><strong>No feedback yet</strong><span>Human notes from the dashboard feedback button will appear here.</span></div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {:else if route === '/admin/printers'}
       <section class="city-dashboard-grid">
         <div class="city-panel span-2">
           <div class="panel-title">Printer Records</div>
@@ -7561,7 +7666,7 @@
           <strong>{residentDisplayName(row.name)}</strong>
           {#if simple}
             <small class="city-resident-portrait-line">{row.online ? 'Visible in the city now.' : 'Resident profile is available.'}</small>
-            <small>Attention {row.attention ?? '-'} · {supportReason.detail}</small>
+            <small class="city-resident-support-line">Attention {row.attention ?? '-'} · {supportReason.detail}</small>
             <em class:warn={supportReason.tone === 'warn'}>{supportReason.action}</em>
           {:else}
             <small>

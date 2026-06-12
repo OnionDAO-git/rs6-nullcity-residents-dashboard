@@ -274,3 +274,26 @@ export interface ResidentTrade {
   createdAt: string;
   updatedAt: string;
 }
+
+export type HumanFeedbackFeeling = 'confused' | 'okay' | 'excited';
+export type HumanFeedbackMode = 'simple' | 'expert';
+
+export interface HumanFeedback {
+  id: string;
+  cityUserId?: string;
+  landingUserId?: string;
+  displayName?: string;
+  handle?: string;
+  email?: string;
+  feeling: HumanFeedbackFeeling;
+  tryingToDo?: string;
+  message: string;
+  route?: string;
+  pageUrl?: string;
+  mode?: HumanFeedbackMode;
+  residentId?: string;
+  allowFollowUp: boolean;
+  userAgent?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}

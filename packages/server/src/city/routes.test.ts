@@ -141,11 +141,151 @@ describe('routeCityApi points and souls', () => {
       'printers',
       'print_queue',
       'city_events',
+      'feedback_entries',
     ]) {
       expect(sql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
     }
     expect(sql).toContain('UNIQUE (city_user_id, resource, source_type, source_id)');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS');
+  });
+
+  test('lets guests send dashboard feedback with page context', async () => {
+    const services = testServices(null);
+
+    const response = await route(new Request('http://city.test/api/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'user-agent': 'Bun test browser' },
+      body: JSON.stringify({
+        feeling: 'confused',
+        tryingToDo: 'Give attention to Hans',
+        message: 'I have onions but do not know what to press.',
+        route: '/residents/hans',
+        pageUrl: 'http://localhost:5174/residents/hans',
+        mode: 'simple',
+        residentId: 'res:hans',
+        allowFollowUp: true,
+      }),
+    }), services);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      feedback: {
+        id: expect.any(String),
+        createdAt: expect.any(String),
+      },
+    });
+    const feedback = await services.store.listFeedback();
+    expect(feedback[0]).toMatchObject({
+      feeling: 'confused',
+      tryingToDo: 'Give attention to Hans',
+      message: 'I have onions but do not know what to press.',
+      route: '/residents/hans',
+      pageUrl: 'http://localhost:5174/residents/hans',
+      mode: 'simple',
+      residentId: 'res:hans',
+      allowFollowUp: false,
+      userAgent: 'Bun test browser',
+    });
+  });
+
+  test('rejects blank dashboard feedback instead of storing noise', async () => {
+    const services = testServices(null);
+
+    const response = await route(new Request('http://city.test/api/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        feeling: 'okay',
+        tryingToDo: '   ',
+        message: '   ',
+        route: '/',
+        mode: 'simple',
+      }),
+    }), services);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'feedback_message_required' });
+  });
+
+  test('shows feedback to admins and hides it from non-admins', async () => {
+    const services = testServices(adminUser);
+    const cityUser = await services.store.upsertUserFromLanding(adminUser);
+
+    await route(jsonRequest('/api/feedback', {
+      feeling: 'excited',
+      tryingToDo: 'Watch RuneScape',
+      message: 'The live page helped me find Hans.',
+      route: '/live',
+      mode: 'expert',
+      allowFollowUp: true,
+    }), services);
+
+    const adminResponse = await route(authedRequest('/api/admin/feedback?limit=5'), services);
+    expect(adminResponse.status).toBe(200);
+    expect(await adminResponse.json()).toMatchObject({
+      feedback: [{
+        cityUserId: cityUser.id,
+        landingUserId: 'landing-user-1',
+        displayName: 'Alice',
+        handle: 'alice',
+        email: 'alice@example.com',
+        feeling: 'excited',
+        route: '/live',
+        mode: 'expert',
+        allowFollowUp: true,
+      }],
+    });
+
+    const nonAdminServices = testServices({ ...adminUser, isAdmin: false });
+    const forbidden = await route(authedRequest('/api/admin/feedback'), nonAdminServices);
+    expect(forbidden.status).toBe(403);
+  });
+
+  test('stores signed-in identity only when the human allows follow-up and drops arbitrary metadata', async () => {
+    const services = testServices(adminUser);
+
+    await route(jsonRequest('/api/feedback', {
+      feeling: 'okay',
+      tryingToDo: 'Stay anonymous',
+      message: 'Please do not attach my identity to this note.',
+      route: '/',
+      mode: 'simple',
+      allowFollowUp: false,
+      metadata: {
+        huge: 'x'.repeat(5000),
+        private: 'should-not-persist',
+      },
+    }), services);
+
+    await route(jsonRequest('/api/feedback', {
+      feeling: 'confused',
+      tryingToDo: 'Get a reply',
+      message: 'The team can follow up on this one.',
+      route: '/residents/hans',
+      mode: 'simple',
+      allowFollowUp: true,
+      metadata: {
+        private: 'should-not-persist',
+      },
+    }), services);
+
+    const feedback = await services.store.listFeedback();
+    expect(feedback[0]).toMatchObject({
+      displayName: 'Alice',
+      handle: 'alice',
+      email: 'alice@example.com',
+      allowFollowUp: true,
+      metadata: {},
+    });
+    expect(feedback[1]).toMatchObject({
+      allowFollowUp: false,
+      metadata: {},
+    });
+    expect('displayName' in feedback[1]!).toBe(false);
+    expect('handle' in feedback[1]!).toBe(false);
+    expect('email' in feedback[1]!).toBe(false);
+    expect('cityUserId' in feedback[1]!).toBe(false);
+    expect('landingUserId' in feedback[1]!).toBe(false);
   });
 
   test('keeps AP grants idempotent and ledger-backed', async () => {

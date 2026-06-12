@@ -16,7 +16,7 @@ import { quoteSoulProposal } from './quote';
 import { runAttentionGrant, initiateOnionAttentionGrant, settleOnionAttentionGrant } from './attention-grant';
 import { verifyOnionCallbackSignature, type OnionApiClient } from './landing-onions';
 import { CityStoreError, type AttentionGrantIntent, type CityStore } from './store';
-import type { CityUser, InboxMessage, InboxThread, LandingSessionUser, PointResource } from './types';
+import type { CityUser, HumanFeedbackFeeling, HumanFeedbackMode, InboxMessage, InboxThread, LandingSessionUser, PointResource } from './types';
 import { jsonResponse, notFound } from '../util';
 
 export interface CityApiContext {
@@ -86,6 +86,40 @@ export async function routeCityApi(
           recentLedger: recentLedger.slice(0, 25),
         },
       });
+    }
+
+    if (method === 'POST' && pathname === '/api/feedback') {
+      const auth = await optionalCityUser(request, context);
+      const body = await readJsonBody(request);
+      const message = boundedStringBody(body, 'message', 2000);
+      if (!message) return jsonResponse({ error: 'feedback_message_required' }, { status: 400 });
+      const allowFollowUp = Boolean(auth && body.allowFollowUp === true);
+      const feedback = await context.store.createFeedback({
+        ...(auth && allowFollowUp ? {
+          cityUserId: auth.cityUser.id,
+          landingUserId: auth.cityUser.landingUserId,
+          displayName: auth.landingUser.name || auth.landingUser.handle || auth.landingUser.email,
+          handle: auth.landingUser.handle || undefined,
+          email: auth.landingUser.email,
+        } : {}),
+        feeling: feedbackFeeling(body.feeling),
+        tryingToDo: boundedStringBody(body, 'tryingToDo', 500),
+        message,
+        route: boundedStringBody(body, 'route', 200),
+        pageUrl: boundedStringBody(body, 'pageUrl', 500),
+        mode: feedbackMode(body.mode),
+        residentId: boundedStringBody(body, 'residentId', 160),
+        allowFollowUp,
+        userAgent: boundedHeader(request.headers.get('user-agent'), 500),
+        metadata: {},
+      });
+      return jsonResponse({ feedback: { id: feedback.id, createdAt: feedback.createdAt } }, { status: 201 });
+    }
+
+    if (method === 'GET' && pathname === '/api/admin/feedback') {
+      const auth = await requireAdmin(request, url, context);
+      if (auth instanceof Response) return auth;
+      return jsonResponse({ feedback: await context.store.listFeedback(positiveInteger(url.searchParams.get('limit')) || 50) });
     }
 
     if (method === 'PATCH' && pathname === '/api/profile') {
@@ -764,6 +798,16 @@ async function requireCityUser(
   return { landingUser: result.user, cityUser };
 }
 
+async function optionalCityUser(
+  request: Request,
+  context: CityApiContext,
+): Promise<AuthenticatedCityRequest | undefined> {
+  const result = await context.auth.authenticate(request);
+  if (!result.user) return undefined;
+  const cityUser = await context.store.upsertUserFromLanding(result.user);
+  return { landingUser: result.user, cityUser };
+}
+
 async function requireAdmin(
   request: Request,
   url: URL,
@@ -1185,6 +1229,23 @@ function pointResource(value: string | null): PointResource | undefined {
 function stringBody(body: Record<string, unknown>, key: string): string | undefined {
   const value = body[key];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function boundedStringBody(body: Record<string, unknown>, key: string, maxLength: number): string | undefined {
+  const value = stringBody(body, key);
+  return value ? value.slice(0, maxLength) : undefined;
+}
+
+function boundedHeader(value: string | null, maxLength: number): string | undefined {
+  return value?.trim() ? value.trim().slice(0, maxLength) : undefined;
+}
+
+function feedbackFeeling(value: unknown): HumanFeedbackFeeling {
+  return value === 'confused' || value === 'okay' || value === 'excited' ? value : 'okay';
+}
+
+function feedbackMode(value: unknown): HumanFeedbackMode | undefined {
+  return value === 'simple' || value === 'expert' ? value : undefined;
 }
 
 function numberBody(body: Record<string, unknown>, key: string, fallback = 0): number {
