@@ -5,7 +5,6 @@ export type SpectatorPacketReplayContext = {
   positionApplied?: boolean;
 };
 
-export function shouldReplaySpectatorPacket(opcode: number, context: SpectatorPacketReplayContext = {}): boolean {
-  if (!VOLATILE_ENTITY_DELTA_OPCODES.has(opcode)) return true;
-  return context.hasMapBootstrap === true && context.positionApplied === true;
+export function shouldReplaySpectatorPacket(opcode: number, _context: SpectatorPacketReplayContext = {}): boolean {
+  return !VOLATILE_ENTITY_DELTA_OPCODES.has(opcode);
 }

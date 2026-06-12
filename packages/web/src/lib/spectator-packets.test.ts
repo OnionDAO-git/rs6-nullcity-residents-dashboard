@@ -7,11 +7,11 @@ describe('shouldReplaySpectatorPacket', () => {
     expect(shouldReplaySpectatorPacket(128)).toBe(false);
   });
 
-  test('keeps player and npc updates once the spectator has a stable map position', () => {
+  test('keeps player and npc updates blocked even after map position until actor bootstrap exists', () => {
     const stableReplay = { hasMapBootstrap: true, positionApplied: true };
 
-    expect(shouldReplaySpectatorPacket(92, stableReplay)).toBe(true);
-    expect(shouldReplaySpectatorPacket(128, stableReplay)).toBe(true);
+    expect(shouldReplaySpectatorPacket(92, stableReplay)).toBe(false);
+    expect(shouldReplaySpectatorPacket(128, stableReplay)).toBe(false);
   });
 
   test('keeps map bootstrap packets and ordinary render packets', () => {
