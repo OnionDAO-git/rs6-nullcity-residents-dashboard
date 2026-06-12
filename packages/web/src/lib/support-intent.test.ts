@@ -34,6 +34,11 @@ describe('supportSettlementState', () => {
   test('treats settled as authoritative over a stale pending flag', () => {
     expect(supportSettlementState('pending_onion_settlement', 'completed')).toBe('settled');
   });
+
+  test('treats explicit city failure as authoritative over a completed Onion request', () => {
+    expect(supportSettlementState('onion_spend_failed', 'completed')).toBe('failed');
+    expect(supportSettlementState('onion_spend_denied', 'completed')).toBe('denied');
+  });
 });
 
 describe('pendingSupportIntentFromGrant', () => {
@@ -86,6 +91,7 @@ describe('pendingSupportIntentFromGrant', () => {
     expect(pendingSupportIntentFromGrant({ status: 'settled', onionRequest: { status: 'completed' } }, context)).toBeUndefined();
     expect(pendingSupportIntentFromGrant({ status: 'onion_spend_denied', onionRequest: { status: 'denied' } }, context)).toBeUndefined();
     expect(pendingSupportIntentFromGrant({ status: 'onion_spend_failed', onionRequest: { status: 'failed' } }, context)).toBeUndefined();
+    expect(pendingSupportIntentFromGrant({ status: 'onion_spend_failed', onionRequest: { status: 'completed' } }, context)).toBeUndefined();
   });
 });
 

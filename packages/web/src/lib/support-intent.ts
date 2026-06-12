@@ -33,9 +33,12 @@ export type SupportSettlementState = 'pending' | 'settled' | 'denied' | 'failed'
 const PENDING_SUPPORT_STORAGE_PREFIX = 'nullcity.pendingSupport';
 
 export function supportSettlementState(status: string | undefined, onionRequestStatus?: string): SupportSettlementState {
-  if (status === 'settled' || onionRequestStatus === 'completed') return 'settled';
-  if (status === 'onion_spend_denied' || onionRequestStatus === 'denied') return 'denied';
-  if (status === 'onion_spend_failed' || onionRequestStatus === 'failed' || onionRequestStatus === 'expired') return 'failed';
+  if (status === 'onion_spend_denied') return 'denied';
+  if (status === 'onion_spend_failed') return 'failed';
+  if (status === 'settled') return 'settled';
+  if (onionRequestStatus === 'denied') return 'denied';
+  if (onionRequestStatus === 'failed' || onionRequestStatus === 'expired') return 'failed';
+  if (onionRequestStatus === 'completed') return 'settled';
   if (
     status === 'pending_onion_settlement' ||
     status === 'awaiting_approval' ||

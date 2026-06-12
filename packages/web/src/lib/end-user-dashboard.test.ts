@@ -7,19 +7,18 @@ describe('visibleDashboardNavItems', () => {
   test('keeps the default attendee nav to the Simple IA destinations', () => {
     expect(visibleDashboardNavItems({ expertMode: false }).map(item => [item.label, item.path])).toEqual([
       ['Home', '/'],
-      ['Live', '/live'],
-      ['Board', '/board'],
+      ['Watch', '/live'],
       ['Residents', '/residents'],
-      ['Soul Library', '/graveyard'],
-      ['Me', '/profile'],
       ['Inbox', '/inbox'],
+      ['Me', '/profile'],
+      ['Soul Library', '/graveyard'],
     ]);
   });
 
   test('reveals diagnostic and staff destinations only in expert mode', () => {
     const labels = visibleDashboardNavItems({ expertMode: true, admin: true }).map(item => item.label);
 
-    expect(labels).toContain('Live');
+    expect(labels).toContain('Watch');
     expect(labels).toContain('Board');
     expect(labels).toContain('Inbox');
     expect(labels).toContain('World');
@@ -37,19 +36,18 @@ describe('primaryDashboardNavItems', () => {
   test('keeps mobile simple mode to the main human actions including letters', () => {
     expect(primaryDashboardNavItems({ expertMode: false }).map(item => [item.label, item.path])).toEqual([
       ['Home', '/'],
-      ['Live', '/live'],
-      ['Board', '/board'],
+      ['Watch', '/live'],
       ['Residents', '/residents'],
-      ['Soul Library', '/graveyard'],
-      ['Me', '/profile'],
       ['Inbox', '/inbox'],
+      ['Me', '/profile'],
+      ['Soul Library', '/graveyard'],
     ]);
   });
 
   test('keeps expert destinations discoverable on mobile in expert mode', () => {
     const labels = primaryDashboardNavItems({ expertMode: true, admin: true }).map(item => item.label);
 
-    expect(labels).toContain('Live');
+    expect(labels).toContain('Watch');
     expect(labels).toContain('Board');
     expect(labels).toContain('Inbox');
     expect(labels).toContain('World');
@@ -72,15 +70,16 @@ describe('boardActionCards', () => {
     });
 
     expect(cards.map(card => [card.label, card.path])).toEqual([
-      ['Give Attention', '/residents?triage=attention'],
-      ['Watch Live', '/live'],
-      ['Request Item', '/login'],
       ['Sign In', '/login'],
+      ['Give Attention', '/residents?triage=attention'],
+      ['Watch Residents', '/live'],
+      ['Soul Library', '/graveyard'],
     ]);
     expect(cards.map(card => card.detail).join(' ')).not.toMatch(/\b(debug|ops|controller|bridge|snapshot|API|backend|MVP|endpoint|shell)\b/i);
+    expect(cards.map(card => card.path).join(' ')).not.toMatch(/prints|embassy|board/i);
   });
 
-  test('routes signed-in humans to their usable Board actions', () => {
+  test('routes signed-in humans to the core human actions instead of unfinished loops', () => {
     const cards = boardActionCards({
       authenticated: true,
       onionBalance: 999,
@@ -91,12 +90,12 @@ describe('boardActionCards', () => {
 
     expect(cards.map(card => [card.label, card.path])).toEqual([
       ['Give Attention', '/residents'],
-      ['Watch Live', '/live'],
-      ['Request Item', '/prints/new'],
-      ['Me', '/profile'],
+      ['Watch Residents', '/live'],
+      ['Read Inbox', '/inbox'],
+      ['Soul Library', '/graveyard'],
     ]);
     expect(cards[0]?.detail).toContain('999 Onions');
-    expect(cards[2]?.detail).toContain('1 request');
+    expect(cards.map(card => `${card.label} ${card.detail} ${card.path}`).join(' ')).not.toMatch(/\b(print|prints|troph|NCRI|AP\/GP|GP)\b/i);
   });
 });
 
@@ -113,7 +112,7 @@ describe('recommendedDashboardAction', () => {
     })).toMatchObject({
       label: 'Sign in to participate',
       path: '/login',
-      detail: 'Unlock Onion spending, resident messages, new souls, and item requests.',
+      detail: 'Load your Onions, support residents, and read replies in your Inbox.',
       tone: 'gold',
     });
   });
@@ -270,13 +269,14 @@ describe('simpleProfileActionCards', () => {
 
     expect(cards.map(card => [card.label, card.path])).toEqual([
       ['Give Attention', '/residents?triage=attention'],
-      ['Watch Live', '/live'],
-      ['Trophies', '/prints'],
+      ['Open Inbox', '/inbox'],
+      ['Watch Residents', '/live'],
+      ['Soul Library', '/graveyard'],
     ]);
     expect(cards[0]?.detail).toContain('999 Onions');
-    expect(cards[1]?.detail).toContain('2 residents');
-    expect(cards[2]?.detail).toContain('1 trophy request');
+    expect(cards[2]?.detail).toContain('2 residents');
     expect(cards.map(card => card.detail).join(' ')).not.toMatch(/\b(debug|ops|controller|bridge|snapshot|API|backend|MVP|endpoint|shell)\b/i);
+    expect(cards.map(card => `${card.label} ${card.path} ${card.detail}`).join(' ')).not.toMatch(/\b(print|prints|troph|NCRI|AP\/GP|GP)\b/i);
   });
 
   test('routes guests from Me toward login before protected actions', () => {
@@ -289,8 +289,9 @@ describe('simpleProfileActionCards', () => {
 
     expect(cards.map(card => [card.label, card.path])).toEqual([
       ['Sign In', '/login'],
-      ['Watch Live', '/live'],
-      ['Board', '/board'],
+      ['Watch Residents', '/live'],
+      ['Residents', '/residents'],
+      ['Soul Library', '/graveyard'],
     ]);
   });
 });
@@ -306,6 +307,12 @@ describe('simpleModeRouteRequiresExpert', () => {
     expect(simpleModeRouteRequiresExpert('/admin')).toBe(true);
     expect(simpleModeRouteRequiresExpert('/admin/economy')).toBe(true);
     expect(simpleModeRouteRequiresExpert('/world')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/board')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/embassy')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/embassy/new')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/embassy/proposal-1')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/prints')).toBe(true);
+    expect(simpleModeRouteRequiresExpert('/prints/new')).toBe(true);
   });
 
   test('keeps the human action routes and resident world observe links Simple-safe', () => {
@@ -314,9 +321,6 @@ describe('simpleModeRouteRequiresExpert', () => {
     expect(simpleModeRouteRequiresExpert('/inbox/thread-1')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/residents')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/residents/res%3Ahans')).toBe(false);
-    expect(simpleModeRouteRequiresExpert('/embassy')).toBe(false);
-    expect(simpleModeRouteRequiresExpert('/prints')).toBe(false);
-    expect(simpleModeRouteRequiresExpert('/board')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/graveyard')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/profile')).toBe(false);
     expect(simpleModeRouteRequiresExpert('/live')).toBe(false);
@@ -542,7 +546,7 @@ describe('residentSupportPayoff', () => {
     expect(payoff.headline).toBe('You just gave Hans about 3 more days in the city.');
     expect(payoff.detail).toBe('75 Onions settled as 75 attention. Attention 4 → 79.');
     expect(payoff.reaction).toBe('The embassy lamps are lit again.');
-    expect(payoff.lettersLine).toBe('Hans will write to you — check your Letters.');
+    expect(payoff.lettersLine).toBe('Hans will write to you — check your Inbox.');
   });
 
   test('uses hour framing for small spends and stays labeled as approximate', () => {
@@ -659,5 +663,23 @@ describe('residentAttentionResultNotice', () => {
       status: 'onion_spend_denied',
       onionRequestStatus: 'denied',
     })).toBe('Onion spend denied. Hans has not received attention.');
+  });
+
+  test('does not treat a completed burn as settled when City attention failed', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 75,
+      status: 'onion_spend_failed',
+      onionRequestStatus: 'completed',
+    })).toBe('Onion spend failed. Hans has not received attention.');
+  });
+
+  test('keeps expired Onion spends out of pending copy', () => {
+    expect(residentAttentionResultNotice({
+      residentName: 'Hans',
+      onionAmount: 75,
+      status: 'pending_onion_settlement',
+      onionRequestStatus: 'expired',
+    })).toBe('Onion spend failed. Hans has not received attention.');
   });
 });

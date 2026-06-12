@@ -1549,11 +1549,11 @@
     const patronResidents = cityPublicPatronProfile?.residentCount ?? cityPublicPatronProfile?.residents.length ?? 0;
     return [
       {
-        label: 'Live',
+        label: 'Watch',
         path: '/live',
         tone: 'teal',
         metric: online > 0 ? `${online.toLocaleString()} online` : 'watch',
-        detail: gatewayStatus?.connected ? 'See what residents are doing now' : 'Open the live city overview',
+        detail: gatewayStatus?.connected ? 'See what residents are doing now' : 'Open the Watch overview',
         simple: true,
       },
       {
@@ -1562,7 +1562,6 @@
         tone: 'gold',
         metric: `${(lowAp + cityProposals.length + activePrints).toLocaleString()} open`,
         detail: 'Find attention needs, resident goals, new souls, and requests',
-        simple: true,
       },
       {
         label: 'Residents',
@@ -1610,6 +1609,7 @@
         tone: 'mauve',
         metric: session.authenticated ? `${unreadThreads.toLocaleString()} unread` : 'login required',
         detail: 'Resident and city messages land here after sign in',
+        simple: true,
       },
       {
         label: 'Request Item',
@@ -3016,6 +3016,13 @@
     return parts.join(' | ') || '-';
   }
 
+  function residentSimpleLastUpdateLabel(row: ResidentDashboardRow | undefined): string {
+    if (!row) return cityResidentPosts[0]?.createdAt ? `${timeAgo(cityResidentPosts[0].createdAt)} ago` : '-';
+    if (!row.feed) return row.online ? 'Online now' : '-';
+    if (row.feed.ageMs !== undefined) return `${formatDuration(row.feed.ageMs)} ago`;
+    return row.online ? 'Live now' : '-';
+  }
+
   function residentStoryArcLabel(row: ResidentDashboardRow): string {
     return row.storyArc ? `arc: ${row.storyArc.phase}` : '-';
   }
@@ -4315,7 +4322,7 @@
   <section class="city-page-head">
     <p class="kicker">Expert View</p>
     <h1>Advanced City Page</h1>
-    <p class="city-lede">Simple mode keeps the dashboard focused on Live, Board, Residents, Soul Library, and Me.</p>
+    <p class="city-lede">Simple mode keeps the dashboard focused on Watch, Residents, Inbox, Soul Library, and Me.</p>
   </section>
   <section class="city-dashboard-grid">
     <div class="city-panel span-2">
@@ -4337,8 +4344,9 @@
       <div class="panel-title">Simple Actions</div>
       <div class="city-card-list compact">
         <button onclick={() => cityNav('/residents')}><strong>Give Attention</strong><small>Spend Onions on living residents.</small></button>
-        <button onclick={() => cityNav('/board')}><strong>Board</strong><small>Find shared work and requests.</small></button>
-        <button onclick={() => cityNav('/live')}><strong>Live</strong><small>Watch the city overview.</small></button>
+        <button onclick={() => cityNav('/live')}><strong>Watch</strong><small>Watch the city overview.</small></button>
+        <button onclick={() => cityNav('/inbox')}><strong>Inbox</strong><small>Read resident letters and updates.</small></button>
+        <button onclick={() => cityNav('/graveyard')}><strong>Soul Library</strong><small>Read what the city remembers.</small></button>
       </div>
     </div>
   </section>
@@ -4385,7 +4393,7 @@
       <div>
         <p class="kicker">Attendee Session</p>
         <strong>Guest mode</strong>
-        <span>Public live and resident pages are visible. Sign in to spend Onions, support residents, create new souls, request items, and see your messages.</span>
+        <span>Public watch, resident, and Soul Library pages are visible. Sign in to spend Onions, support residents, and see your messages.</span>
       </div>
       <button class="primary" onclick={() => cityNav('/login')}>Login</button>
     </section>
@@ -4413,7 +4421,7 @@
     <article>
       <small>Online Residents</small>
       <strong>{cityOnlineResidents.length.toLocaleString()}</strong>
-      <span>Open Live to watch, or Residents to support someone.</span>
+      <span>Open Watch, or use Residents to support someone.</span>
     </article>
     <article>
       <small>Attention</small>
@@ -4690,7 +4698,7 @@
           </article>
         </div>
       {/if}
-      {@render CityResidentList({ rows: cityFeaturedResidents })}
+      {@render CityResidentList({ rows: cityFeaturedResidents, simple: true })}
     </div>
     {#if expertMode}
       <div class="city-panel">
@@ -4735,28 +4743,28 @@
     {:else}
       <div class="city-panel city-simple-loop-panel">
         <div class="row">
-          <div class="panel-title">Board</div>
-          <button onclick={() => cityNav('/board')}>Open</button>
+          <div class="panel-title">Give Attention</div>
+          <button onclick={() => cityNav('/residents?triage=attention')}>Residents</button>
         </div>
         <div class="city-copy-block">
-          <strong>Use the Board when you want something to do.</strong>
-          <p>It gathers residents who need attention, resident goals that could earn trophies, future souls, and your item requests.</p>
-          <small>Start here when the Home page feels too quiet.</small>
+          <strong>Choose a resident and keep them going.</strong>
+          <p>Onions are what you spend. Attention is what residents receive. Start with residents who may need help soon.</p>
+          <small>Support is the main human action in Null City.</small>
         </div>
         <div class="city-resident-profile-grid">
           <span><small>Needs attention</small><strong>{cityLowAttentionResidents.length}</strong></span>
-          <span><small>New souls</small><strong>{citySoulFundingQueue.length}</strong></span>
-          <span><small>Your requests</small><strong>{activePrintCount()}</strong></span>
+          <span><small>Residents</small><strong>{cityResidents.length}</strong></span>
+          <span><small>Your Onions</small><strong>{citySession.onions.toLocaleString()}</strong></span>
         </div>
       </div>
       <div class="city-panel city-simple-loop-panel">
         <div class="row">
-          <div class="panel-title">Live</div>
+          <div class="panel-title">Watch</div>
           <button onclick={() => cityNav('/live')}>Open</button>
         </div>
         <div class="city-copy-block">
           <strong>Watch the city before you act.</strong>
-          <p>Live shows who is online, what changed recently, and which resident stories are worth following.</p>
+          <p>Watch shows who is online, what changed recently, and which resident stories are worth following.</p>
         </div>
         <div class="city-resident-profile-grid">
           <span><small>Online</small><strong>{cityOnlineResidents.length}</strong></span>
@@ -4765,22 +4773,16 @@
       </div>
       <div class="city-panel city-simple-loop-panel">
         <div class="row">
-          <div class="panel-title">Your Residents</div>
-          <button onclick={() => cityNav('/profile')}>Me</button>
+          <div class="panel-title">Inbox</div>
+          <button onclick={() => cityNav('/inbox')}>Open</button>
         </div>
-        <div class="city-card-list compact">
-          {#each cityPublicPatronProfile?.residents.slice(0, 3) || [] as resident (resident.slug)}
-            <button onclick={() => cityNav(`/residents/${encodeURIComponent(resident.slug)}`)}>
-              <span class="tag ok">supported</span>
-              <strong>{resident.displayName}</strong>
-              <small>Resident you have touched as a patron.</small>
-            </button>
-          {:else}
-            <div class="city-empty-state">
-              <strong>{citySession.authenticated ? 'No patron list yet' : 'Sign in to see your residents'}</strong>
-              <span>Residents you support will appear here after the city has a patron relationship signal.</span>
-            </div>
-          {/each}
+        <div class="city-copy-block">
+          <strong>Support should come back as messages.</strong>
+          <p>Read resident letters and city updates here after you sign in and support someone.</p>
+        </div>
+        <div class="city-resident-profile-grid">
+          <span><small>Unread</small><strong>{cityInboxThreads.filter(thread => !thread.latestMessage?.readAt).length}</strong></span>
+          <span><small>Your residents</small><strong>{cityPublicPatronProfile?.residentCount ?? cityPublicPatronProfile?.residents.length ?? 0}</strong></span>
         </div>
       </div>
       <div class="city-panel city-simple-loop-panel">
@@ -4847,9 +4849,9 @@
         {:else}
           <div class="city-empty-state">
             <strong>Resident list is loading</strong>
-            <span>Watch Live or check Residents while the list catches up.</span>
+            <span>Watch or check Residents while the list catches up.</span>
             <div class="resident-sync-actions">
-              <button onclick={() => cityNav('/live')}>Watch Live</button>
+              <button onclick={() => cityNav('/live')}>Watch</button>
               <button onclick={() => cityNav('/residents')}>Residents</button>
             </div>
           </div>
@@ -4958,9 +4960,9 @@
       {:else}
         <div class="city-empty-state">
           <strong>No city update yet</strong>
-          <span>Open Live to watch residents while new updates arrive.</span>
+          <span>Open Watch to see residents while new updates arrive.</span>
           <div class="resident-sync-actions">
-            <button onclick={() => cityNav('/live')}>Watch Live</button>
+            <button onclick={() => cityNav('/live')}>Watch</button>
           </div>
         </div>
       {/if}
@@ -5362,7 +5364,7 @@
     <div>
       <p class="kicker">Attendee Session</p>
       <strong>{label}</strong>
-      <span>Use the Onion DAO login to load your Onions, support residents, create new souls, request items, and see your messages.</span>
+      <span>Use the Onion DAO login to load your Onions, support residents, and see your messages.</span>
       {#if !cityLoginUrlReady}
         <small>Ask event staff for the attendee QR or staff login link.</small>
       {/if}
@@ -5697,7 +5699,7 @@
       </div>
       <aside class="city-panel">
         <div class="panel-title">Nearby Residents</div>
-        {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8) })}
+        {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8), simple: !expertMode })}
       </aside>
     </section>
   {:else if citySession.authenticated}
@@ -5727,7 +5729,7 @@
       </div>
       <aside class="city-panel">
         <div class="panel-title">Online Residents</div>
-        {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8) })}
+        {@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8), simple: !expertMode })}
       </aside>
     </section>
   {:else}
@@ -6257,7 +6259,7 @@
             {/if}
             <p class="resident-support-letters-line">{cityResidentSupportPayoff.lettersLine}</p>
             <div class="resident-simple-actions">
-              <button class="primary" onclick={() => cityNav('/inbox')}>Open Letters</button>
+              <button class="primary" onclick={() => cityNav('/inbox')}>Open Inbox</button>
               <button disabled={!cityResident?.online} onclick={() => cityResident && cityNav(`/world?resident=${encodeURIComponent(cityResident.name)}`)}>Watch them live</button>
             </div>
           </div>
@@ -6268,7 +6270,7 @@
             <span><small>Attention</small><strong>{cityResident?.attention ?? cityResidentReadModel?.currentAttention ?? '-'}</strong></span>
             <span><small>Status</small><strong>{cityResident?.online ? 'Online now' : cityResidentReadModel?.status || 'Syncing'}</strong></span>
             <span><small>Goal</small><strong>{cityResidentReadModel?.goal || cityResident?.thinking?.activePlan || 'No public goal yet'}</strong></span>
-            <span><small>Last update</small><strong>{cityResident ? residentFeedLabel(cityResident) : cityResidentPosts[0]?.createdAt ? `${timeAgo(cityResidentPosts[0].createdAt)} ago` : '-'}</strong></span>
+            <span><small>Last update</small><strong>{residentSimpleLastUpdateLabel(cityResident)}</strong></span>
           </div>
           {#if cityResident}
             <div class="resident-simple-actions">
@@ -6282,7 +6284,7 @@
           <div class="city-copy-block">
             <strong>Onions are what you spend. Attention is what the resident receives.</strong>
             <p>Nothing is final until the Onion spend settles. Once settled, Null City gives this resident attention.</p>
-            <p>Writing a soul, helping create a resident, or giving attention can make you part of that resident's patron story. Patrons may qualify for trophies if the resident achieves their goal.</p>
+            <p>After support lands, watch for resident replies and city messages in your Inbox.</p>
           </div>
         </div>
         <div class="city-panel span-2 resident-simple-posts">
@@ -6297,7 +6299,7 @@
                 </div>
               </article>
             {:else}
-              <div class="city-empty-state"><strong>No public posts yet</strong><span>Open the live view to watch residents while the city syncs updates.</span></div>
+              <div class="city-empty-state"><strong>No public posts yet</strong><span>Open Watch to see residents while the city syncs updates.</span></div>
             {/each}
           </div>
         </div>
@@ -6659,8 +6661,8 @@
         <strong>{missingState.title}</strong>
         <span>{missingState.detail}</span>
         <div class="resident-sync-actions">
-          <button onclick={() => cityNav('/live')}>Watch Live</button>
-          <button onclick={() => cityNav('/board')}>Board</button>
+          <button onclick={() => cityNav('/live')}>Watch</button>
+          <button onclick={() => cityNav('/residents')}>Residents</button>
           {#if expertMode}
             <button onclick={() => debugNav('/residents')}>Ops Roster</button>
           {/if}
@@ -7515,7 +7517,7 @@
   <section class="city-panel">
     <div class="city-empty-state">
       <strong>{cityLoginRedirecting ? 'Opening attendee login' : cityLoginUrlReady ? 'Attendee login ready' : 'Attendee login not connected'}</strong>
-      <span>{cityLoginRedirecting ? 'Creating the local dev session and returning to the dashboard.' : cityLoginUrlReady ? 'Open the Onion DAO login to unlock Onions, resident support, new souls, item requests, and messages.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
+      <span>{cityLoginRedirecting ? 'Creating the local dev session and returning to the dashboard.' : cityLoginUrlReady ? 'Open the Onion DAO login to load your Onions, support residents, and read messages.' : 'Ask event staff for the attendee QR or staff login link. This dashboard remains in guest mode until attendee login is connected.'}</span>
     </div>
     {#if cityLoginUrlReady}
       <a class="city-link-button" href={cityLoginHref('/')}>Open Onion DAO Login</a>
@@ -7558,9 +7560,7 @@
           <span class:ok={row.online} class="dot"></span>
           <strong>{residentDisplayName(row.name)}</strong>
           {#if simple}
-            {#if row.storyArc?.summary}
-              <small class="city-resident-portrait-line">{row.storyArc.summary}</small>
-            {/if}
+            <small class="city-resident-portrait-line">{row.online ? 'Visible in the city now.' : 'Resident profile is available.'}</small>
             <small>Attention {row.attention ?? '-'} · {supportReason.detail}</small>
             <em class:warn={supportReason.tone === 'warn'}>{supportReason.action}</em>
           {:else}
@@ -7593,8 +7593,8 @@
         <strong>{rosterState.title}</strong>
         <span>{rosterState.detail}</span>
         <div class="resident-sync-actions">
-          <button onclick={() => cityNav('/live')}>Watch Live</button>
-          <button onclick={() => cityNav('/board')}>Board</button>
+          <button onclick={() => cityNav('/live')}>Watch</button>
+          <button onclick={() => cityNav('/residents')}>Residents</button>
           {#if expertMode}
             <button onclick={() => debugNav('/residents')}>Ops Roster</button>
           {/if}

@@ -135,14 +135,14 @@ export function dismissDashboardNotice(dismissed: ReadonlySet<string>, kind: str
 
 export const dashboardNavItems: DashboardNavItem[] = [
   { label: 'Home', path: '/', match: '/', glyph: 'HM' },
-  { label: 'Live', path: '/live', match: '/live', glyph: 'LV' },
-  { label: 'Board', path: '/board', match: '/board', glyph: 'BD' },
+  { label: 'Watch', path: '/live', match: '/live', glyph: 'WT' },
   { label: 'Residents', path: '/residents', match: '/residents', glyph: 'RE' },
-  { label: 'Soul Library', path: '/graveyard', match: '/graveyard', glyph: 'SL' },
+  { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
   { label: 'Me', path: '/profile', match: '/profile', glyph: 'ME' },
+  { label: 'Soul Library', path: '/graveyard', match: '/graveyard', glyph: 'SL' },
+  { label: 'Board', path: '/board', match: '/board', glyph: 'BD', expertOnly: true },
   { label: 'New Souls', path: '/embassy', match: '/embassy', glyph: 'SO', expertOnly: true },
   { label: 'Items', path: '/prints', match: '/prints', glyph: 'IT', expertOnly: true },
-  { label: 'Inbox', path: '/inbox', match: '/inbox', glyph: 'IN' },
   { label: 'World', path: '/world', match: '/world', glyph: 'WO', expertOnly: true },
   { label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true },
   { label: 'Economy', path: '/economy', match: '/economy', glyph: 'EC', expertOnly: true },
@@ -195,7 +195,7 @@ export function recommendedDashboardAction(input: RecommendedDashboardActionInpu
     return {
       label: 'Sign in to participate',
       path: '/login',
-      detail: 'Unlock Onion spending, resident messages, new souls, and item requests.',
+      detail: 'Load your Onions, support residents, and read replies in your Inbox.',
       tone: 'gold',
       actionLabel: 'Sign In',
     };
@@ -277,41 +277,52 @@ export function boardActionCards(input: BoardActionCardsInput): BoardActionCard[
   const onionText = input.authenticated && input.onionBalance > 0
     ? `${input.onionBalance.toLocaleString()} Onion${input.onionBalance === 1 ? '' : 's'}`
     : 'Onions';
-  const requestText = input.pendingPrints > 0
-    ? `${input.pendingPrints.toLocaleString()} request${input.pendingPrints === 1 ? '' : 's'} in progress.`
-    : 'Ask for a physical trophy or item request.';
+
+  const supportCard: BoardActionCard = {
+    label: 'Give Attention',
+    path: attentionPath,
+    detail: input.residentCount > 0
+      ? `Choose a resident and spend ${onionText} so they receive attention.`
+      : 'Open the resident list when it loads, then choose who should receive attention.',
+    tone: input.lowAttentionResidents > 0 ? 'warn' : 'gold',
+  };
+  const watchCard: BoardActionCard = {
+    label: 'Watch Residents',
+    path: '/live',
+    detail: 'See residents moving in the city before you choose who to support.',
+    tone: 'teal',
+  };
+  const libraryCard: BoardActionCard = {
+    label: 'Soul Library',
+    path: '/graveyard',
+    detail: 'Read resident stories and remember who has lived in Null City.',
+    tone: 'mauve',
+  };
+
+  if (!input.authenticated) {
+    return [
+      {
+        label: 'Sign In',
+        path: '/login',
+        detail: 'Load your Onions and unlock resident support.',
+        tone: 'gold',
+      },
+      supportCard,
+      watchCard,
+      libraryCard,
+    ];
+  }
 
   return [
+    supportCard,
+    watchCard,
     {
-      label: 'Give Attention',
-      path: attentionPath,
-      detail: input.residentCount > 0
-        ? `Choose a resident and spend ${onionText} so they receive attention.`
-        : 'Open the resident list when it loads, then choose who should receive attention.',
-      tone: input.lowAttentionResidents > 0 ? 'warn' : 'gold',
-    },
-    {
-      label: 'Watch Live',
-      path: '/live',
-      detail: 'See residents moving in the city before you choose who to support.',
-      tone: 'teal',
-    },
-    {
-      label: 'Request Item',
-      path: input.authenticated ? '/prints/new' : '/login',
-      detail: input.authenticated
-        ? requestText
-        : 'Sign in first, then ask for an item or trophy request.',
-      tone: 'amber',
-    },
-    {
-      label: input.authenticated ? 'Me' : 'Sign In',
-      path: input.authenticated ? '/profile' : '/login',
-      detail: input.authenticated
-        ? 'See your Onions, supported residents, and requests.'
-        : 'Load your Onions and unlock resident support.',
+      label: 'Read Inbox',
+      path: '/inbox',
+      detail: 'Read letters and updates from residents you support.',
       tone: 'mauve',
     },
+    libraryCard,
   ];
 }
 
@@ -325,15 +336,21 @@ export function simpleProfileActionCards(input: SimpleProfileActionCardsInput): 
         tone: 'gold',
       },
       {
-        label: 'Watch Live',
+        label: 'Watch Residents',
         path: '/live',
         detail: 'See what residents are doing before you choose one.',
         tone: 'teal',
       },
       {
-        label: 'Board',
-        path: '/board',
-        detail: 'Find attention needs, trophies, and future residents.',
+        label: 'Residents',
+        path: '/residents',
+        detail: 'Browse residents and choose who you may want to support.',
+        tone: 'gold',
+      },
+      {
+        label: 'Soul Library',
+        path: '/graveyard',
+        detail: 'Read resident stories and city memory.',
         tone: 'mauve',
       },
     ];
@@ -347,7 +364,13 @@ export function simpleProfileActionCards(input: SimpleProfileActionCardsInput): 
       tone: 'gold',
     },
     {
-      label: 'Watch Live',
+      label: 'Open Inbox',
+      path: '/inbox',
+      detail: 'Read letters and updates from residents you support.',
+      tone: 'mauve',
+    },
+    {
+      label: 'Watch Residents',
       path: '/live',
       detail: input.supportedResidentCount > 0
         ? `${input.supportedResidentCount.toLocaleString()} resident${input.supportedResidentCount === 1 ? '' : 's'} in your patron list. Watch what is happening now.`
@@ -355,12 +378,10 @@ export function simpleProfileActionCards(input: SimpleProfileActionCardsInput): 
       tone: 'teal',
     },
     {
-      label: 'Trophies',
-      path: input.pendingPrints > 0 ? '/prints' : '/prints/new',
-      detail: input.pendingPrints > 0
-        ? `${input.pendingPrints.toLocaleString()} trophy request${input.pendingPrints === 1 ? '' : 's'} in progress.`
-        : 'Request a trophy, or support residents whose goals could become trophies.',
-      tone: 'amber',
+      label: 'Soul Library',
+      path: '/graveyard',
+      detail: 'Read resident stories and see what the city remembers.',
+      tone: 'mauve',
     },
   ];
 }
@@ -405,6 +426,9 @@ export function residentSupportReason(row: ResidentDashboardRow): ResidentSuppor
 export function simpleModeRouteRequiresExpert(route: string, search = ''): boolean {
   const normalized = normalizeDashboardPath(route);
   if (normalized === '/world') return !hasWorldObserveTarget(search);
+  if (normalized === '/board') return true;
+  if (normalized === '/embassy' || normalized.startsWith('/embassy/')) return true;
+  if (normalized === '/prints' || normalized.startsWith('/prints/')) return true;
   if (normalized === '/chronicle' || normalized.startsWith('/chronicle/')) return true;
   if (normalized === '/economy') return true;
   if (normalized === '/library') return true;
@@ -524,7 +548,7 @@ export function residentSupportPayoff(input: ResidentSupportPayoffInput): Reside
     headline: `You just gave ${resident} ${runway} in the city.`,
     detail: `${onionLabel} settled as ${credited.toLocaleString()} attention.${attentionTrail}`,
     ...(reaction ? { reaction } : {}),
-    lettersLine: `${resident} will write to you — check your Letters.`,
+    lettersLine: `${resident} will write to you — check your Inbox.`,
   };
 }
 
@@ -557,7 +581,13 @@ export function residentRecentPublicSay(input: ResidentRecentSayInput): string |
 
 export function residentAttentionResultNotice(input: ResidentAttentionResultNoticeInput): string {
   const resident = input.residentName || 'This resident';
-  const settled = input.status === 'settled' || input.onionRequestStatus === 'completed';
+  if (input.status === 'onion_spend_denied' || input.onionRequestStatus === 'denied') {
+    return `Onion spend denied. ${resident} has not received attention.`;
+  }
+  if (input.status === 'onion_spend_failed' || input.onionRequestStatus === 'failed' || input.onionRequestStatus === 'expired') {
+    return `Onion spend failed. ${resident} has not received attention.`;
+  }
+  const settled = input.status === 'settled';
   if (settled) {
     const amount = Math.max(0, Math.floor(input.creditedAmount ?? input.onionAmount));
     const attentionBefore = nonNegativeWholeAmount(input.attentionBefore);
@@ -566,12 +596,6 @@ export function residentAttentionResultNotice(input: ResidentAttentionResultNoti
       return `You gave ${resident} ${formatOnionAmount(Math.max(0, Math.floor(input.onionAmount)))}. Their attention rose from ${attentionBefore.toLocaleString()} to ${attentionAfter.toLocaleString()}.`;
     }
     return `Onions spent. ${resident} received ${amount.toLocaleString()} attention.`;
-  }
-  if (input.status === 'onion_spend_denied' || input.onionRequestStatus === 'denied') {
-    return `Onion spend denied. ${resident} has not received attention.`;
-  }
-  if (input.status === 'onion_spend_failed' || input.onionRequestStatus === 'failed') {
-    return `Onion spend failed. ${resident} has not received attention.`;
   }
   return `Onion spend pending. ${resident} has not received attention yet.`;
 }

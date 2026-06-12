@@ -169,18 +169,18 @@ export function residentDetailEmptyState(input: ResidentDetailEmptyStateInput): 
   if (input.loading) {
     return {
       title: 'Resident page is loading',
-      detail: 'Use Live or the Board while this resident page catches up.',
+      detail: 'Use Watch or Residents while this resident page catches up.',
     };
   }
   if (input.residentCount === 0 && input.hasLiveHints) {
     return {
       title: 'Resident page is catching up',
-      detail: 'This resident may still be active. Use Live or the Board while the page updates.',
+      detail: 'This resident may still be active. Use Watch or Residents while the page updates.',
     };
   }
   return {
     title: 'Resident not found',
-    detail: 'Go back to Residents or the Board and choose someone from the current list.',
+    detail: 'Go back to Residents and choose someone from the current list.',
   };
 }
 
@@ -188,47 +188,47 @@ export function residentRosterEmptyState(input: ResidentRosterEmptyStateInput): 
   if (input.loading) {
     return {
       title: 'Resident list is loading',
-      detail: 'Use Live or the Board while residents load.',
+      detail: 'Use Watch or Residents while residents load.',
     };
   }
   if (!input.hasLiveHints) {
     return {
       title: 'No residents are listed yet',
-      detail: 'Open Live or check the Board while residents arrive.',
+      detail: 'Open Watch or Residents while residents arrive.',
     };
   }
 
   if (input.cityDataError) {
     return {
       title: 'Resident list is catching up',
-      detail: 'Open Live or the Board while the resident list updates.',
+      detail: 'Open Watch or Residents while the resident list updates.',
     };
   }
 
   if (input.residentCount && input.residentCount > 0) {
     return {
       title: 'Resident list is catching up',
-      detail: `${(input.activeResidentCount || 0).toLocaleString()} of ${input.residentCount.toLocaleString()} residents are active right now. Use Live or the Board while the list updates.`,
+      detail: `${(input.activeResidentCount || 0).toLocaleString()} of ${input.residentCount.toLocaleString()} residents are active right now. Use Watch or Residents while the list updates.`,
     };
   }
 
   if (input.gatewayOrControllerConnected) {
     return {
       title: 'Resident list is catching up',
-      detail: 'The city is responding. Use Live or the Board while the resident list updates.',
+      detail: 'The city is responding. Use Watch or Residents while the resident list updates.',
     };
   }
 
   if (input.bridgeAvailable) {
     return {
       title: 'Resident list is catching up',
-      detail: 'The city is responding. Use Live or the Board while the resident list updates.',
+      detail: 'The city is responding. Use Watch or Residents while the resident list updates.',
     };
   }
 
   return {
     title: 'Resident list is catching up',
-    detail: 'Residents look active. Use Live or the Board while the list updates.',
+    detail: 'Residents look active. Use Watch or Residents while the list updates.',
   };
 }
 

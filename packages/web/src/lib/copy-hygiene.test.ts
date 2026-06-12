@@ -39,7 +39,7 @@ describe('dashboard copy hygiene', () => {
   test('keeps guest session copy attendee-facing instead of naming API internals', () => {
     expect(appSource).not.toContain('`/api/session`');
     expect(appSource).not.toContain('Showing the shell with empty states');
-    expect(appSource).toContain('Sign in to spend Onions, support residents, create new souls, request items, and see your messages.');
+    expect(appSource).toContain('Sign in to spend Onions, support residents, and see your messages.');
     expect(appSource).toContain('This dashboard remains in guest mode until attendee login is connected.');
   });
 
@@ -83,31 +83,24 @@ describe('dashboard copy hygiene', () => {
     expect(dashboardNavSource).toContain("{ label: 'Stories', path: '/chronicle', match: '/chronicle', glyph: 'ST', expertOnly: true }");
   });
 
-  test('keeps the Simple Quest Board route human-facing instead of dev-heavy', () => {
+  test('keeps the shared Board out of the Simple human path', () => {
     const boardSource = sourceBetween(appSource, '{#snippet CityBoard()}', '{#snippet CityEconomy()}');
 
     expect(appSource).toContain("route === '/board'");
-    expect(appSource).toContain("cityNav('/board')");
     expect(dashboardNavSource).toContain("path: '/board'");
-    expect(dashboardNavSource).not.toMatch(/\{[^}]*path: '\/board'[^}]*expertOnly: true[^}]*\}/);
+    expect(dashboardNavSource).toMatch(/\{[^}]*path: '\/board'[^}]*expertOnly: true[^}]*\}/);
+    expect(dashboardNavSource).toContain("if (normalized === '/board') return true;");
+    expect(appSource).not.toContain("cityNav('/board')");
+    expect(appSource).toContain('Simple mode keeps the dashboard focused on Watch, Residents, Inbox, Soul Library, and Me.');
+    expect(appSource).toContain("cityNav('/inbox')}><strong>Inbox");
+    expect(appSource).toContain("cityNav('/graveyard')}><strong>Soul Library");
     expect(boardSource).toContain('<h1>Board</h1>');
     expect(boardSource).toContain('Use the Board to decide what to do next');
     expect(boardSource).toContain('What To Do Now');
-    expect(boardSource).toContain('Give Attention');
-    expect(boardSource).toContain('Watch Live');
-    expect(boardSource).toContain('Request Item');
-    expect(boardSource).toContain("cityNav('/live')");
-    expect(boardSource).toContain("cityNav('/prints')");
-    expect(boardSource).toContain("'/prints/new'");
-    expect(boardSource).toContain("'/embassy/new'");
-    expect(boardSource).toContain("citySession.authenticated ? '/prints/new' : '/login'");
-    expect(boardSource).toContain("citySession.authenticated ? '/embassy/new' : '/login'");
+    expect(boardSource).toContain('cityBoardActionCards');
     expect(boardSource).toContain("cityNav('/residents?triage=attention')");
     expect(appSource).not.toContain('/residents?focus=needs-attention');
-    expect(boardSource).toContain('Resident Goals & Trophies');
-    expect(boardSource).toContain('wrote the soul, helped create the resident, or gave attention');
     expect(boardSource).toContain('Resident list is loading');
-    expect(boardSource).toContain('Sign in to track trophies');
     expect(boardSource).not.toMatch(/\b(Designing|wired|API|bridge|backend|MVP|operator|dev|snapshot)\b/i);
     expect(boardSource).not.toMatch(/\bNCRI\b/);
   });
@@ -124,16 +117,17 @@ describe('dashboard copy hygiene', () => {
     expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.headline');
     expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.reaction');
     expect(simpleResidentProfileSource).toContain('cityResidentSupportPayoff.lettersLine');
-    expect(simpleResidentProfileSource).toContain('Open Letters');
+    expect(simpleResidentProfileSource).toContain('Open Inbox');
     expect(simpleResidentProfileSource).toContain('Waiting for your approval on OnionDAO');
     expect(simpleResidentProfileSource).toContain('Approve on OnionDAO →');
     expect(simpleResidentProfileSource).toContain('This spend did not complete.');
     expect(appSource).toContain('attentionBefore: result.city.attentionBefore');
     expect(appSource).toContain('attentionAfter: result.city.attentionAfter');
     expect(dashboardNavSource).toContain('Their attention rose from');
-    expect(simpleResidentProfileSource).toContain('Patrons may qualify for trophies if the resident achieves their goal.');
-    expect(simpleResidentProfileSource).toContain('helping create a resident');
-    expect(simpleResidentProfileSource).not.toMatch(/\b(NCRI|backend|bridge|API|controller|operator|MVP)\b/i);
+    expect(simpleResidentProfileSource).toContain('After support lands, watch for resident replies and city messages in your Inbox.');
+    expect(simpleResidentProfileSource).not.toMatch(/\b(NCRI|troph|backend|bridge|API|controller|operator|MVP)\b/i);
+    expect(simpleResidentProfileSource).toContain('residentSimpleLastUpdateLabel(cityResident)');
+    expect(simpleResidentProfileSource).not.toContain('residentFeedLabel(cityResident)');
     expect(residentListSource).toContain('residentSupportReason(row)');
     expect(residentListSource).toContain('supportReason.detail');
   });
@@ -150,15 +144,18 @@ describe('dashboard copy hygiene', () => {
   });
 
   test('opens the home hero in the product voice instead of SaaS-credit framing', () => {
-    expect(appSource).not.toContain('Onions are what you spend. Attention is what residents receive.');
-    expect(appSource).toContain("These villagers are AIs living their own lives in old-school RuneScape. They stay alive on human attention. Pick someone, keep them going, and they'll know you.");
+    const heroSource = sourceBetween(appSource, '<section class="city-hero-band">', '<section class={`city-recommended-action');
+
+    expect(heroSource).not.toContain('Onions are what you spend. Attention is what residents receive.');
+    expect(heroSource).toContain("These villagers are AIs living their own lives in old-school RuneScape. They stay alive on human attention. Pick someone, keep them going, and they'll know you.");
   });
 
-  test('lets strangers choose a resident by story on simple cards when portrait data exists', () => {
+  test('keeps simple resident cards focused on visibility and support instead of raw story scans', () => {
     const residentListSource = sourceBetween(appSource, '{#snippet CityResidentList', '{#snippet SpectatorSurface');
 
-    expect(residentListSource).toContain('{#if row.storyArc?.summary}');
     expect(residentListSource).toContain('city-resident-portrait-line');
+    expect(residentListSource).toContain('Visible in the city now.');
+    expect(residentListSource).toContain('Resident profile is available.');
   });
 
   test('keeps the simple profile focused on receipts and next human actions', () => {
@@ -249,7 +246,7 @@ describe('dashboard copy hygiene', () => {
   test('labels homepage economy activity as event-window activity, not resident liveness', () => {
     expect(appSource).not.toContain("active · GP Δ");
     expect(appSource).not.toContain('Watch live or choose one to support.');
-    expect(appSource).toContain('Open Live to watch, or Residents to support someone.');
+    expect(appSource).toContain('Open Watch, or use Residents to support someone.');
     expect(appSource).toContain('<span><small>Events</small><strong>{cityLiveEconomySummary.eventLabel}</strong></span>');
     expect(appSource).toContain("<span><small>GP Delta</small><strong>{cityLiveEconomy.snapshot ? cityLiveEconomy.snapshot.city.gpNetDelta.toLocaleString() : '-'}</strong></span>");
   });
@@ -267,6 +264,7 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('View in RuneScape');
     expect(appSource).toContain('cityNav(`/world?resident=${encodeURIComponent(row.name)}`)');
     expect(appSource).toContain('cityNav(`/world?resident=${encodeURIComponent(cityResident.name)}`)');
+    expect(appSource).toContain('{@render CityResidentList({ rows: cityOnlineResidents.slice(0, 8), simple: !expertMode })}');
   });
 
   test('keeps public profile empty states endpoint-free', () => {
@@ -289,14 +287,13 @@ describe('dashboard copy hygiene', () => {
     expect(appSource).toContain('Residents you support will write to you. Read their letters in the Inbox.');
   });
 
-  test('surfaces the NCRI marketplace without making GP the simple-mode payment plan', () => {
-    const simpleItemsSource = sourceBetween(appSource, '{#snippet CitySimpleItemLoopPanels()}', '{#snippet CityGraveyard()}');
+  test('keeps unfinished item and trophy mechanics behind Expert mode', () => {
+    const simpleHomeSource = sourceBetween(appSource, '{:else}\n      <div class="city-panel city-simple-loop-panel">', '    {/if}\n  </section>\n{/snippet}\n\n{#snippet CityBoard()}');
 
-    expect(simpleItemsSource).toContain('Trophy Rewards');
-    expect(simpleItemsSource).toContain('Trophies are physical rewards');
-    expect(simpleItemsSource).not.toContain('NCRI Marketplace');
-    expect(simpleItemsSource).not.toContain('NCRI trophies are the physical swag loop');
-    expect(simpleItemsSource).not.toContain('GP/payment flow');
+    expect(appSource).toContain('{@render CityResidentList({ rows: cityFeaturedResidents, simple: true })}');
+    expect(dashboardNavSource).toContain("if (normalized === '/prints' || normalized.startsWith('/prints/')) return true;");
+    expect(dashboardNavSource).toContain("{ label: 'Items', path: '/prints', match: '/prints', glyph: 'IT', expertOnly: true }");
+    expect(simpleHomeSource).not.toMatch(/\b(print|prints|troph|NCRI|AP\/GP|GP|Request Item)\b/i);
   });
 
   test('keeps the projector overview rails public-readable instead of dashboard-internal', () => {

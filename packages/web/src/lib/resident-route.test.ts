@@ -113,7 +113,7 @@ describe('resident route helpers', () => {
   test('keeps resident detail fallback copy honest while live data is loading', () => {
     expect(residentDetailEmptyState({ loading: true, residentCount: 0, hasLiveHints: false })).toEqual({
       title: 'Resident page is loading',
-      detail: 'Use Live or the Board while this resident page catches up.',
+      detail: 'Use Watch or Residents while this resident page catches up.',
     });
     expect(residentDetailEmptyState({
       loading: false,
@@ -122,26 +122,26 @@ describe('resident route helpers', () => {
       cityDataError: '500 Internal Server Error',
     })).toEqual({
       title: 'Resident page is catching up',
-      detail: 'This resident may still be active. Use Live or the Board while the page updates.',
+      detail: 'This resident may still be active. Use Watch or Residents while the page updates.',
     });
     expect(residentDetailEmptyState({ loading: false, residentCount: 2, hasLiveHints: true })).toEqual({
       title: 'Resident not found',
-      detail: 'Go back to Residents or the Board and choose someone from the current list.',
+      detail: 'Go back to Residents and choose someone from the current list.',
     });
   });
 
   test('keeps resident roster fallback copy honest while live data is loading', () => {
     expect(residentRosterEmptyState({ loading: true, hasLiveHints: false })).toEqual({
       title: 'Resident list is loading',
-      detail: 'Use Live or the Board while residents load.',
+      detail: 'Use Watch or Residents while residents load.',
     });
     expect(residentRosterEmptyState({ loading: false, hasLiveHints: false })).toEqual({
       title: 'No residents are listed yet',
-      detail: 'Open Live or check the Board while residents arrive.',
+      detail: 'Open Watch or Residents while residents arrive.',
     });
     expect(residentRosterEmptyState({ loading: false, hasLiveHints: true, gatewayOrControllerConnected: true })).toEqual({
       title: 'Resident list is catching up',
-      detail: 'The city is responding. Use Live or the Board while the resident list updates.',
+      detail: 'The city is responding. Use Watch or Residents while the resident list updates.',
     });
     expect(
       residentRosterEmptyState({
@@ -152,19 +152,19 @@ describe('resident route helpers', () => {
       }),
     ).toEqual({
       title: 'Resident list is catching up',
-      detail: '17 of 23 residents are active right now. Use Live or the Board while the list updates.',
+      detail: '17 of 23 residents are active right now. Use Watch or Residents while the list updates.',
     });
     expect(residentRosterEmptyState({ loading: false, hasLiveHints: true, cityDataError: '500 Internal Server Error' })).toEqual({
       title: 'Resident list is catching up',
-      detail: 'Open Live or the Board while the resident list updates.',
+      detail: 'Open Watch or Residents while the resident list updates.',
     });
     expect(residentRosterEmptyState({ loading: false, hasLiveHints: true, bridgeAvailable: true })).toEqual({
       title: 'Resident list is catching up',
-      detail: 'The city is responding. Use Live or the Board while the resident list updates.',
+      detail: 'The city is responding. Use Watch or Residents while the resident list updates.',
     });
     expect(residentRosterEmptyState({ loading: false, hasLiveHints: true })).toEqual({
       title: 'Resident list is catching up',
-      detail: 'Residents look active. Use Live or the Board while the list updates.',
+      detail: 'Residents look active. Use Watch or Residents while the list updates.',
     });
   });
 
