@@ -6,14 +6,15 @@ This repo owns the human-facing Null City UI. If a task affects what attendees, 
 
 Before changing dashboard behavior, read:
 
-1. `SPEC.md` for the original operations-dashboard architecture.
-2. `spec/README.md` for the current city-dashboard plan set.
-3. `spec/09-implementation-roadmap.md` for phase order and verification gates.
-4. `../rs6-nullcity-server/AGENTS.md` and `../rs6-nullcity-server/docs/README.md` for cross-repo rules and server boundaries.
-5. `../rs6-nullcity-server/docs/agent-status.md` tail for live locks and runtime requests.
-6. `../rs6-nullcity-server/docs/issue-register.md` for dashboard bugs and QA findings that need dev fixes.
-7. `../rs6-nullcity-server/docs/city-dashboard-integration.md` for server JSON contracts.
-8. `../landing-2026/docs/nullcity-dev-accounts.md` for OnionDAO local dev accounts, seeded Onion balances, dev-auth URLs, and reset steps.
+1. `docs/new-developer-onboarding.md` for the first commands, branch, and safe first task.
+2. `SPEC.md` for the original operations-dashboard architecture.
+3. `spec/README.md` for the current city-dashboard plan set.
+4. `spec/09-implementation-roadmap.md` for phase order and verification gates.
+5. `../rs6-nullcity-server/AGENTS.md` and `../rs6-nullcity-server/docs/README.md` for cross-repo rules and server boundaries.
+6. `../rs6-nullcity-server/docs/agent-status.md` tail for live locks and runtime requests.
+7. `../rs6-nullcity-server/docs/issue-register.md` for dashboard bugs and QA findings that need dev fixes.
+8. `../rs6-nullcity-server/docs/city-dashboard-integration.md` for server JSON contracts.
+9. `../landing-2026/docs/nullcity-dev-accounts.md` for OnionDAO local dev accounts, seeded Onion balances, dev-auth URLs, and reset steps.
 
 Open P0/P1 rows in the server issue register whose evidence or next action names dashboard files are the dashboard dev-agent intake queue. Claim and fix one of those before taking adjacent `D*` or roadmap work unless every matching row is blocked or already leased.
 
@@ -39,7 +40,7 @@ Use these `D*` packets alongside `spec/09-implementation-roadmap.md`:
 
 ## Coordination
 
-- Work on `main` unless James asks for a feature branch.
+- Work on `wip/spec` unless James asks for a different branch.
 - Check `git status --short` before editing.
 - If a dashboard task needs new server data, update `../rs6-nullcity-server/docs/city-dashboard-integration.md` or claim an `S11` server contract packet. Do not make ad hoc server UI.
 - Keep server commits and dashboard commits separate unless James explicitly asks for a cross-repo landing.
@@ -59,7 +60,7 @@ If you need the shared dashboard restarted, append a `RUNTIME-REQUEST` line to `
 Paste-ready kickoff prompt:
 
 ```text
-You are an autonomous dashboard agent in <dashboard-repo> on branch main. Read AGENTS.md, SPEC.md, spec/README.md, spec/09-implementation-roadmap.md, and the server AGENTS.md/docs/README.md/docs/agent-status.md tail/docs/issue-register.md. First inspect Open P0/P1 issue-register rows naming dashboard files; claim the highest-severity unblocked dashboard issue before D*/spec backlog work. Implement UI/BFF changes in this repo, request/record any server API needs through server docs/city-dashboard-integration.md or S11, request shared runtime restarts through server docs/agent-status.md, run bun run typecheck && bun run check && bun run build, commit explicit files, and push main.
+You are an autonomous dashboard agent in <dashboard-repo> on branch wip/spec unless James tells you otherwise. Read AGENTS.md, docs/new-developer-onboarding.md, SPEC.md, spec/README.md, spec/09-implementation-roadmap.md, and the server AGENTS.md/docs/README.md/docs/agent-status.md tail/docs/issue-register.md. First inspect Open P0/P1 issue-register rows naming dashboard files; claim the highest-severity unblocked dashboard issue before D*/spec backlog work. Implement UI/BFF changes in this repo, request/record any server API needs through server docs/city-dashboard-integration.md or S11, request shared runtime restarts through server docs/agent-status.md, run bun run typecheck && bun run check && bun run build, commit explicit files, and push wip/spec.
 ```
 
 ## Verification
