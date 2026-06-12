@@ -18,7 +18,8 @@ type Handler = (query: string, values: unknown[]) => Rows;
 function makeSql(handler: Handler): never {
   const fn = (strings: TemplateStringsArray, ...values: unknown[]): Promise<Rows> =>
     Promise.resolve(handler(strings.join(' ? '), values));
-  (fn as unknown as { unsafe: (q: string) => Promise<Rows> }).unsafe = async () => [];
+  (fn as unknown as { unsafe: (q: string, values?: unknown[]) => Promise<Rows> }).unsafe = async (q, values = []) =>
+    Promise.resolve(handler(q, values));
   return fn as never;
 }
 
@@ -34,6 +35,26 @@ const intentRow = {
   failure_reason: null,
   created_at: new Date('2026-06-03T00:00:00.000Z'),
   updated_at: new Date('2026-06-03T00:00:00.000Z'),
+};
+
+const feedbackRow = {
+  id: 'feedback_1',
+  city_user_id: 'cu1',
+  landing_user_id: 'landing-1',
+  display_name: 'Alice',
+  handle: 'alice',
+  email: 'alice@example.com',
+  feeling: 'confused',
+  trying_to_do: 'Give attention',
+  message: 'I could not find the button.',
+  route: '/residents/hans',
+  page_url: 'http://localhost:5174/residents/hans',
+  mode: 'simple',
+  resident_id: 'res:hans',
+  allow_follow_up: true,
+  user_agent: 'test browser',
+  metadata: {},
+  created_at: new Date('2026-06-12T12:00:00.000Z'),
 };
 
 describe('PostgresCityStore (mock-sql; catches mapper column drift)', () => {
@@ -101,5 +122,77 @@ describe('PostgresCityStore (mock-sql; catches mapper column drift)', () => {
     const store = new PostgresCityStore('postgres://fake', makeSql(query => { if (query.includes('city_identity_aliases')) called = true; return []; }));
     await store.setIdentityAlias('person-1', 'alice');
     expect(called).toBe(true);
+  });
+
+  test('createFeedback maps the RETURNING row and stores bounded public context', async () => {
+    let seenQuery = '';
+    let seenValues: unknown[] = [];
+    const store = new PostgresCityStore('postgres://fake', makeSql((query, values) => {
+      seenQuery = query;
+      seenValues = values;
+      return [feedbackRow];
+    }));
+
+    const feedback = await store.createFeedback({
+      cityUserId: 'cu1',
+      landingUserId: 'landing-1',
+      displayName: 'Alice',
+      handle: 'alice',
+      email: 'alice@example.com',
+      feeling: 'confused',
+      tryingToDo: 'Give attention',
+      message: 'I could not find the button.',
+      route: '/residents/hans',
+      pageUrl: 'http://localhost:5174/residents/hans',
+      mode: 'simple',
+      residentId: 'res:hans',
+      allowFollowUp: true,
+      userAgent: 'test browser',
+      metadata: {},
+    });
+
+    expect(seenQuery).toContain('INSERT INTO feedback_entries');
+    expect(seenValues).toContain('cu1');
+    expect(seenValues).toContain('confused');
+    expect(feedback).toMatchObject({
+      id: 'feedback_1',
+      cityUserId: 'cu1',
+      landingUserId: 'landing-1',
+      displayName: 'Alice',
+      handle: 'alice',
+      email: 'alice@example.com',
+      feeling: 'confused',
+      tryingToDo: 'Give attention',
+      message: 'I could not find the button.',
+      route: '/residents/hans',
+      pageUrl: 'http://localhost:5174/residents/hans',
+      mode: 'simple',
+      residentId: 'res:hans',
+      allowFollowUp: true,
+      metadata: {},
+    });
+    expect(typeof feedback.createdAt).toBe('string');
+  });
+
+  test('listFeedback reads newest feedback through the unsafe limit query and maps rows', async () => {
+    let seenQuery = '';
+    let seenValues: unknown[] = [];
+    const store = new PostgresCityStore('postgres://fake', makeSql((query, values) => {
+      seenQuery = query;
+      seenValues = values;
+      return [feedbackRow];
+    }));
+
+    const feedback = await store.listFeedback(10);
+
+    expect(seenQuery).toContain('SELECT * FROM feedback_entries ORDER BY created_at DESC LIMIT $1');
+    expect(seenValues).toEqual([10]);
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0]).toMatchObject({
+      id: 'feedback_1',
+      feeling: 'confused',
+      message: 'I could not find the button.',
+      allowFollowUp: true,
+    });
   });
 });
