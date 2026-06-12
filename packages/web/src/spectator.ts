@@ -61,16 +61,18 @@ window.addEventListener('message', event => {
   }
 
   if (message.type === 'nullcity:spectator-packet' && message.sessionId === sessionId) {
-    if (!shouldReplaySpectatorPacket(message.packet.opcode)) {
+    const isMapBootstrap = message.packet.opcode === 166 || message.packet.opcode === 23;
+    if (!shouldReplaySpectatorPacket(message.packet.opcode, { hasMapBootstrap, positionApplied })) {
       schedulePositionFollow();
       setStatus(currentLiveStatus());
       return;
     }
     packetCount += 1;
     lastOpcode = String(message.packet.opcode);
-    hasMapBootstrap = hasMapBootstrap || message.packet.opcode === 166 || message.packet.opcode === 23;
+    hasMapBootstrap = hasMapBootstrap || isMapBootstrap;
     try {
       client.pushSpectatorPacket(message.packet);
+      if (isMapBootstrap) applyTargetPosition();
       schedulePositionFollow();
       setStatus(currentLiveStatus());
     } catch (error) {
